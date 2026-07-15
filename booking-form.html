@@ -1054,7 +1054,7 @@ function renderItems() {
       pkGrid.innerHTML = filteredPKs.map(p => {
         const selected = selectedPKs.includes(p.Ma_PK);
         const imgSrc = p.Anh_PK || '';
-        const busyClass = p.busy ? 'busy' '';
+        const busyClass = p.busy ? 'busy' : '';
         const busyBadge = p.busy ? '<div class="busy-badge">BẬN NGÀY NÀY</div>' : '';
         const cursor = p.busy && !selected ? 'not-allowed' : 'pointer';
 
