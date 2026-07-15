@@ -210,6 +210,14 @@ function setupRealtime() {
     handleRealtimePaymentChange(payload);
   });
 
+  // Subscribe to booking changes
+  SupabaseService.subscribeToChanges('bookings', payload => {
+    handleRealtimeBookingChange(payload);
+  });
+
+  // Poll for bookings every 30 seconds
+  startBookingPolling();
+
   console.log('✅ Realtime subscriptions active');
 }
 
@@ -282,6 +290,40 @@ async function handleRealtimePaymentChange(payload) {
   if (curView === 'v-soc') {
     renderSoc();
   }
+}
+
+async function handleRealtimeBookingChange(payload) {
+  await syncBookingsToLocal();
+}
+
+async function syncBookingsToLocal() {
+  if (!SupabaseService.isConfigured()) return;
+  try {
+    const bookings = await SupabaseService.fetchBookings();
+    const normalized = (bookings || []).map(b => SupabaseService.normalizeBooking(b));
+    // Merge into db.don - bookings have Ma_Don starting with 'B'
+    const existingBookings = db.don.filter(d => d._fromBooking);
+    const existingIds = new Set(existingBookings.map(b => b._dbId));
+    const newBookings = normalized.filter(b => !existingIds.has(b._dbId));
+    if (newBookings.length > 0) {
+      db.don = [...db.don, ...newBookings];
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
+        renderCurrentView();
+      }
+      toast(`📋 Có ${newBookings.length} đơn đặt thuê mới!`, 'success');
+    }
+  } catch (err) {
+    console.warn('Booking sync error:', err);
+  }
+}
+
+let bookingPollInterval = null;
+function startBookingPolling() {
+  if (bookingPollInterval) clearInterval(bookingPollInterval);
+  bookingPollInterval = setInterval(() => {
+    syncBookingsToLocal();
+  }, 30000);
 }
 
 // ============================================================
@@ -419,6 +461,7 @@ async function initWithSupabase() {
       console.log('✅ Logged in as:', user.email);
       await loadFromSupabase();
       setupRealtime();
+      syncBookingsToLocal();
     } else {
       // Not logged in - show login
       console.log('🔐 Not authenticated');

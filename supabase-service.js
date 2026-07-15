@@ -617,7 +617,6 @@ async function fetchBookings() {
   const { data, error } = await supabase
     .from('bookings')
     .select('*')
-    .eq('trang_thai', 'pending')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -817,6 +816,30 @@ function normalizePayment(p) {
   };
 }
 
+function normalizeBooking(b) {
+  if (!b) return null;
+  return {
+    id: b.id,
+    _dbId: b.id,
+    Ma_Don: b.ma_booking,
+    Ma_Booking: b.ma_booking,
+    Trang_Thai_Don: 'Chờ xác nhận',
+    Insta_Khach: b.insta_khach,
+    SDT: b.sdt,
+    Goi_Thue: b.goi_thue,
+    Ngay_Lay: b.ngay_lay,
+    Gio_Lay: b.gio_lay,
+    Ngay_Tra: b.ngay_tra,
+    Hinh_Thuc_Coc: b.hinh_thuc_coc,
+    Hinh_Thuc_Nhan: b.hinh_thuc_nhan,
+    Dia_Chi: b.dia_chi,
+    Su_Kien: b.su_kien,
+    Ghi_Chu: b.ghi_chu,
+    _ts: new Date(b.created_at).getTime(),
+    _fromBooking: true
+  };
+}
+
 // ============================================================
 // EXPORT
 // ============================================================
@@ -862,6 +885,7 @@ window.SupabaseService = {
   fetchBookings,
   createBooking,
   updateBookingStatus,
+  normalizeBooking,
 
   // Realtime
   subscribeToChanges,
