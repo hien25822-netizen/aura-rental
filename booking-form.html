@@ -717,10 +717,15 @@ input[type="date"], input[type="time"] {
   </div>
 </div>
 
+<!-- Supabase Client Library -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
-// Supabase Configuration
-// Copy from your main app's config.js
-var SUPABASE_CONFIG = window.APP_CONFIG || null;
+// Supabase Configuration - Direct config for booking form
+var SUPABASE_CONFIG = {
+  supabaseUrl: 'https://mmiygzcljqayrfomxkkk.supabase.co',
+  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw'
+};
 var supabase = null;
 if (SUPABASE_CONFIG?.supabaseUrl && SUPABASE_CONFIG?.supabaseKey) {
   supabase = window.supabase.createClient(SUPABASE_CONFIG.supabaseUrl, SUPABASE_CONFIG.supabaseKey);
