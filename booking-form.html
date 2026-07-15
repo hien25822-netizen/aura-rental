@@ -9,15 +9,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap');
+
 :root {
-  /* Brand - Match main app */
+  /* Brand */
   --primary: #daf0fe;
   --primary-dark: #7dd3fc;
   --primary-light: #e0f2fe;
   --accent: #4a9e7c;
   --accent-soft: #e5f3ed;
 
-  /* Status colors - Match main app */
+  /* Status colors */
   --green: #10b981;
   --green-soft: #d1fae5;
   --green-deep: #047857;
@@ -45,6 +47,7 @@
   --txt: #111827;
   --txt-2: #4b5563;
   --muted: #9ca3af;
+  --black: #000000;
 
   /* Radii */
   --r-sm: 6px;
@@ -74,54 +77,82 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
   margin: 0 auto;
   padding: 16px 16px 100px;
 }
-/* Header - Match main app style */
+
+/* Header - Apple-inspired minimal design */
 .header {
   text-align: center;
-  padding: 24px 0 20px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: #fff;
-  margin: -16px -16px 20px;
-  padding: 28px 20px;
-  border-radius: 0 0 20px 20px;
-  box-shadow: 0 4px 16px rgba(212, 115, 125, 0.25);
+  padding: 32px 20px 28px;
+  background: var(--surface);
+  margin: -16px -16px 24px;
+  border-bottom: 1px solid var(--border);
 }
-.header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
-.header p { opacity: 0.9; font-size: 13px; }
-/* Progress - Match main app */
+.header-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.header-logo-icon {
+  width: 56px;
+  height: 56px;
+  background: linear-gradient(135deg, #1a1d2e 0%, #2d3348 100%);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 4px 12px rgba(26, 29, 46, 0.15);
+}
+.header-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--black);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+.header-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Progress */
 .progress-bar {
   display: flex;
-  gap: 6px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 24px;
 }
 .progress-step {
   flex: 1;
-  height: 4px;
+  height: 3px;
   background: var(--surface-3);
   border-radius: 2px;
-  transition: all 0.2s;
+  transition: all 0.3s ease;
 }
-.progress-step.active { background: var(--primary); }
+.progress-step.active { background: var(--black); }
 .progress-step.done { background: var(--green); }
-/* Form sections - Match main app */
+/* Form sections - Clean Apple style */
 .form-section {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 16px;
+  border-radius: var(--r-xl);
+  padding: 20px;
   margin-bottom: 12px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
 }
 .section-num {
   width: 26px;
   height: 26px;
-  background: var(--primary);
+  background: var(--black);
   color: #fff;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   margin-right: 10px;
   flex-shrink: 0;
 }
@@ -169,7 +200,7 @@ textarea { resize: vertical; min-height: 70px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-group { margin-bottom: 14px; }
 .form-group:last-child { margin-bottom: 0; }
-/* Radio/Checkbox - Match main app */
+/* Radio/Checkbox - Apple style */
 .options-grid {
   display: flex;
   flex-direction: column;
@@ -178,44 +209,44 @@ textarea { resize: vertical; min-height: 70px; }
 .option-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 2px solid var(--border);
-  border-radius: var(--r);
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   background: var(--surface);
 }
-.option-item:hover { border-color: var(--primary); }
+.option-item:hover { border-color: var(--black); }
 .option-item.selected {
-  border-color: var(--green);
-  background: var(--green-soft);
+  border-color: var(--black);
+  background: var(--surface-2);
 }
 .option-item input { display: none; }
 .option-radio {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: 2px solid var(--border);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
 }
 .option-item.selected .option-radio {
-  border-color: var(--green);
-  background: var(--green);
+  border-color: var(--black);
+  background: var(--black);
 }
 .option-item.selected .option-radio::after {
   content: '';
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   background: #fff;
   border-radius: 50%;
 }
-.option-text { font-size: 14px; font-weight: 600; }
-.option-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.option-text { font-size: 15px; font-weight: 500; color: var(--txt); }
+.option-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
 /* Dress/Accessory selection - Match main app */
 .search-wrap {
   margin-bottom: 12px;
@@ -236,99 +267,95 @@ textarea { resize: vertical; min-height: 70px; }
 
 .items-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 .item-chip {
   position: relative;
-  border: 2px solid var(--border);
-  border-radius: var(--r);
-  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 0;
   cursor: pointer;
-  transition: all 0.15s;
-  text-align: left;
+  transition: all 0.2s ease;
+  text-align: center;
   background: var(--surface);
+  overflow: hidden;
 }
-.item-chip:hover { border-color: var(--primary); }
+.item-chip:hover { border-color: var(--black); transform: translateY(-1px); }
 .item-chip.selected {
-  border-color: var(--green);
-  background: var(--green-soft);
+  border-color: var(--black);
+  background: var(--surface-2);
 }
 .item-chip.busy {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 .busy-badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: 4px;
+  right: 4px;
   background: var(--red);
   color: #fff;
   font-size: 8px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 999px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 6px;
   z-index: 1;
 }
 .item-chip input { display: none; }
 .item-chip-check {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 4px;
+  left: 4px;
   width: 18px;
   height: 18px;
-  border: 2px solid var(--border);
-  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 10px;
   color: #fff;
-  transition: all 0.15s;
+  transition: all 0.2s ease;
   background: var(--surface);
 }
 .item-chip.selected .item-chip-check {
-  background: var(--green);
-  border-color: var(--green);
+  background: var(--black);
+  border-color: var(--black);
 }
 .item-chip.selected .item-chip-check::after { content: '✓'; }
 .item-chip-img {
   width: 100%;
   aspect-ratio: 1;
-  background: linear-gradient(135deg, var(--purple-soft), var(--accent-soft));
-  border-radius: var(--r);
+  background: linear-gradient(135deg, var(--gray-soft), var(--surface-2));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  margin-bottom: 8px;
+  font-size: 24px;
   overflow: hidden;
 }
 .item-chip-img img { width: 100%; height: 100%; object-fit: cover; }
+.item-chip-info {
+  padding: 8px 6px;
+}
 .item-chip-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--txt);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .item-chip-size {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   margin-top: 2px;
-}
-.item-chip-price {
-  font-size: 12px;
-  color: var(--primary);
-  font-weight: 600;
-  margin-top: 4px;
 }
 /* Date input */
 input[type="date"], input[type="time"] {
   -webkit-appearance: none;
   appearance: none;
 }
-/* Submit button - Match main app */
+/* Submit button - Apple style */
 .submit-section {
   position: fixed;
   bottom: 0;
@@ -338,60 +365,62 @@ input[type="date"], input[type="time"] {
   padding: 12px 16px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
 }
 .submit-btn {
   width: 100%;
-  padding: 14px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  padding: 16px;
+  background: var(--black);
   color: #fff;
   border: none;
-  border-radius: var(--r);
-  font-size: 15px;
-  font-weight: 700;
+  border-radius: var(--r-lg);
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
-  box-shadow: 0 4px 15px rgba(232, 180, 188, 0.4);
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
 }
-.submit-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.submit-btn:hover { opacity: 0.85; }
 .submit-btn:active { transform: scale(0.98); }
 .submit-btn:disabled { background: var(--muted); cursor: not-allowed; }
-/* Success - Match main app */
+/* Success - Apple style */
 .success-card {
   text-align: center;
-  padding: 40px 20px;
+  padding: 48px 20px;
 }
 .success-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 20px;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 24px;
   background: var(--green-soft);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 40px;
+  font-size: 36px;
 }
 .success-card h2 {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
   margin-bottom: 8px;
   color: var(--txt);
+  letter-spacing: -0.5px;
 }
 .success-card p {
   color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 20px;
+  font-size: 15px;
+  margin-bottom: 24px;
+  line-height: 1.5;
 }
 .success-code {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: var(--black);
   color: #fff;
-  padding: 14px 24px;
-  border-radius: var(--r);
-  font-size: 16px;
-  font-weight: 700;
+  padding: 16px 32px;
+  border-radius: var(--r-lg);
+  font-size: 18px;
+  font-weight: 600;
   display: inline-block;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  letter-spacing: 1px;
 }
 /* Loading - Match main app */
 .loading-card {
@@ -444,8 +473,11 @@ input[type="date"], input[type="time"] {
 <body>
 <div class="container">
   <div class="header">
-    <h1>👗 Aura Rental</h1>
-    <p>Đặt lịch thuê váy dễ dàng</p>
+    <div class="header-logo">
+      <div class="header-logo-icon">👗</div>
+      <div class="header-title">AURA RENTAL</div>
+      <div class="header-subtitle">Đặt lịch thuê váy dễ dàng</div>
+    </div>
   </div>
 
   <div class="progress-bar">
@@ -1022,8 +1054,10 @@ function renderItems() {
             <div class="item-chip-img">
               ${imgSrc ? `<img src="${imgSrc}" alt="">` : '👗'}
             </div>
-            <div class="item-chip-name">${v.Ten_Vay}</div>
-            <div class="item-chip-size">Size ${v.Size}</div>
+            <div class="item-chip-info">
+              <div class="item-chip-name">${v.Ten_Vay}</div>
+              <div class="item-chip-size">Size ${v.Size}</div>
+            </div>
           </div>
         `;
       }).join('');
@@ -1073,8 +1107,10 @@ function renderItems() {
             <div class="item-chip-img">
               ${imgSrc ? `<img src="${imgSrc}" alt="">` : '💍'}
             </div>
-            <div class="item-chip-name">${p.Ten_PK}</div>
-            <div class="item-chip-size">${p.Loai || 'Phụ kiện'}</div>
+            <div class="item-chip-info">
+              <div class="item-chip-name">${p.Ten_PK}</div>
+              <div class="item-chip-size">${p.Loai || 'Phụ kiện'}</div>
+            </div>
           </div>
         `;
       }).join('');
