@@ -840,8 +840,8 @@ async function init() {
   dateInput.value = CONFIG.MIN_DATE;
 
   // Wait for Supabase client to be ready
-  if (!window.supabaseClient && window.supabase) {
-    window.supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.supabaseUrl, SUPABASE_CONFIG.supabaseKey);
+  if (!window.supabaseClient && window.supabase && window.SUPABASE_CONFIG) {
+    window.supabaseClient = window.supabase.createClient(window.SUPABASE_CONFIG.supabaseUrl, window.SUPABASE_CONFIG.supabaseKey);
   }
 
   // Load inventory
