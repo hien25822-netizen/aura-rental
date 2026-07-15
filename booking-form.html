@@ -721,15 +721,18 @@ input[type="date"], input[type="time"] {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-// Supabase Configuration - Direct config for booking form
-var SUPABASE_CONFIG = {
-  supabaseUrl: 'https://mmiygzcljqayrfomxkkk.supabase.co',
-  supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw'
-};
-var supabase = null;
-if (SUPABASE_CONFIG?.supabaseUrl && SUPABASE_CONFIG?.supabaseKey) {
-  supabase = window.supabase.createClient(SUPABASE_CONFIG.supabaseUrl, SUPABASE_CONFIG.supabaseKey);
-}
+// Wait for Supabase library to load
+window.addEventListener('load', function() {
+  // Supabase Configuration - Direct config for booking form
+  window.SUPABASE_CONFIG = {
+    supabaseUrl: 'https://mmiygzcljqayrfomxkkk.supabase.co',
+    supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw'
+  };
+  window.supabaseClient = null;
+  if (window.supabase && typeof window.supabase.createClient === 'function') {
+    window.supabaseClient = window.supabase.createClient(window.SUPABASE_CONFIG.supabaseUrl, window.SUPABASE_CONFIG.supabaseKey);
+  }
+});
 
 // Config
 var CONFIG = {
@@ -836,6 +839,11 @@ async function init() {
   dateInput.min = CONFIG.MIN_DATE;
   dateInput.value = CONFIG.MIN_DATE;
 
+  // Wait for Supabase client to be ready
+  if (!window.supabaseClient && window.supabase) {
+    window.supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.supabaseUrl, SUPABASE_CONFIG.supabaseKey);
+  }
+
   // Load inventory
   await loadInventory();
 
@@ -882,11 +890,11 @@ async function loadInventory(silent = false) {
     }
 
     // If empty, fetch directly from Supabase
-    if (dresses.length === 0 && accessories.length === 0 && supabase) {
+    if (dresses.length === 0 && accessories.length === 0 && window.supabaseClient) {
       try {
         const [dressData, accData] = await Promise.all([
-          supabase.from('dresses').select('*'),
-          supabase.from('accessories').select('*')
+          window.supabaseClient.from('dresses').select('*'),
+          window.supabaseClient.from('accessories').select('*')
         ]);
 
         if (dressData.data) {
@@ -1318,7 +1326,7 @@ async function saveBooking(booking) {
           ghi_chu: booking.Ghi_Chu,
         };
 
-        const { data, error } = await supabase
+        const { data, error } = await window.supabaseClient
           .from('bookings')
           .insert(bookingData)
           .select()
@@ -1336,7 +1344,7 @@ async function saveBooking(booking) {
                 booking_id: data.id,
                 dress_id: did
               }));
-              await supabase.from('booking_dresses').insert(dressRels);
+              await window.supabaseClient.from('booking_dresses').insert(dressRels);
             }
 
             if (accessoryIds.length > 0) {
@@ -1344,7 +1352,7 @@ async function saveBooking(booking) {
                 booking_id: data.id,
                 accessory_id: aid
               }));
-              await supabase.from('booking_accessories').insert(accRels);
+              await window.supabaseClient.from('booking_accessories').insert(accRels);
             }
           }
         }
