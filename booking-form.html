@@ -11,9 +11,9 @@
 <style>
 :root {
   /* Brand - Match main app */
-  --primary: #d4737d;
-  --primary-dark: #b85a63;
-  --primary-light: #f8e8ea;
+  --primary: #daf0fe;
+  --primary-dark: #7dd3fc;
+  --primary-light: #e0f2fe;
   --accent: #4a9e7c;
   --accent-soft: #e5f3ed;
 
@@ -1008,8 +1008,6 @@ function renderItems() {
       vayGrid.innerHTML = filteredDresses.map(v => {
         const selected = selectedVays.includes(v.Ma_Vay);
         const imgSrc = v.Anh_Vay || '';
-        const price = selectedGoi === '12h' ? v.Gia_Thue_12h :
-                      selectedGoi === '3 ngày' ? v.Gia_Thue_3_Ngay : v.Gia_Thue_1_Ngay;
         const busyClass = v.busy ? 'busy' : '';
         const busyBadge = v.busy ? '<div class="busy-badge">BẬN NGÀY NÀY</div>' : '';
         const cursor = v.busy && !selected ? 'not-allowed' : 'pointer';
@@ -1026,7 +1024,6 @@ function renderItems() {
             </div>
             <div class="item-chip-name">${v.Ten_Vay}</div>
             <div class="item-chip-size">Size ${v.Size}</div>
-            <div class="item-chip-price">${fmtVND(price)}</div>
           </div>
         `;
       }).join('');
@@ -1078,7 +1075,6 @@ function renderItems() {
             </div>
             <div class="item-chip-name">${p.Ten_PK}</div>
             <div class="item-chip-size">${p.Loai || 'Phụ kiện'}</div>
-            <div class="item-chip-price">${fmtVND(p.Gia_Thue_1_Ngay)}</div>
           </div>
         `;
       }).join('');
