@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#DAF0FE" />
+<title>Aura Rental - Quản lý thuê váy</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Aura Rental" />
+<link rel="apple-touch-icon" href="icon-192.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=24" />
+</head>
+<body>
+<div class="app">
+
+<!-- ===== HEADER ===== -->
+<header>
+  <div class="header-left">
+    <h1 id="title">Calendar</h1>
+    <span class="pill" id="pill">M6/2026</span>
+  </div>
+  <div class="header-right">
+    <button class="header-btn" onclick="openRefundOrders()" title="Đơn đã hoàn cọc">💰</button>
+    <button class="header-btn" onclick="go('v-soc')" title="Sổ thu/chi">📊</button>
+    <button class="header-btn" onclick="shareBookingForm()" title="Chia sẻ link đặt thuê">🔗</button>
+    <button class="header-btn" onclick="exportToSheets()" title="Xuất dữ liệu Google Sheets">📤</button>
+  </div>
+</header>
+
+<!-- ===== CALENDAR ===== -->
+<section class="view active" id="v-cal">
+  <div class="cal-toolbar">
+    <div class="cal-nav" id="cal-nav-mth">
+      <button data-nav="prev">‹</button>
+      <div class="cal-month-label" id="cal-month-label">Tháng 6 / 2026</div>
+      <button data-nav="next">›</button>
+    </div>
+    <div class="cal-mode-tabs">
+      <button class="on" data-mode="month">Tháng</button>
+      <button data-mode="day">Ngày</button>
+    </div>
+  </div>
+  <div class="cal-legend">
+    <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#10b981"></div> Lấy váy</div>
+    <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#ef4444"></div> Trả về</div>
+  </div>
+  <div class="cal-month-stats-mini" id="cal-stats"></div>
+  <div id="cal-month"></div>
+  <div id="cal-day" style="display:none"></div>
+</section>
+
+<!-- ===== ORDERS ===== -->
+<section class="view" id="v-orders">
+  <div class="orders-header">
+    <input class="search" id="search" placeholder="Tìm tên, SĐT, mã đơn..." />
+    <button class="btn-new-order" onclick="openNewOrder()">
+      <span>＋</span> Đơn mới
+    </button>
+  </div>
+  <div class="chips" id="order-chips">
+    <button class="on" data-f="all">Tất cả</button>
+    <button data-f="today">Hôm nay</button>
+    <button data-f="week">Tuần này</button>
+    <button data-f="preparing">Cần lấy</button>
+    <button data-f="renting">Đang thuê</button>
+    <button data-f="returning">Trả hôm nay</button>
+    <button data-f="overdue">Quá hạn</button>
+    <button data-f="refunded">Đã hoàn</button>
+  </div>
+  <div class="chips chips-type" id="order-type-chips">
+    <button class="on" data-f="type-all">Tất cả loại</button>
+    <button data-f="type-chot">Chốt thuê</button>
+    <button data-f="type-fitting">Fitting</button>
+    <button data-f="type-fittingxa">Fitting xa</button>
+    <button data-f="type-datship">Đặt ship</button>
+  </div>
+  <div id="order-list"></div>
+</section>
+
+<!-- ===== DRESSES (KHO VÁY) ===== -->
+<section class="view" id="v-kho">
+  <input class="search" id="search-kho" placeholder="Tìm váy..." />
+  <div class="chips" id="kho-chips">
+    <button class="on" data-loai="">Tất cả size</button>
+    <button data-loai="S">Size S</button>
+    <button data-loai="M">Size M</button>
+    <button data-loai="L">Size L</button>
+    <button data-loai="Free size">Free size</button>
+  </div>
+  <div id="kho-list"></div>
+</section>
+
+<!-- ===== ACCESSORIES (PHỤ KIỆN) ===== -->
+<section class="view" id="v-pk">
+  <input class="search" id="search-pk" placeholder="Tìm phụ kiện..." />
+  <div class="chips" id="pk-chips">
+    <button class="on" data-loai="">Tất cả</button>
+    <button data-loai="Giày">Giày</button>
+    <button data-loai="Túi">Túi</button>
+    <button data-loai="Dây chuyền">Dây chuyền</button>
+    <button data-loai="Khăn">Khăn</button>
+    <button data-loai="Khác">Khác</button>
+  </div>
+  <div id="pk-list"></div>
+</section>
+
+<!-- ===== CHECK AVAILABILITY ===== -->
+<section class="view" id="v-avail">
+  <div class="check-header">
+    <h3>✨ Check Váy Trống</h3>
+    <p class="muted">Chọn ngày & gói thuê để xem váy/phụ kiện còn trống</p>
+  </div>
+
+  <!-- Date & Package selection -->
+  <div class="check-date-section">
+    <div class="selected-date" id="selected-date-display">
+      <span class="date-label">📅 Ngày:</span>
+      <span class="date-value" id="av-date-display">—</span>
+    </div>
+    <div class="quick-dates" id="quick-dates">
+      <button class="quick-date-btn" data-date="today">Hôm nay</button>
+      <button class="quick-date-btn" data-date="tomorrow">Ngày mai</button>
+      <button class="quick-date-btn" data-date="weekend">Cuối tuần</button>
+      <button class="quick-date-btn" data-date="pick" onclick="openDatePicker()">📅 Chọn</button>
+    </div>
+  </div>
+
+  <!-- Filter options -->
+  <div class="avail-filters">
+    <div class="avail-filter-group">
+      <label>Loại</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" data-type="vay" onclick="switchAvailType('vay')">👗 Váy</button>
+        <button class="toggle-btn" data-type="pk" onclick="switchAvailType('pk')">💍 Phụ kiện</button>
+      </div>
+    </div>
+    <div class="avail-filter-group">
+      <label>Gói thuê</label>
+      <div class="toggle-group">
+        <button class="toggle-btn" data-goi="12h" onclick="switchAvailGoi('12h')">12h</button>
+        <button class="toggle-btn active" data-goi="1 ngày" onclick="switchAvailGoi('1 ngày')">1 ngày</button>
+        <button class="toggle-btn" data-goi="3 ngày" onclick="switchAvailGoi('3 ngày')">3 ngày</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="check-search">
+    <input type="text" id="check-search" placeholder="🔍 Tìm váy..." oninput="filterCheckItems(this.value)" />
+  </div>
+
+  <!-- Calendar mini -->
+  <div class="cal-mini" id="cal-mini"></div>
+
+  <!-- Results -->
+  <div class="avail-results" id="avail-results">
+    <div class="avail-summary" id="avail-summary"></div>
+    <div class="avail-list" id="avail-list"></div>
+  </div>
+</section>
+
+<!-- ===== CASH BOOK ===== -->
+<section class="view" id="v-soc">
+  <input class="search" id="search-soc" placeholder="Tìm giao dịch..." />
+  <div id="soc-list"></div>
+</section>
+
+<!-- ===== BOTTOM NAV ===== -->
+<nav class="bottom">
+  <button class="active" data-go="v-cal"><span class="ico">📅</span><small>Lịch</small></button>
+  <button data-go="v-orders"><span class="ico">📦</span><small>Đơn</small></button>
+  <button data-go="v-avail"><span class="ico">✨</span><small>Check</small></button>
+  <button data-go="v-kho"><span class="ico">👗</span><small>Váy</small></button>
+  <button data-go="v-pk"><span class="ico">💍</span><small>Phụ kiện</small></button>
+</nav>
+
+<!-- FAB for inventory add -->
+<button class="fab" id="fab-add" style="display:none" onclick="openAddContext()">＋</button>
+
+</div><!-- /.app -->
+
+<!-- ===== TOAST ===== -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- ===== MODALS ===== -->
+<div class="modal" id="m-detail"><div class="sheet" id="d-body"></div></div>
+<div class="modal" id="m-new"><div class="sheet" id="n-body"></div></div>
+<div class="modal" id="m-edit-item"><div class="sheet" id="ei-body"></div></div>
+<div class="modal" id="m-edit-order"><div class="sheet" id="eo-body"></div></div>
+<div class="modal" id="m-refund"><div class="sheet" id="r-body"></div></div>
+<div class="modal" id="m-confirm"><div class="sheet" id="cf-body" style="max-height:280px"></div></div>
+<div class="modal" id="m-refund-orders"><div class="sheet" id="ro-body" style="max-height:85vh"></div></div>
+<div class="modal" id="m-refund-screenshot"><div class="sheet" id="rss-body"></div></div>
+
+<!-- Supabase Configuration -->
+<script>
+  window.APP_CONFIG = {
+    supabaseUrl: 'https://mmiygzcljqayrfomxkkk.supabase.co',
+    supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw'
+  };
+  console.log('✅ APP_CONFIG loaded');
+</script>
+
+<!-- Supabase Client Library -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- Supabase Service Layer -->
+<script src="supabase-service.js?v=4"></script>
+
+<!-- Supabase App Integration -->
+<script src="supabase-app.js?v=3"></script>
+
+<!-- Main App (loaded after Supabase) -->
+<script src="app.js?v=17"></script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>

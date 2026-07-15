@@ -1,0 +1,50 @@
+{
+  "name": "Aura Rental",
+  "short_name": "Aura",
+  "description": "Quản lý thuê váy cao cấp — Aura Rental",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF8F3",
+  "theme_color": "#DAF0FE",
+  "lang": "vi",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Tạo đơn mới",
+      "short_name": "Đơn mới",
+      "description": "Tạo đơn cho khách nhanh",
+      "url": "./index.html#new",
+      "icons": [{ "src": "icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lịch thuê",
+      "short_name": "Lịch",
+      "description": "Xem lịch thuê hôm nay",
+      "url": "./index.html#calendar",
+      "icons": [{ "src": "icon-192.svg", "sizes": "192x192" }]
+    }
+  ]
+}

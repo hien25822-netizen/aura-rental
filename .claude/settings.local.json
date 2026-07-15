@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(python3 -c ' *)",
+      "WebFetch(domain:anthropic-algeng-chat-tts-us.oss-east-1.aliyuncs.com)",
+      "WebFetch(domain:anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com)",
+      "Bash(curl -sL -o \"/Users/nguyenhien/Hienrrr/Apps/Aura Rental/logo-aura.png\" \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-05%2FClaude.7%2F2073739461820158196%2Ff1a4b57d337fcc0e9dfabc28a6edd67b1554d9ca50fb76e1be2ce99c2b538b41..png?Expires=1783352419&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=hMZ1eUDSm6HbEa99dN64i4TqVqA%3D\")",
+      "Bash(curl -sL -o \"/Users/nguyenhien/Hienrrr/Apps/Aura Rental/logo-aura.png\" \"https://minimax-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-05%2FClaude.7%2F2073739461820158196%2Ff1a4b57d337fcc0e9dfabc28a6edd67b1554d9ca50fb76e1be2ce99c2b538b41..png?Expires=1783352419&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=hMZ1eUDSm6HbEa99dN64i4TqVqA%3D\")",
+      "mcp__Anthropic_WebSearch__web_search",
+      "Bash(curl -s -I \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F51dc787fe3980df200e3db857c2a56ca6b9b88b176d50cfbf45ca4609d3ac018..webp?Expires=1783510980&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=AT4dnX1MkPoYuTdOFZFCUNljHqI%3D\")",
+      "Bash(curl -sL \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F4aa87156419ecdccda1ca2c9eeb3113bf98c57d1de1ee18b9db9fc93e5dcfc8d..webp?Expires=1783520272&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=As5icRhAYvaFOWVbpt3T5rtB5WQ%3D\" -o /tmp/aura_check.webp)",
+      "WebFetch(domain:minimax-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com)"
+    ]
+  }
+}

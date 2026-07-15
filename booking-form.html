@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a1d2e">
+<title>Aura Rental - Đặt lịch thuê váy</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+:root {
+  /* Brand - Match main app */
+  --primary: #d4737d;
+  --primary-dark: #b85a63;
+  --primary-light: #f8e8ea;
+  --accent: #4a9e7c;
+  --accent-soft: #e5f3ed;
+
+  /* Status colors - Match main app */
+  --green: #10b981;
+  --green-soft: #d1fae5;
+  --green-deep: #047857;
+  --red: #ef4444;
+  --red-soft: #fee2e2;
+  --red-deep: #991b1b;
+  --blue: #3b82f6;
+  --blue-soft: #dbeafe;
+  --blue-deep: #1e40af;
+  --yellow: #f59e0b;
+  --yellow-soft: #fef3c7;
+  --yellow-deep: #92400e;
+  --purple: #8b5cf6;
+  --purple-soft: #ede9fe;
+  --gray: #6b7280;
+  --gray-soft: #f3f4f6;
+
+  /* Neutrals */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f9fafb;
+  --surface-3: #f3f4f6;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --txt: #111827;
+  --txt-2: #4b5563;
+  --muted: #9ca3af;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r: 8px;
+  --r-md: 10px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 20px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--txt);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 100px;
+}
+/* Header - Match main app style */
+.header {
+  text-align: center;
+  padding: 24px 0 20px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  margin: -16px -16px 20px;
+  padding: 28px 20px;
+  border-radius: 0 0 20px 20px;
+  box-shadow: 0 4px 16px rgba(212, 115, 125, 0.25);
+}
+.header h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.3px; }
+.header p { opacity: 0.9; font-size: 13px; }
+/* Progress - Match main app */
+.progress-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.progress-step {
+  flex: 1;
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+.progress-step.active { background: var(--primary); }
+.progress-step.done { background: var(--green); }
+/* Form sections - Match main app */
+.form-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.section-num {
+  width: 26px;
+  height: 26px;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--txt);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+}
+.section-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+/* Inputs - Match main app */
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--txt-2);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  font-size: 14px;
+  transition: all 0.15s;
+  background: var(--surface);
+  color: var(--txt);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(26,29,46,0.08);
+}
+input::placeholder, textarea::placeholder { color: var(--muted); }
+textarea { resize: vertical; min-height: 70px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-group { margin-bottom: 14px; }
+.form-group:last-child { margin-bottom: 0; }
+/* Radio/Checkbox - Match main app */
+.options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-radius: var(--r);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface);
+}
+.option-item:hover { border-color: var(--primary); }
+.option-item.selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+.option-item input { display: none; }
+.option-radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.option-item.selected .option-radio {
+  border-color: var(--green);
+  background: var(--green);
+}
+.option-item.selected .option-radio::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border-radius: 50%;
+}
+.option-text { font-size: 14px; font-weight: 600; }
+.option-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+/* Dress/Accessory selection - Match main app */
+.search-wrap {
+  margin-bottom: 12px;
+}
+.search-wrap input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: var(--r);
+  font-size: 14px;
+  background: var(--surface);
+  transition: all 0.15s;
+}
+.search-wrap input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.item-chip {
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: var(--r);
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  background: var(--surface);
+}
+.item-chip:hover { border-color: var(--primary); }
+.item-chip.selected {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+.item-chip.busy {
+  opacity: 0.5;
+}
+.busy-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--red);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  z-index: 1;
+}
+.item-chip input { display: none; }
+.item-chip-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+  transition: all 0.15s;
+  background: var(--surface);
+}
+.item-chip.selected .item-chip-check {
+  background: var(--green);
+  border-color: var(--green);
+}
+.item-chip.selected .item-chip-check::after { content: '✓'; }
+.item-chip-img {
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, var(--purple-soft), var(--accent-soft));
+  border-radius: var(--r);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.item-chip-img img { width: 100%; height: 100%; object-fit: cover; }
+.item-chip-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.item-chip-size {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.item-chip-price {
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 600;
+  margin-top: 4px;
+}
+/* Date input */
+input[type="date"], input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* Submit button - Match main app */
+.submit-section {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  padding: 12px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+}
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 4px 15px rgba(232, 180, 188, 0.4);
+}
+.submit-btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+.submit-btn:active { transform: scale(0.98); }
+.submit-btn:disabled { background: var(--muted); cursor: not-allowed; }
+/* Success - Match main app */
+.success-card {
+  text-align: center;
+  padding: 40px 20px;
+}
+.success-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 20px;
+  background: var(--green-soft);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+}
+.success-card h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--txt);
+}
+.success-card p {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.success-code {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: var(--r);
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+/* Loading - Match main app */
+.loading-card {
+  text-align: center;
+  padding: 60px 20px;
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.hidden { display: none !important; }
+/* Toast - Match main app */
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  animation: toastIn 0.25s ease;
+  max-width: 320px;
+}
+@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+/* Address field */
+.address-field { display: none; }
+.address-field.show { display: block; }
+/* Skip section */
+.skip-link {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  padding: 8px;
+  cursor: pointer;
+}
+.skip-link:hover { color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>👗 Aura Rental</h1>
+    <p>Đặt lịch thuê váy dễ dàng</p>
+  </div>
+
+  <div class="progress-bar">
+    <div class="progress-step active" id="step1"></div>
+    <div class="progress-step" id="step2"></div>
+    <div class="progress-step" id="step3"></div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading-view" class="form-section loading-card">
+    <div class="spinner"></div>
+    <p style="color: var(--muted)">Đang tải thông tin...</p>
+  </div>
+
+  <!-- Form -->
+  <form id="booking-form" class="hidden">
+    <!-- Section 1: Thông tin khách -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">1</span>
+        Thông tin của nàng
+      </div>
+
+      <div class="form-group">
+        <label>Tên Instagram của nàng là gì? <span style="color: var(--red)">*</span></label>
+        <input type="text" name="insta" placeholder="@username" required>
+      </div>
+
+      <div class="form-group">
+        <label>Số điện thoại liên hệ <span style="color: var(--red)">*</span></label>
+        <input type="tel" name="sdt" placeholder="0901234567" required>
+      </div>
+    </div>
+
+    <!-- Section 2: Chọn váy -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">2</span>
+        Nàng muốn thuê váy nào - size gì?
+      </div>
+      <p class="section-desc">Có thể chọn 1 hoặc nhiều váy cùng lúc. Chỉ hiện váy trống theo ngày đã chọn.</p>
+
+      <!-- Search váy -->
+      <div class="search-wrap">
+        <input type="text" id="search-vay" placeholder="🔍 Tìm váy..." oninput="filterDresses(this.value)">
+      </div>
+
+      <div class="items-grid" id="vay-grid"></div>
+    </div>
+
+    <!-- Section 3: Gói thuê -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">3</span>
+        Nàng muốn thuê gói nào?
+      </div>
+
+      <div class="options-grid">
+        <label class="option-item" data-goi="12h">
+          <input type="radio" name="goi" value="12h">
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">12h</div>
+            <div class="option-desc">Thuê trong ngày, trả lại trong ngày</div>
+          </div>
+        </label>
+        <label class="option-item selected" data-goi="1 ngày">
+          <input type="radio" name="goi" value="1 ngày" checked>
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">1 ngày</div>
+            <div class="option-desc">Lấy hôm nay, trả ngày mai</div>
+          </div>
+        </label>
+        <label class="option-item" data-goi="3 ngày">
+          <input type="radio" name="goi" value="3 ngày">
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">3 ngày</div>
+            <div class="option-desc">Thuê 3 ngày 2 đêm</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 4: Ngày & Giờ -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">4</span>
+        Ngày & Giờ lấy váy
+      </div>
+
+      <div class="form-group">
+        <label>Ngày nàng muốn lấy váy <span style="color: var(--red)">*</span></label>
+        <input type="date" name="ngayLay" id="ngayLay" required>
+      </div>
+
+      <div class="form-group">
+        <label>Giờ lấy váy</label>
+        <input type="time" name="gioLay" value="09:00">
+      </div>
+    </div>
+
+    <!-- Section 5: Phụ kiện -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">5</span>
+        Nàng muốn thuê thêm phụ kiện gì?
+      </div>
+      <p class="section-desc">Có thể chọn 1 hoặc nhiều phụ kiện cùng lúc</p>
+      <p class="skip-link" onclick="skipSection('pk-section')">Bỏ qua phần này →</p>
+
+      <!-- Search phụ kiện -->
+      <div class="search-wrap">
+        <input type="text" id="search-pk" placeholder="🔍 Tìm phụ kiện..." oninput="filterAccessories(this.value)">
+      </div>
+
+      <div class="items-grid" id="pk-grid" style="margin-top: 12px"></div>
+    </div>
+
+    <!-- Section 6: Nhận hàng -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">6</span>
+        Hình thức nàng muốn nhận váy
+      </div>
+
+      <div class="options-grid">
+        <label class="option-item selected" data-nhan="Không đặt ship">
+          <input type="radio" name="nhan" value="Không đặt ship" checked>
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">Nàng tự qua shop lấy váy</div>
+          </div>
+        </label>
+        <label class="option-item" data-nhan="Đặt ship">
+          <input type="radio" name="nhan" value="Đặt ship">
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">Đặt ship về địa chỉ của nàng</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-group address-field" id="address-field">
+        <label>Địa chỉ nhận váy <span style="color: var(--red)">*</span></label>
+        <textarea name="diaChi" placeholder="VD: 123 Nguyễn Trãi, Quận 1, TP.HCM"></textarea>
+      </div>
+    </div>
+
+    <!-- Section 7: Cọc tiền -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">7</span>
+        Hình thức cọc tiền váy
+      </div>
+
+      <div class="options-grid">
+        <label class="option-item selected" data-coc="Cọc 50% + CCCD">
+          <input type="radio" name="coc" value="Cọc 50% + CCCD" checked>
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">Cọc 50% + CCCD</div>
+            <div class="option-desc">Đặt cọc 50% giá trị váy + giữ CCCD</div>
+          </div>
+        </label>
+        <label class="option-item" data-coc="Cọc 100%">
+          <input type="radio" name="coc" value="Cọc 100%">
+          <span class="option-radio"></span>
+          <div>
+            <div class="option-text">Cọc 100%</div>
+            <div class="option-desc">Đặt cọc 100% giá trị váy</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 8: Sự kiện -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">8</span>
+        Nàng mặc cho sự kiện nào?
+      </div>
+
+      <div class="options-grid">
+        <label class="option-item" data-sukien="Tiệc cưới">
+          <input type="radio" name="sukien" value="Tiệc cưới">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Tiệc cưới</div></div>
+        </label>
+        <label class="option-item" data-sukien="Tiệc công ty">
+          <input type="radio" name="sukien" value="Tiệc công ty">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Tiệc công ty</div></div>
+        </label>
+        <label class="option-item" data-sukien="Prom">
+          <input type="radio" name="sukien" value="Prom">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Prom</div></div>
+        </label>
+        <label class="option-item" data-sukien="Sự kiện">
+          <input type="radio" name="sukien" value="Sự kiện">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Sự kiện</div></div>
+        </label>
+        <label class="option-item" data-sukien="Anniversary">
+          <input type="radio" name="sukien" value="Anniversary">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Anniversary</div></div>
+        </label>
+        <label class="option-item" data-sukien="Du lịch">
+          <input type="radio" name="sukien" value="Du lịch">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Du lịch</div></div>
+        </label>
+        <label class="option-item" data-sukien="Đi date">
+          <input type="radio" name="sukien" value="Đi date">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Đi date</div></div>
+        </label>
+        <label class="option-item" data-sukien="Tốt nghiệp">
+          <input type="radio" name="sukien" value="Tốt nghiệp">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Tốt nghiệp</div></div>
+        </label>
+        <label class="option-item" data-sukien="Đi chụp ảnh">
+          <input type="radio" name="sukien" value="Đi chụp ảnh">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Đi chụp ảnh</div></div>
+        </label>
+        <label class="option-item" data-sukien="Mục khác">
+          <input type="radio" name="sukien" value="Mục khác">
+          <span class="option-radio"></span>
+          <div><div class="option-text">Mục khác</div></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 9: Ghi chú -->
+    <div class="form-section">
+      <div class="section-title">
+        <span class="section-num">9</span>
+        Ghi chú thêm
+      </div>
+      <p class="skip-link" onclick="skipSection('note-section')">Bỏ qua phần này →</p>
+
+      <div class="form-group" id="note-section">
+        <textarea name="ghichu" placeholder="VD: Cần giao hàng trước 14h, sự kiện đặc biệt..."></textarea>
+      </div>
+    </div>
+  </form>
+
+  <!-- Submit Button (fixed) -->
+  <div class="submit-section" id="submit-section">
+    <button type="submit" form="booking-form" class="submit-btn" id="submit-btn">
+      Gửi yêu cầu đặt thuê
+    </button>
+  </div>
+
+  <!-- Success -->
+  <div id="success-view" class="hidden">
+    <div class="form-section success-card">
+      <div class="success-icon">✅</div>
+      <h2>Đã gửi yêu cầu!</h2>
+      <p>Shop sẽ liên hệ xác nhận trong thời gian sớm nhất qua Zalo nhé!</p>
+      <div class="success-code" id="booking-code"></div>
+      <p style="font-size: 13px; color: var(--muted);">Vui lòng nhắn tin qua Zalo để xác nhận nhanh hơn</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Supabase Configuration
+// Copy from your main app's config.js
+var SUPABASE_CONFIG = window.APP_CONFIG || null;
+var supabase = null;
+if (SUPABASE_CONFIG?.supabaseUrl && SUPABASE_CONFIG?.supabaseKey) {
+  supabase = window.supabase.createClient(SUPABASE_CONFIG.supabaseUrl, SUPABASE_CONFIG.supabaseKey);
+}
+
+// Config
+var CONFIG = {
+  STORE_KEY: 'aura_v7',
+  BOOKING_KEY: 'aura_bookings',
+  PENDING_KEY: 'aura_pending_bookings',
+  MIN_DATE: new Date().toISOString().split('T')[0]
+};
+
+// State
+var dresses = [];
+var accessories = [];
+var selectedVays = [];
+var selectedPKs = [];
+var searchVayTerm = '';
+var searchPKTerm = '';
+
+// Helper functions from app.js (simplified versions)
+function parseD(s) { var x=new Date(s); x.setHours(0,0,0,0); return x; }
+function addD(s,n) { var x=parseD(s); x.setDate(x.getDate()+n); return x; }
+function isoOf(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth()+1).padStart(2,'0');
+  var day = String(d.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + day;
+}
+function ngayTraThuc(goi, lay){
+  if (!goi || !lay) return null;
+  if (goi === '12h') return parseD(lay);
+  if (goi === '1 ngay' || goi === '1 ngày') return addD(lay, 1);
+  if (goi === '3 ngay' || goi === '3 ngày') return addD(lay, 3);
+  return parseD(lay);
+}
+function isVayBusy(ma, dateIso, goi) {
+  try {
+    var stored = localStorage.getItem(CONFIG.STORE_KEY);
+    if (!stored) return false;
+    var data = JSON.parse(stored);
+    var don = data.don || [];
+    return don.some(function(o) {
+      if (o.hoan) return false;
+      var has = (o.dhvs || []).some(function(x) { return (x.vay || x.Ma_Vay) === ma; });
+      if (!has) return false;
+      var lay = o.Ngay_Lay || o.lay;
+      var goiO = o.Goi_Thue || o.goi;
+      if (!lay || !goiO) return false;
+      var layDate = parseD(lay);
+      var traDate = ngayTraThuc(goiO, lay);
+      var dd = parseD(dateIso);
+      if (goiO === '12h') return +dd === +layDate;
+      return dd >= layDate && dd <= traDate;
+    });
+  } catch(e) { return false; }
+}
+function isPKBusy(ma, dateIso, goi) {
+  try {
+    var stored = localStorage.getItem(CONFIG.STORE_KEY);
+    if (!stored) return false;
+    var data = JSON.parse(stored);
+    var don = data.don || [];
+    return don.some(function(o) {
+      if (o.hoan) return false;
+      if (!(o.Ma_PK || o.pks || []).includes(ma)) return false;
+      var lay = o.Ngay_Lay || o.lay;
+      var goiO = o.Goi_Thue || o.goi;
+      if (!lay || !goiO) return false;
+      var layDate = parseD(lay);
+      var traDate = ngayTraThuc(goiO, lay);
+      var dd = parseD(dateIso);
+      if (goiO === '12h') return +dd === +layDate;
+      return dd >= layDate && dd <= traDate;
+    });
+  } catch(e) { return false; }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', init);
+
+// Real-time: Listen for storage changes from other tabs/windows
+window.addEventListener('storage', (e) => {
+  if (e.key === CONFIG.STORE_KEY && e.newValue) {
+    loadInventory(true);
+    renderItems();
+  }
+});
+
+// Poll periodically for updates
+setInterval(() => {
+  const storedData = localStorage.getItem(CONFIG.STORE_KEY);
+  if (storedData) {
+    const db = JSON.parse(storedData);
+    const newDresses = db.vay || [];
+    const newAccessories = db.pk || [];
+    if (newDresses.length !== dresses.length || newAccessories.length !== accessories.length) {
+      loadInventory(true);
+      renderItems();
+    }
+  }
+}, 5000);
+
+async function init() {
+  // Set min date
+  const dateInput = document.getElementById('ngayLay');
+  dateInput.min = CONFIG.MIN_DATE;
+  dateInput.value = CONFIG.MIN_DATE;
+
+  // Load inventory
+  await loadInventory();
+
+  // Render items
+  renderItems();
+
+  // Setup event listeners
+  setupRadioOptions();
+  setupAddressToggle();
+  document.getElementById('booking-form').addEventListener('submit', handleSubmit);
+
+  // Re-render items when date or package changes
+  dateInput.addEventListener('change', () => {
+    // Clear selected items if they become busy
+    const selectedGoi = getSelectedGoi();
+    selectedVays = selectedVays.filter(id => !isVayBusy(id, dateInput.value, selectedGoi));
+    selectedPKs = selectedPKs.filter(id => !isPKBusy(id, dateInput.value, selectedGoi));
+    renderItems();
+  });
+
+  document.querySelectorAll('[name="goi"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      // Clear selected items if they become busy
+      selectedVays = selectedVays.filter(id => !isVayBusy(id, dateInput.value, getSelectedGoi()));
+      selectedPKs = selectedPKs.filter(id => !isPKBusy(id, dateInput.value, getSelectedGoi()));
+      renderItems();
+    });
+  });
+
+  // Show form
+  document.getElementById('loading-view').classList.add('hidden');
+  document.getElementById('booking-form').classList.remove('hidden');
+  document.getElementById('submit-section').classList.remove('hidden');
+}
+
+async function loadInventory(silent = false) {
+  try {
+    const data = localStorage.getItem(CONFIG.STORE_KEY);
+    if (data) {
+      const db = JSON.parse(data);
+      dresses = (db.vay || []).map(normalizeVay);
+      accessories = (db.pk || []).map(normalizePK);
+    }
+  } catch (e) {
+    console.error('Load inventory error:', e);
+  }
+}
+
+function normalizeVay(v) {
+  return {
+    Ma_Vay: v.Ma_Vay || v.ma,
+    Ten_Vay: v.Ten_Vay || v.ten,
+    Size: v.Size || v.size,
+    Anh_Vay: v.Anh_Vay || v.anh || '',
+    Gia_Thue_12h: v.Gia_Thue_12h || v.t12 || 0,
+    Gia_Thue_1_Ngay: v.Gia_Thue_1_Ngay || v.t1 || 0,
+    Gia_Thue_3_Ngay: v.Gia_Thue_3_Ngay || v.t3 || 0,
+  };
+}
+
+function normalizePK(p) {
+  return {
+    Ma_PK: p.Ma_PK || p.ma,
+    Ten_PK: p.Ten_PK || p.ten,
+    Loai: p.Loai || p.loai,
+    Anh_PK: p.Anh_PK || p.anh || '',
+    Gia_Thue_1_Ngay: p.Gia_Thue_1_Ngay || p.t1 || 0,
+  };
+}
+
+function getSelectedDate() {
+  const dateInput = document.getElementById('ngayLay');
+  return dateInput ? dateInput.value : '';
+}
+
+function getSelectedGoi() {
+  const selected = document.querySelector('[name="goi"]:checked');
+  return selected ? selected.value : '1 ngày';
+}
+
+function filterDresses(term) {
+  searchVayTerm = term.toLowerCase().trim();
+  renderItems();
+}
+
+function filterAccessories(term) {
+  searchPKTerm = term.toLowerCase().trim();
+  renderItems();
+}
+
+function renderItems() {
+  const selectedDate = getSelectedDate();
+  const selectedGoi = getSelectedGoi();
+
+  // Render dresses
+  const vayGrid = document.getElementById('vay-grid');
+  if (dresses.length === 0) {
+    vayGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Chưa có váy nào. Vui lòng quay lại sau.</p>';
+  } else {
+    let filteredDresses = dresses;
+
+    // Filter by search term
+    if (searchVayTerm) {
+      filteredDresses = filteredDresses.filter(v =>
+        (v.Ten_Vay || '').toLowerCase().includes(searchVayTerm)
+      );
+    }
+
+    // Check availability for each dress
+    filteredDresses = filteredDresses.map(v => {
+      const busy = selectedDate ? isVayBusy(v.Ma_Vay, selectedDate, selectedGoi) : false;
+      return { ...v, busy };
+    });
+
+    // Sort: free first, then busy
+    filteredDresses.sort((a, b) => a.busy - b.busy);
+
+    if (filteredDresses.length === 0) {
+      vayGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Không tìm thấy váy nào.</p>';
+    } else {
+      vayGrid.innerHTML = filteredDresses.map(v => {
+        const selected = selectedVays.includes(v.Ma_Vay);
+        const imgSrc = v.Anh_Vay || '';
+        const price = selectedGoi === '12h' ? v.Gia_Thue_12h :
+                      selectedGoi === '3 ngày' ? v.Gia_Thue_3_Ngay : v.Gia_Thue_1_Ngay;
+        const busyClass = v.busy ? 'busy' : '';
+        const busyBadge = v.busy ? '<div class="busy-badge">BẬN NGÀY NÀY</div>' : '';
+        const cursor = v.busy && !selected ? 'not-allowed' : 'pointer';
+
+        return `
+          <div class="item-chip ${selected ? 'selected' : ''} ${busyClass}"
+               onclick="${v.busy && !selected ? '' : `toggleVay('${v.Ma_Vay}', this)`}"
+               style="cursor: ${cursor}; ${v.busy && !selected ? 'opacity: 0.6;' : ''}">
+            ${busyBadge}
+            <input type="checkbox" name="vays" value="${v.Ma_Vay}" ${selected ? 'checked' : ''} ${v.busy && !selected ? 'disabled' : ''}>
+            <span class="item-chip-check"></span>
+            <div class="item-chip-img">
+              ${imgSrc ? `<img src="${imgSrc}" alt="">` : '👗'}
+            </div>
+            <div class="item-chip-name">${v.Ten_Vay}</div>
+            <div class="item-chip-size">Size ${v.Size}</div>
+            <div class="item-chip-price">${fmtVND(price)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Render accessories
+  const pkGrid = document.getElementById('pk-grid');
+  if (accessories.length === 0) {
+    pkGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Chưa có phụ kiện nào.</p>';
+  } else {
+    let filteredPKs = accessories;
+
+    // Filter by search term
+    if (searchPKTerm) {
+      filteredPKs = filteredPKs.filter(p =>
+        (p.Ten_PK || '').toLowerCase().includes(searchPKTerm)
+      );
+    }
+
+    // Check availability for each accessory
+    filteredPKs = filteredPKs.map(p => {
+      const busy = selectedDate ? isPKBusy(p.Ma_PK, selectedDate, selectedGoi) : false;
+      return { ...p, busy };
+    });
+
+    // Sort: free first, then busy
+    filteredPKs.sort((a, b) => a.busy - b.busy);
+
+    if (filteredPKs.length === 0) {
+      pkGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Không tìm thấy phụ kiện nào.</p>';
+    } else {
+      pkGrid.innerHTML = filteredPKs.map(p => {
+        const selected = selectedPKs.includes(p.Ma_PK);
+        const imgSrc = p.Anh_PK || '';
+        const busyClass = p.busy ? 'busy' '';
+        const busyBadge = p.busy ? '<div class="busy-badge">BẬN NGÀY NÀY</div>' : '';
+        const cursor = p.busy && !selected ? 'not-allowed' : 'pointer';
+
+        return `
+          <div class="item-chip ${selected ? 'selected' : ''} ${busyClass}"
+               onclick="${p.busy && !selected ? '' : `togglePK('${p.Ma_PK}', this)`}"
+               style="cursor: ${cursor}; ${p.busy && !selected ? 'opacity: 0.6;' : ''}">
+            ${busyBadge}
+            <input type="checkbox" name="pks" value="${p.Ma_PK}" ${selected ? 'checked' : ''} ${p.busy && !selected ? 'disabled' : ''}>
+            <span class="item-chip-check"></span>
+            <div class="item-chip-img">
+              ${imgSrc ? `<img src="${imgSrc}" alt="">` : '💍'}
+            </div>
+            <div class="item-chip-name">${p.Ten_PK}</div>
+            <div class="item-chip-size">${p.Loai || 'Phụ kiện'}</div>
+            <div class="item-chip-price">${fmtVND(p.Gia_Thue_1_Ngay)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+function fmtVND(n) {
+  return (n || 0).toLocaleString('vi-VN') + 'đ';
+}
+
+function toggleVay(id, el) {
+  const idx = selectedVays.indexOf(id);
+  if (idx >= 0) {
+    selectedVays.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    selectedVays.push(id);
+    el.classList.add('selected');
+  }
+  el.querySelector('input').checked = selectedVays.includes(id);
+}
+
+function togglePK(id, el) {
+  const idx = selectedPKs.indexOf(id);
+  if (idx >= 0) {
+    selectedPKs.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    selectedPKs.push(id);
+    el.classList.add('selected');
+  }
+  el.querySelector('input').checked = selectedPKs.includes(id);
+}
+
+function setupRadioOptions() {
+  // All radio option groups
+  const radioGroups = ['goi', 'nhan', 'coc', 'sukien'];
+
+  radioGroups.forEach(group => {
+    document.querySelectorAll(`[data-${group}]`).forEach(label => {
+      label.addEventListener('click', function(e) {
+        // Remove selected from siblings
+        document.querySelectorAll(`[data-${group}]`).forEach(l => l.classList.remove('selected'));
+        // Add selected to this
+        this.classList.add('selected');
+        // Check the radio
+        const radio = this.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+      });
+    });
+  });
+}
+
+function setupAddressToggle() {
+  document.querySelectorAll('[data-nhan]').forEach(label => {
+    label.addEventListener('click', function() {
+      const nhan = this.dataset.nhan;
+      const addressField = document.getElementById('address-field');
+      if (nhan === 'Đặt ship') {
+        addressField.classList.add('show');
+        addressField.querySelector('textarea').required = true;
+      } else {
+        addressField.classList.remove('show');
+        addressField.querySelector('textarea').required = false;
+      }
+    });
+  });
+}
+
+function skipSection(sectionId) {
+  const el = document.getElementById(sectionId);
+  if (el) el.style.display = 'none';
+}
+
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+
+  const form = e.target;
+  const btn = document.getElementById('submit-btn');
+
+  // Validate
+  if (!form.insta.value.trim()) {
+    showToast('Vui lòng nhập tên Instagram!');
+    form.insta.focus();
+    return;
+  }
+  if (!form.sdt.value.trim()) {
+    showToast('Vui lòng nhập số điện thoại!');
+    form.sdt.focus();
+    return;
+  }
+  if (selectedVays.length === 0) {
+    showToast('Vui lòng chọn ít nhất 1 váy!');
+    return;
+  }
+
+  // Disable button
+  btn.disabled = true;
+  btn.textContent = 'Đang gửi...';
+
+  // Build booking data
+  const booking = {
+    id: 'B' + Date.now(),
+    Trang_Thai_Don: 'Chờ xác nhận',
+    Insta_Khach: form.insta.value.trim(),
+    SDT: form.sdt.value.trim(),
+    dhvs: selectedVays.map(v => ({ vay: v })),
+    Ma_PK: selectedPKs,
+    Goi_Thue: form.goi.value,
+    Ngay_Lay: form.ngayLay.value,
+    Gio_Lay: form.gioLay.value,
+    Ngay_Tra: '',
+    Hinh_Thuc_Nhan: form.nhan.value,
+    Dia_Chi: form.diaChi.value || '',
+    Hinh_Thuc_Coc: form.coc.value,
+    Su_Kien: form.sukien.value || '',
+    Ghi_Chu: form.ghichu.value || '',
+    Chi_Phi_Khac: 0,
+    Trang_Thai_Hoan_Coc: false,
+    hoan: false,
+    Ngay_Tao: new Date().toISOString(),
+    _ts: Date.now(),
+  };
+
+  // Calculate Ngay_Tra
+  const layDate = new Date(form.ngayLay.value);
+  if (form.goi.value === '12h') {
+    booking.Ngay_Tra = form.ngayLay.value;
+  } else if (form.goi.value === '1 ngày') {
+    layDate.setDate(layDate.getDate() + 1);
+    booking.Ngay_Tra = layDate.toISOString().split('T')[0];
+  } else if (form.goi.value === '3 ngày') {
+    layDate.setDate(layDate.getDate() + 2);
+    booking.Ngay_Tra = layDate.toISOString().split('T')[0];
+  }
+
+  try {
+    // Save to localStorage and Supabase
+    await saveBooking(booking);
+
+    // Show success
+    document.getElementById('booking-form').classList.add('hidden');
+    document.getElementById('submit-section').classList.add('hidden');
+    document.getElementById('success-view').classList.remove('hidden');
+    document.getElementById('booking-code').textContent = booking.id;
+
+    // Update progress
+    document.querySelectorAll('.progress-step').forEach(s => {
+      s.classList.remove('active');
+      s.classList.add('done');
+    });
+
+  } catch (err) {
+    console.error('Submit error:', err);
+    showToast('Có lỗi xảy ra. Vui lòng thử lại!');
+    btn.disabled = false;
+    btn.textContent = 'Gửi yêu cầu đặt thuê';
+  }
+}
+
+async function saveBooking(booking) {
+  // Get existing bookings
+  const bookings = JSON.parse(localStorage.getItem(CONFIG.BOOKING_KEY) || '[]');
+  bookings.unshift(booking);
+  localStorage.setItem(CONFIG.BOOKING_KEY, JSON.stringify(bookings));
+
+  // Mark as pending for main app to process
+  localStorage.setItem(CONFIG.PENDING_KEY, 'true');
+
+  // Also try to save to main app's DB if same origin
+  try {
+    const mainStore = localStorage.getItem(CONFIG.STORE_KEY);
+    if (mainStore) {
+      const db = JSON.parse(mainStore);
+      if (!db.form) db.form = [];
+      db.form.unshift({
+        id: booking.id,
+        Insta_Khach: booking.Insta_Khach,
+        SDT: booking.SDT,
+        Ngay_Lay: booking.Ngay_Lay,
+        Gio_Lay: booking.Gio_Lay,
+        Su_Kien: booking.Su_Kien,
+        Ngay_Tao: booking.Ngay_Tao,
+        _ts: Date.now(),
+      });
+      localStorage.setItem(CONFIG.STORE_KEY, JSON.stringify(db));
+    }
+  } catch (e) {
+    console.log('Could not sync to main store');
+  }
+
+  // Submit to Supabase if configured
+  if (supabase && SUPABASE_CONFIG?.supabaseUrl) {
+    try {
+      // Get dress IDs from main app's inventory
+      const mainStore = localStorage.getItem(CONFIG.STORE_KEY);
+      if (mainStore) {
+        const db = JSON.parse(mainStore);
+        const dresses = db.vay || [];
+
+        // Find dress UUIDs for selected dress codes
+        const dressIds = [];
+        for (const vayCode of selectedVays) {
+          const dress = dresses.find(d => (d.Ma_Vay || d.ma) === vayCode);
+          if (dress && dress._dbId) {
+            dressIds.push(dress._dbId);
+          }
+        }
+
+        // Find accessory UUIDs for selected accessory codes
+        const accessoryIds = [];
+        const accessories = db.pk || [];
+        for (const pkCode of selectedPKs) {
+          const acc = accessories.find(a => (a.Ma_PK || a.ma) === pkCode);
+          if (acc && acc._dbId) {
+            accessoryIds.push(acc._dbId);
+          }
+        }
+
+        // Submit to Supabase
+        const bookingData = {
+          ma_booking: booking.id,
+          trang_thai: 'Chờ xác nhận',
+          insta_khach: booking.Insta_Khach,
+          sdt: booking.SDT,
+          goi_thue: booking.Goi_Thue,
+          ngay_lay: booking.Ngay_Lay,
+          gio_lay: booking.Gio_Lay,
+          ngay_tra: booking.Ngay_Tra,
+          hinh_thuc_nhan: booking.Hinh_Thuc_Nhan,
+          dia_chi: booking.Dia_Chi,
+          hinh_thuc_coc: booking.Hinh_Thuc_Coc,
+          su_kien: booking.Su_Kien,
+          ghi_chu: booking.Ghi_Chu,
+        };
+
+        const { data, error } = await supabase
+          .from('bookings')
+          .insert(bookingData)
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('Supabase booking insert error:', error);
+        } else {
+          console.log('✅ Booking saved to Supabase:', data.id);
+
+          // If we have the booking ID, also insert dress/accessory relations
+          if (data.id) {
+            if (dressIds.length > 0) {
+              const dressRels = dressIds.map(did => ({
+                booking_id: data.id,
+                dress_id: did
+              }));
+              await supabase.from('booking_dresses').insert(dressRels);
+            }
+
+            if (accessoryIds.length > 0) {
+              const accRels = accessoryIds.map(aid => ({
+                booking_id: data.id,
+                accessory_id: aid
+              }));
+              await supabase.from('booking_accessories').insert(accRels);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase sync failed (booking will still work locally):', e);
+    }
+  }
+}
+</script>
+</body>
+</html>

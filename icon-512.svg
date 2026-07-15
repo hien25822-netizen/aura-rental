@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1d2e"/>
+      <stop offset="1" stop-color="#2d3142"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="72" y="96" width="368" height="328" rx="26" fill="#fff"/>
+  <rect x="72" y="96" width="368" height="68" rx="26" fill="#e87a96"/>
+  <rect x="72" y="136" width="368" height="28" fill="#e87a96"/>
+  <rect x="156" y="74" width="16" height="54" rx="8" fill="#1a1d2e"/>
+  <rect x="340" y="74" width="16" height="54" rx="8" fill="#1a1d2e"/>
+  <g fill="#d8dbe5">
+    <circle cx="120" cy="206" r="8"/><circle cx="170" cy="206" r="8"/><circle cx="220" cy="206" r="8"/><circle cx="270" cy="206" r="8"/><circle cx="320" cy="206" r="8"/><circle cx="370" cy="206" r="8"/><circle cx="420" cy="206" r="8"/>
+    <circle cx="120" cy="256" r="8"/><circle cx="170" cy="256" r="8"/><circle cx="220" cy="256" r="8"/>
+    <circle cx="320" cy="256" r="8"/><circle cx="370" cy="256" r="8"/><circle cx="420" cy="256" r="8"/>
+    <circle cx="120" cy="306" r="8"/><circle cx="170" cy="306" r="8"/><circle cx="220" cy="306" r="8"/><circle cx="270" cy="306" r="8"/><circle cx="320" cy="306" r="8"/><circle cx="370" cy="306" r="8"/><circle cx="420" cy="306" r="8"/>
+    <circle cx="120" cy="356" r="8"/><circle cx="170" cy="356" r="8"/><circle cx="220" cy="356" r="8"/><circle cx="270" cy="356" r="8"/><circle cx="320" cy="356" r="8"/><circle cx="370" cy="356" r="8"/><circle cx="420" cy="356" r="8"/>
+    <circle cx="120" cy="406" r="8"/><circle cx="170" cy="406" r="8"/><circle cx="220" cy="406" r="8"/><circle cx="270" cy="406" r="8"/><circle cx="320" cy="406" r="8"/><circle cx="370" cy="406" r="8"/>
+  </g>
+  <circle cx="270" cy="256" r="16" fill="#27ae60"/>
+  <circle cx="370" cy="306" r="16" fill="#f39c12"/>
+  <circle cx="170" cy="356" r="16" fill="#e74c3c"/>
+  <text x="396" y="108" font-family="Arial, sans-serif" font-size="48" font-weight="700" fill="#fff" text-anchor="middle">A</text>
+</svg>

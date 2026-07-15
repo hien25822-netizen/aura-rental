@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1d2e"/>
+      <stop offset="1" stop-color="#2d3142"/>
+    </linearGradient>
+    <linearGradient id="dress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8b4c4"/>
+      <stop offset="1" stop-color="#e87a96"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <!-- Calendar frame -->
+  <rect x="28" y="36" width="136" height="124" rx="10" fill="#fff"/>
+  <!-- Calendar header strip -->
+  <rect x="28" y="36" width="136" height="26" rx="10" fill="#e87a96"/>
+  <rect x="28" y="50" width="136" height="12" fill="#e87a96"/>
+  <!-- Calendar rings -->
+  <rect x="58" y="28" width="6" height="20" rx="3" fill="#1a1d2e"/>
+  <rect x="128" y="28" width="6" height="20" rx="3" fill="#1a1d2e"/>
+  <!-- Calendar grid: 3 rows x 4 cols of date dots -->
+  <g fill="#d8dbe5">
+    <circle cx="46" cy="78" r="3"/><circle cx="64" cy="78" r="3"/><circle cx="82" cy="78" r="3"/><circle cx="100" cy="78" r="3"/><circle cx="118" cy="78" r="3"/><circle cx="136" cy="78" r="3"/><circle cx="154" cy="78" r="3"/>
+    <circle cx="46" cy="96" r="3"/><circle cx="64" cy="96" r="3"/><circle cx="82" cy="96" r="3"/>
+    <circle cx="118" cy="96" r="3"/><circle cx="136" cy="96" r="3"/><circle cx="154" cy="96" r="3"/>
+    <circle cx="46" cy="114" r="3"/><circle cx="64" cy="114" r="3"/><circle cx="82" cy="114" r="3"/><circle cx="100" cy="114" r="3"/><circle cx="118" cy="114" r="3"/><circle cx="136" cy="114" r="3"/><circle cx="154" cy="114" r="3"/>
+    <circle cx="46" cy="132" r="3"/><circle cx="64" cy="132" r="3"/><circle cx="82" cy="132" r="3"/><circle cx="100" cy="132" r="3"/><circle cx="118" cy="132" r="3"/><circle cx="136" cy="132" r="3"/><circle cx="154" cy="132" r="3"/>
+    <circle cx="46" cy="150" r="3"/><circle cx="64" cy="150" r="3"/><circle cx="82" cy="150" r="3"/><circle cx="100" cy="150" r="3"/><circle cx="118" cy="150" r="3"/><circle cx="136" cy="150" r="3"/>
+  </g>
+  <!-- Status dots in green/orange/red over the calendar grid -->
+  <circle cx="100" cy="96" r="6" fill="#27ae60"/>
+  <circle cx="136" cy="114" r="6" fill="#f39c12"/>
+  <circle cx="64" cy="132" r="6" fill="#e74c3c"/>
+  <!-- Letter A on top-right corner -->
+  <text x="148" y="40" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#fff" text-anchor="middle">A</text>
+</svg>

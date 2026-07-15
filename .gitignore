@@ -1,0 +1,19 @@
+# Environment variables - DO NOT PUSH
+.env
+.env.local
+.env.production
+
+# Backup files
+*.json.bak
+localBackup*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log

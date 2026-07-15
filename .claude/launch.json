@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Aura Rental",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-c", "import http.server, os; http.server.HTTPServer(('', int(os.environ.get('PORT', 8765))), http.server.SimpleHTTPRequestHandler).serve_forever()"],
+      "port": 8765,
+      "autoPort": true
+    }
+  ]
+}
