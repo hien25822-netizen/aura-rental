@@ -8,19 +8,66 @@
  * - Auth UI (login modal)
  * - Data sync from Supabase
  * - Offline fallback to localStorage
- * - Realtime subscriptions
- *
- * HOW IT WORKS:
- * 1. On load, check if Supabase is configured (via APP_CONFIG)
- * 2. If configured: try auth → load from Supabase → enable realtime
- * 3. If not configured or offline: use localStorage (backward compatible)
- * 4. All saves go to both localStorage AND Supabase (when online)
- *
- * Usage:
- *   1. Set window.APP_CONFIG with Supabase credentials
- *   2. Include this file AFTER app.js
- *   3. The app will automatically use Supabase if configured
- */
+
+/* ============================================================
+ * NOTIFICATION BANNER
+ * ============================================================ */
+const SyncBanner = {
+  container: null,
+
+  init() {
+    // Create banner container
+    this.container = document.createElement('div');
+    this.container.id = 'sync-banner';
+    this.container.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      z-index: 9999;
+      transform: translateY(-100%);
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    `;
+    this.container.innerHTML = `
+      <span id="sync-banner-icon">🔄</span>
+      <span id="sync-banner-text">Đang cập nhật...</span>
+    `;
+    document.body.appendChild(this.container);
+  },
+
+  show(message, icon = '🔄') {
+    if (!this.container) this.init();
+    document.getElementById('sync-banner-icon').textContent = icon;
+    document.getElementById('sync-banner-text').textContent = message;
+    this.container.style.transform = 'translateY(0)';
+  },
+
+  hide() {
+    if (!this.container) return;
+    this.container.style.transform = 'translateY(-100%)';
+  },
+
+  success(message) {
+    this.show(message, '✅');
+    setTimeout(() => this.hide(), 3000);
+  },
+
+  info(message) {
+    this.show(message, '📋');
+    setTimeout(() => this.hide(), 3000);
+  }
+};
 
 // ============================================================
 // CONFIG CHECK
@@ -131,7 +178,7 @@ async function loadFromSupabase() {
   }
 
   try {
-    toast('Đang tải dữ liệu...', '', 2000);
+    SyncBanner.show('Đang đồng bộ dữ liệu...', '🔄');
 
     const [dresses, accessories, orders, payments] = await Promise.all([
       SupabaseService.fetchDresses(),
@@ -188,7 +235,7 @@ async function loadFromSupabase() {
     // Save merged data to localStorage
     localStorage.setItem(STORE, JSON.stringify(db));
 
-    toast('Đã tải dữ liệu từ Supabase', 'success');
+    SyncBanner.success(`Đã đồng bộ ${db.don.length} đơn, ${db.vay.length} váy, ${db.pk.length} phụ kiện`);
     console.log('Loaded:', {
       dresses: db.vay.length,
       accessories: db.pk.length,
@@ -269,16 +316,19 @@ async function handleRealtimeDressChange(payload) {
     if (!db.vay.find(d => d._dbId === dress._dbId)) {
       db.vay.push(dress);
       if (curView === 'v-kho') renderKho();
+      SyncBanner.info('📋 Váy mới được thêm từ thiết bị khác');
     }
   } else if (eventType === 'UPDATE') {
     const idx = db.vay.findIndex(d => d._dbId === newRecord.id);
     if (idx >= 0) {
       db.vay[idx] = SupabaseService.normalizeDress(newRecord);
       if (curView === 'v-kho') renderKho();
+      SyncBanner.info('📋 Váy được cập nhật từ thiết bị khác');
     }
   } else if (eventType === 'DELETE') {
     db.vay = db.vay.filter(d => d._dbId !== oldRecord.id);
     if (curView === 'v-kho') renderKho();
+    SyncBanner.info('📋 Váy được xóa từ thiết bị khác');
   }
 
   localStorage.setItem(STORE, JSON.stringify(db));
@@ -292,16 +342,19 @@ async function handleRealtimeAccessoryChange(payload) {
     if (!db.pk.find(p => p._dbId === acc._dbId)) {
       db.pk.push(acc);
       if (curView === 'v-pk') renderPk();
+      SyncBanner.info('📋 Phụ kiện mới được thêm từ thiết bị khác');
     }
   } else if (eventType === 'UPDATE') {
     const idx = db.pk.findIndex(p => p._dbId === newRecord.id);
     if (idx >= 0) {
       db.pk[idx] = SupabaseService.normalizeAccessory(newRecord);
       if (curView === 'v-pk') renderPk();
+      SyncBanner.info('📋 Phụ kiện được cập nhật từ thiết bị khác');
     }
   } else if (eventType === 'DELETE') {
     db.pk = db.pk.filter(p => p._dbId !== oldRecord.id);
     if (curView === 'v-pk') renderPk();
+    SyncBanner.info('📋 Phụ kiện được xóa từ thiết bị khác');
   }
 
   localStorage.setItem(STORE, JSON.stringify(db));
@@ -317,6 +370,7 @@ async function handleRealtimeOrderChange(payload) {
     if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
       renderCurrentView();
     }
+    SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
   } catch (err) {
     console.warn('Realtime order sync error:', err);
   }
@@ -371,7 +425,7 @@ async function syncBookingsToLocal() {
       if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
         renderCurrentView();
       }
-      toast(`📋 Có ${newBookings.length} đơn đặt thuê mới!`, 'success');
+      SyncBanner.success(`Có ${newBookings.length} đơn đặt thuê mới từ website!`);
     }
   } catch (err) {
     console.warn('Booking sync error:', err);
@@ -616,6 +670,9 @@ function addAuthButton() {
   const authBtn = document.createElement('button');
   authBtn.className = 'header-btn';
   authBtn.id = 'auth-btn';
+
+  // If button already exists, don't add again
+  if (document.getElementById('auth-btn')) return;
   authBtn.title = 'Tài khoản';
 
   // Update button based on auth state
@@ -645,7 +702,7 @@ function addAuthButton() {
 
   // Insert before the last header button
   const lastBtn = header.querySelector('.header-btn:last-child');
-  if (lastBtn) {
+  if (lastBtn && lastBtn.parentNode === header) {
     header.insertBefore(authBtn, lastBtn);
   } else {
     header.appendChild(authBtn);

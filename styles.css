@@ -3359,6 +3359,10 @@ h1, h2, h3, h4 {
   background: #dc2626;
   color: #fff;
 }
+.type-pill.ChoXacNhan, .type-pill-inline.ChoXacNhan {
+  background: #10b981;
+  color: #fff;
+}
 
 /* =====================================================
    REFUND MODAL — Apple-style redesign (enhanced)

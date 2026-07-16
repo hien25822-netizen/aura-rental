@@ -210,13 +210,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- Supabase Service Layer -->
-<script src="supabase-service.js?v=4"></script>
+<script src="supabase-service.js?v=5"></script>
 
-<!-- Supabase App Integration -->
-<script src="supabase-app.js?v=3"></script>
+<!-- Main App (defines functions first) -->
+<script src="app.js?v=18"></script>
 
-<!-- Main App (loaded after Supabase) -->
-<script src="app.js?v=17"></script>
+<!-- Supabase App Integration (wraps functions after they're defined) -->
+<script src="supabase-app.js?v=6"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
