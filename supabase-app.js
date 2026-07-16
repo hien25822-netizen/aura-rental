@@ -300,7 +300,27 @@ async function syncBookingsToLocal() {
   if (!SupabaseService.isConfigured()) return;
   try {
     const bookings = await SupabaseService.fetchBookings();
-    const normalized = (bookings || []).map(b => SupabaseService.normalizeBooking(b));
+    // Build dress map for name resolution
+    const dressMap = {};
+    (db.vay || []).forEach(v => { if (v._dbId) dressMap[v._dbId] = v; });
+    const accMap = {};
+    (db.pk || []).forEach(p => { if (p._dbId) accMap[p._dbId] = p; });
+
+    const normalized = (bookings || []).map(b => {
+      const nb = SupabaseService.normalizeBooking(b, dressMap, accMap);
+      // Resolve dress IDs to dress objects with names
+      nb.dhvs = (b._dressIds || []).map(dressId => {
+        const dress = dressMap[dressId];
+        return dress ? { vay: dress._dbId || dressId, Ten_Vay: dress.Ten_Vay || dress.ma || 'Váy', Size: dress.Size || '' } : { vay: dressId };
+      });
+      // Resolve accessory IDs to names
+      nb.Ma_PK = (b._accIds || []).map(accId => {
+        const acc = accMap[accId];
+        return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || 'Phụ kiện' } : accId;
+      });
+      return nb;
+    });
+
     // Merge into db.don - bookings have Ma_Don starting with 'B'
     const existingBookings = db.don.filter(d => d._fromBooking);
     const existingIds = new Set(existingBookings.map(b => b._dbId));

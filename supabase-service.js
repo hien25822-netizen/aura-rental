@@ -609,7 +609,7 @@ async function createPayment(payment) {
 // ============================================================
 
 /**
- * Fetch pending bookings
+ * Fetch pending bookings with dress/accessory relations
  */
 async function fetchBookings() {
   if (!supabase) throw new Error('Supabase not configured');
@@ -620,7 +620,36 @@ async function fetchBookings() {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  const bookings = data || [];
+
+  if (bookings.length === 0) return bookings;
+
+  // Fetch dress relations
+  const bookingIds = bookings.map(b => b.id);
+  const [dressesResult, accsResult] = await Promise.all([
+    supabase.from('booking_dresses').select('*').in('booking_id', bookingIds),
+    supabase.from('booking_accessories').select('*').in('booking_id', bookingIds)
+  ]);
+
+  // Build maps
+  const dressMap = {};
+  (dressesResult.data || []).forEach(d => {
+    if (!dressMap[d.booking_id]) dressMap[d.booking_id] = [];
+    dressMap[d.booking_id].push(d.dress_id);
+  });
+  const accMap = {};
+  (accsResult.data || []).forEach(a => {
+    if (!accMap[a.booking_id]) accMap[a.booking_id] = [];
+    accMap[a.booking_id].push(a.accessory_id);
+  });
+
+  // Attach relations to bookings
+  bookings.forEach(b => {
+    b._dressIds = dressMap[b.id] || [];
+    b._accIds = accMap[b.id] || [];
+  });
+
+  return bookings;
 }
 
 /**
@@ -816,7 +845,7 @@ function normalizePayment(p) {
   };
 }
 
-function normalizeBooking(b) {
+function normalizeBooking(b, dressMap = {}, accMap = {}) {
   if (!b) return null;
   return {
     id: b.id,
@@ -836,7 +865,14 @@ function normalizeBooking(b) {
     Su_Kien: b.su_kien,
     Ghi_Chu: b.ghi_chu,
     _ts: new Date(b.created_at).getTime(),
-    _fromBooking: true
+    _fromBooking: true,
+    _dressIds: b._dressIds || [],
+    _accIds: b._accIds || [],
+    // Resolve dress names from dress map
+    dhvs: (b._dressIds || []).map(dressId => ({
+      vay: dressId
+    })),
+    Ma_PK: b._accIds || []
   };
 }
 
