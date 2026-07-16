@@ -3344,19 +3344,19 @@ h1, h2, h3, h4 {
 .type-pill:active, .type-pill-inline:active { transform: scale(0.96); }
 
 .type-pill.ChotThue, .type-pill-inline.ChotThue {
-  background: var(--primary-600);
+  background: #8b5cf6;
   color: #fff;
 }
 .type-pill.Fitting, .type-pill-inline.Fitting {
-  background: #FF9F0A;
+  background: #60a5fa;
   color: #fff;
 }
 .type-pill.FittingXa, .type-pill-inline.FittingXa {
-  background: #BF5AF2;
+  background: #059669;
   color: #fff;
 }
 .type-pill.DatShip, .type-pill-inline.DatShip {
-  background: #30D158;
+  background: #dc2626;
   color: #fff;
 }
 

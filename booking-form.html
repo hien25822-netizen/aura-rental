@@ -1323,7 +1323,7 @@ async function saveBooking(booking) {
   }
 
   // Submit to Supabase if configured
-  if (supabase && SUPABASE_CONFIG?.supabaseUrl) {
+  if (window.supabaseClient && window.SUPABASE_CONFIG?.supabaseUrl) {
     try {
       // Get dress IDs from main app's inventory
       const mainStore = localStorage.getItem(CONFIG.STORE_KEY);

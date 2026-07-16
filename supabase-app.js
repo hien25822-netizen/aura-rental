@@ -483,21 +483,23 @@ window.saveNewOrder = async function() {
 
 // Wrapper for saveEditOrder
 const _origSaveEditOrder = window.saveEditOrder;
-window.saveEditOrder = async function(id) {
-  const result = await _origSaveEditOrder(id);
+window.saveEditOrder = function(id) {
+  // Call original first
+  _origSaveEditOrder(id);
 
-  if (result && SupabaseService.isConfigured()) {
-    try {
-      const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-      if (order && order._dbId) {
-        await SupabaseService.updateOrder(order._dbId, order);
+  // Sync to Supabase
+  if (SupabaseService.isConfigured()) {
+    setTimeout(async () => {
+      try {
+        const order = db.don.find(o => (o.Ma_Don || o.id) === id);
+        if (order && order._dbId) {
+          await SupabaseService.updateOrder(order._dbId, order);
+        }
+      } catch (err) {
+        console.warn('Failed to sync edit order to Supabase:', err);
       }
-    } catch (err) {
-      console.warn('Failed to sync edit order to Supabase:', err);
-    }
+    }, 100);
   }
-
-  return result;
 };
 
 // Wrapper for submitItem (add/edit dress/accessory)
