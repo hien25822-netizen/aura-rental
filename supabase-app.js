@@ -140,12 +140,52 @@ async function loadFromSupabase() {
       SupabaseService.fetchPayments()
     ]);
 
-    db.vay = dresses || [];
-    db.pk = accessories || [];
-    db.don = orders || [];
+    // Build maps from Supabase data
+    const supDresses = {};
+    (dresses || []).forEach(v => { if (v._dbId) supDresses[v._dbId] = v; });
+    const supAccessories = {};
+    (accessories || []).forEach(p => { if (p._dbId) supAccessories[p._dbId] = p; });
+    const supOrders = {};
+    (orders || []).forEach(o => { if (o._dbId) supOrders[o._dbId] = o; });
+
+    // Merge: Keep local data, update from Supabase if Supabase has newer data
+    // Prefer Supabase for records that exist in both (it's the source of truth)
+    const mergedDresses = [];
+    const localDressIds = new Set((db.vay || []).map(v => v._dbId));
+    const supDressIds = new Set(Object.keys(supDresses));
+
+    // Add all Supabase dresses
+    (dresses || []).forEach(v => mergedDresses.push(v));
+
+    // Add local-only dresses (not in Supabase yet)
+    (db.vay || []).forEach(v => {
+      if (!v._dbId || !supDresses[v._dbId]) {
+        mergedDresses.push(v);
+      }
+    });
+
+    const mergedAccessories = [];
+    (accessories || []).forEach(p => mergedAccessories.push(p));
+    (db.pk || []).forEach(p => {
+      if (!p._dbId || !supAccessories[p._dbId]) {
+        mergedAccessories.push(p);
+      }
+    });
+
+    const mergedOrders = [];
+    (orders || []).forEach(o => mergedOrders.push(o));
+    (db.don || []).forEach(o => {
+      if (!o._dbId || !supOrders[o._dbId]) {
+        mergedOrders.push(o);
+      }
+    });
+
+    db.vay = mergedDresses;
+    db.pk = mergedAccessories;
+    db.don = mergedOrders;
     db.tt = payments || [];
 
-    // Save to localStorage as backup
+    // Save merged data to localStorage
     localStorage.setItem(STORE, JSON.stringify(db));
 
     toast('Đã tải dữ liệu từ Supabase', 'success');
@@ -458,6 +498,72 @@ window.saveEditOrder = async function(id) {
   }
 
   return result;
+};
+
+// Wrapper for submitItem (add/edit dress/accessory)
+const _origSubmitItem = window.submitItem;
+window.submitItem = async function(kind, id) {
+  // Call original first
+  await _origSubmitItem(kind, id);
+
+  if (SupabaseService.isConfigured()) {
+    try {
+      const table = kind === 'vay' ? 'vay' : 'pk';
+      const item = id ? db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id) : null;
+
+      if (!item) return;
+
+      if (id && item._dbId) {
+        // Update existing
+        if (kind === 'vay') {
+          await SupabaseService.updateDress(item._dbId, item);
+        } else {
+          await SupabaseService.updateAccessory(item._dbId, item);
+        }
+      } else if (!id) {
+        // New item - find the one we just added
+        const newItem = db[table].find(x =>
+          (kind === 'vay' ? x.Ten_Vay === item.Ten_Vay : x.Ten_PK === item.Ten_PK) && !x._dbId
+        );
+        if (newItem) {
+          const supabaseRecord = kind === 'vay'
+            ? await SupabaseService.createDress(newItem)
+            : await SupabaseService.createAccessory(newItem);
+          newItem._dbId = supabaseRecord._dbId;
+          newItem.id = supabaseRecord.id;
+          localStorage.setItem(STORE, JSON.stringify(db));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to sync item to Supabase:', err);
+    }
+  }
+};
+
+// Wrapper for deleteItem
+const _origDeleteItem = window.deleteItem;
+window.deleteItem = function(kind, id) {
+  // Get item before deletion for Supabase sync
+  const table = kind === 'vay' ? 'vay' : 'pk';
+  const item = db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
+
+  // Call original
+  _origDeleteItem(kind, id);
+
+  // Sync to Supabase
+  if (item && item._dbId && SupabaseService.isConfigured()) {
+    setTimeout(async () => {
+      try {
+        if (kind === 'vay') {
+          await SupabaseService.deleteDress(item._dbId);
+        } else {
+          await SupabaseService.deleteAccessory(item._dbId);
+        }
+      } catch (err) {
+        console.warn('Failed to delete item from Supabase:', err);
+      }
+    }, 100);
+  }
 };
 
 // ============================================================
