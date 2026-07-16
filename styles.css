@@ -1651,11 +1651,18 @@ input.search::placeholder {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  background: var(--gold-100);
-  color: var(--gold-700);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.day-type-badge.day-type-chotthue,
+.day-type-badge.day-type-chốtthuê { background: #8b5cf6; color: #fff; }
+.day-type-badge.day-type-fitting { background: #60a5fa; color: #fff; }
+.day-type-badge.day-type-fittingxa { background: #059669; color: #fff; }
+.day-type-badge.day-type-datship,
+.day-type-badge.day-type-đặtship { background: #dc2626; color: #fff; }
+.day-type-badge.day-type-choxacnhan,
+.day-type-badge.day-type-chờxácnhận { background: #10b981; color: #fff; }
+.day-type-badge:not([class*="day-type-"]) { background: var(--gold-100); color: var(--gold-700); }
 
 .day-card-customer {
   font-size: var(--text-sm);

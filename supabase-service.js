@@ -855,6 +855,7 @@ function normalizeBooking(b, dressMap = {}, accMap = {}) {
     Trang_Thai_Don: 'Chờ xác nhận',
     Insta_Khach: b.insta_khach,
     SDT: b.sdt,
+    Insta: b.insta_khach,
     Goi_Thue: b.goi_thue,
     Ngay_Lay: b.ngay_lay,
     Gio_Lay: b.gio_lay,
@@ -868,10 +869,14 @@ function normalizeBooking(b, dressMap = {}, accMap = {}) {
     _fromBooking: true,
     _dressIds: b._dressIds || [],
     _accIds: b._accIds || [],
-    // Resolve dress names from dress map
-    dhvs: (b._dressIds || []).map(dressId => ({
-      vay: dressId
-    })),
+    // Build dhvs with Ma_Vay for donTenVay() to find
+    dhvs: (b._dressIds || []).map(dressId => {
+      const dress = dressMap[dressId];
+      return {
+        vay: dressId,
+        Ma_Vay: dressId
+      };
+    }),
     Ma_PK: b._accIds || []
   };
 }

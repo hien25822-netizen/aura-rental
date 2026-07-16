@@ -444,45 +444,9 @@ function renderMonth() {
   $('#cal-month').style.display = 'block';
   $('#cal-day').style.display = 'none';
 
-  // Calculate stats for this month
-  const monthStart = new Date(y, m, 1);
-  const monthEnd = new Date(y, m + 1, 0);
-  const layCount = db.don.filter(o => {
-    if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-    const lay = new Date(o.Ngay_Lay || o.lay);
-    return lay >= monthStart && lay <= monthEnd;
-  }).length;
-  const traCount = db.don.filter(o => {
-    if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-    const goi = o.Goi_Thue || o.goi;
-    const tra = ngayTraThuc(goi, o.Ngay_Lay || o.lay);
-    if (!tra) return false;
-    return tra >= monthStart && tra <= monthEnd;
-  }).length;
-  const thueCount = db.don.filter(o => {
-    if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-    const goi = o.Goi_Thue || o.goi;
-    const lay = new Date(o.Ngay_Lay || o.lay);
-    const tra = ngayTraThuc(goi, o.Ngay_Lay || o.lay);
-    if (!tra) return false;
-    const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-    return lay <= todayDate && tra >= todayDate;
-  }).length;
-
+  // Stats removed — each calendar day shows its own indicators
+  $('#cal-stats').innerHTML = '';
   const wrap = $('#cal-month');
-  // Render stats to the dedicated stats div
-  $('#cal-stats').innerHTML = `
-    <div class="cal-stat-mini lay">
-      <div class="stat-dot"></div>
-      <span class="stat-count">${layCount}</span>
-      <span class="stat-text">Lấy váy</span>
-    </div>
-    <div class="cal-stat-mini tra">
-      <div class="stat-dot"></div>
-      <span class="stat-count">${traCount}</span>
-      <span class="stat-text">Trả váy</span>
-    </div>
-  `;
 
   let html = '<div class="calendar-wrap">';
 
