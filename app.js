@@ -242,7 +242,11 @@ function statusForDate(don, dateIso) {
 function donTenVay(don) {
   if (!don || !don.dhvs) return [];
   return don.dhvs.map(x => {
-    const v = db.vay.find(v => (v.Ma_Vay || v.ma) === (x.vay || x.Ma_Vay));
+    // Prefer already-resolved name (from Supabase booking sync)
+    if (x.Ten_Vay) return x.Ten_Vay;
+    // Fall back to local dress lookup
+    const key = x.Ma_Vay || x.vay;
+    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
     return v ? (v.Ten_Vay || v.ten) : '';
   }).filter(Boolean);
 }
@@ -250,7 +254,8 @@ function donTienThueVay(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
   return (don.dhvs || []).reduce((s, x) => {
-    const v = db.vay.find(v => (v.Ma_Vay || v.ma) === (x.vay || x.Ma_Vay));
+    const key = x.Ma_Vay || x.vay;
+    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
     return s + (v ? Number(v[g] || 0) : 0);
   }, 0);
 }
@@ -258,14 +263,16 @@ function donTienThuePK(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
   return (don.Ma_PK || don.pks || []).reduce((s, id) => {
-    const p = db.pk.find(p => (p.Ma_PK || p.ma) === id);
+    const key = typeof id === 'object' ? (id.Ma_PK || '') : id;
+    const p = db.pk.find(d => (d.Ma_PK || d.ma) === key);
     return s + (p ? Number(p[g] || 0) : 0);
   }, 0);
 }
 function donCocGoiY(don) {
   if (!don) return 0;
   const tong = (don.dhvs || []).reduce((s, x) => {
-    const v = db.vay.find(v => (v.Ma_Vay || v.ma) === (x.vay || x.Ma_Vay));
+    const key = x.Ma_Vay || x.vay;
+    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
     return s + (v ? Number(v.Gia_Vay_Goc || 0) : 0);
   }, 0);
   return don.Hinh_Thuc_Coc === 'Cọc 100%' ? tong : tong * 0.5;
@@ -667,8 +674,9 @@ function DayOrderCard(o, group) {
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
   const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === pk);
-    return p ? (p.Ten_PK || p.ten) : '?';
+    const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
+    const p = db.pk.find(x => (x.Ma_PK || x.ma) === key);
+    return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
   }).filter(Boolean).join(', ') || '';
   const sdt = o.SDT || o.sdt || '';
   const ins = o.Insta_Khach || o.insta || '';
@@ -1021,8 +1029,9 @@ function OrderCardListCard(o, refDate = new Date()) {
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
   const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === pk);
-    return p ? (p.Ten_PK || p.ten) : '?';
+    const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
+    const p = db.pk.find(x => (x.Ma_PK || x.ma) === key);
+    return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
   }).filter(Boolean).join(', ') || '';
   const ngayLay = o.Ngay_Lay || o.lay || '';
   const ngayLayDisplay = isoToVN(ngayLay);

@@ -361,10 +361,28 @@ async function handleRealtimeAccessoryChange(payload) {
 }
 
 async function handleRealtimeOrderChange(payload) {
-  // For orders, we reload all to get relations
   try {
     const orders = await SupabaseService.fetchOrders();
-    db.don = orders || [];
+
+    // Merge with existing local orders to preserve resolved dress/accessory names
+    const localByDbId = {};
+    (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
+
+    const merged = (orders || []).map(supOrder => {
+      const local = localByDbId[supOrder._dbId];
+      if (local) {
+        // Preserve locally-resolved dhvs (Ten_Vay, Size) and Ma_PK (Ten_PK)
+        return {
+          ...supOrder,
+          dhvs: local.dhvs && local.dhvs.length ? local.dhvs : supOrder.dhvs,
+          Ma_PK: local.Ma_PK && local.Ma_PK.length ? local.Ma_PK : supOrder.Ma_PK,
+          _fromBooking: local._fromBooking,
+        };
+      }
+      return supOrder;
+    });
+
+    db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
 
     if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
@@ -394,28 +412,62 @@ async function syncBookingsToLocal() {
   if (!SupabaseService.isConfigured()) return;
   try {
     const bookings = await SupabaseService.fetchBookings();
-    // Build dress map for name resolution
-    const dressMap = {};
-    (db.vay || []).forEach(v => { if (v._dbId) dressMap[v._dbId] = v; });
-    const accMap = {};
-    (db.pk || []).forEach(p => { if (p._dbId) accMap[p._dbId] = p; });
+
+    // Fetch ALL dresses from Supabase to resolve names (db.vay uses Ma_Vay, booking_dresses uses UUID)
+    let allDresses = {};
+    let allAccessories = {};
+    try {
+      const [dresses, accessories] = await Promise.all([
+        SupabaseService.fetchDresses(),
+        SupabaseService.fetchAccessories()
+      ]);
+      (dresses || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
+      (accessories || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
+    } catch (e) {
+      // Fallback to local db.vay
+      (db.vay || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
+      (db.pk || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
+    }
 
     const normalized = (bookings || []).map(b => {
-      const nb = SupabaseService.normalizeBooking(b, dressMap, accMap);
       // Resolve dress IDs to dress objects with names
-      nb.dhvs = (b._dressIds || []).map(dressId => {
-        const dress = dressMap[dressId];
-        return dress ? { vay: dress._dbId || dressId, Ten_Vay: dress.Ten_Vay || dress.ma || 'Váy', Size: dress.Size || '' } : { vay: dressId };
+      const dhvs = (b._dressIds || []).map(dressId => {
+        const dress = allDresses[dressId];
+        return dress ? { vay: dressId, Ma_Vay: dress.Ma_Vay || dressId, Ten_Vay: dress.Ten_Vay || dress.ten || 'Váy', Size: dress.Size || '' } : { vay: dressId, Ma_Vay: dressId };
       });
       // Resolve accessory IDs to names
-      nb.Ma_PK = (b._accIds || []).map(accId => {
-        const acc = accMap[accId];
-        return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || 'Phụ kiện' } : accId;
+      const Ma_PK = (b._accIds || []).map(accId => {
+        const acc = allAccessories[accId];
+        return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || acc.ten || 'Phụ kiện' } : accId;
       });
-      return nb;
+
+      return {
+        id: b.id,
+        _dbId: b.id,
+        Ma_Don: b.ma_booking,
+        Trang_Thai_Don: 'Chờ xác nhận',
+        Insta_Khach: b.insta_khach,
+        SDT: b.sdt,
+        Insta: b.insta_khach,
+        Goa_Thue: b.goi_thue,
+        Ngay_Lay: b.ngay_lay,
+        Gio_Lay: b.gio_lay,
+        Ngay_Tra: b.ngay_tra,
+        Hinh_Thuc_Coc: b.hinh_thuc_coc,
+        Hinh_Thuc_Nhan: b.hinh_thuc_nhan,
+        Dia_Chi: b.dia_chi,
+        Su_Kien: b.su_kien,
+        Ghi_Chu: b.ghi_chu,
+        _ts: new Date(b.created_at).getTime(),
+        _fromBooking: true,
+        _dressIds: b._dressIds || [],
+        _accIds: b._accIds || [],
+        dhvs,
+        Ma_PK
+      };
     });
 
-    // Merge into db.don - bookings have Ma_Don starting with 'B'
+    // Merge into db.don
     const existingBookings = db.don.filter(d => d._fromBooking);
     const existingIds = new Set(existingBookings.map(b => b._dbId));
     const newBookings = normalized.filter(b => !existingIds.has(b._dbId));
@@ -638,12 +690,19 @@ async function initWithSupabase() {
     // Initialize Supabase auth
     const user = await SupabaseService.init();
 
+    // Setup realtime IMMEDIATELY if Supabase is configured (before login)
+    // so changes sync even without authentication
+    if (SupabaseService.isConfigured()) {
+      setupRealtime();
+      startBookingPolling();
+      // Initial booking sync
+      syncBookingsToLocal();
+    }
+
     if (user) {
       // Logged in - load from Supabase
       console.log('✅ Logged in as:', user.email);
       await loadFromSupabase();
-      setupRealtime();
-      syncBookingsToLocal();
     } else {
       // Not logged in - show login
       console.log('🔐 Not authenticated');
