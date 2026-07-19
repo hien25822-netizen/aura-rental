@@ -404,7 +404,7 @@ function go(view) {
   curView = view;
   $$('section.view').forEach(s => s.classList.toggle('active', s.id === view));
   $$('nav.bottom button[data-go]').forEach(b => b.classList.toggle('active', b.dataset.go === view));
-  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!', 'v-soc': 'Sổ thu/chi' };
+  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!' };
   $('#title').textContent = titleMap[view] || '';
   $('#fab-add').style.display = (view === 'v-kho' || view === 'v-pk') ? 'flex' : 'none';
   if (view === 'v-cal') renderCal();
@@ -412,7 +412,6 @@ function go(view) {
   else if (view === 'v-kho') renderKho();
   else if (view === 'v-pk') renderPk();
   else if (view === 'v-avail') renderAvail();
-  else if (view === 'v-soc') renderSoc();
 }
 $$('nav.bottom button[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 
@@ -901,6 +900,7 @@ window.setOrderType = (id, type) => {
     o.Hinh_Thuc_Nhan = o.Hinh_Thuc_Nhan || 'Đặt ship';
   }
   save();
+  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) renderCurrentView();
   closeModal('m-confirm');
   toast('Đã đổi loại đơn → ' + type, 'success');
 };
@@ -1424,7 +1424,8 @@ let availState = {
   type: 'vay',  // 'vay' or 'pk'
   goi: '1 ngày',
   date: null,    // Date object
-  dateStr: null  // ISO string
+  dateStr: null, // ISO string
+  showBusyOnly: true
 };
 
 function initAvail() {
@@ -1559,6 +1560,14 @@ window.switchAvailGoi = (goi) => {
   renderAvail();
 };
 
+window.switchAvailShow = (what) => {
+  availState.showBusyOnly = what === 'busy';
+  document.querySelectorAll('.avail-show-toggle .toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.show === what);
+  });
+  renderAvail();
+};
+
 // Search filter for check tab
 window.filterCheckItems = function(search) {
   availState.searchTerm = search.toLowerCase().trim();
@@ -1614,6 +1623,9 @@ function renderAvail() {
   }).filter(x => {
     if (!searchTerm) return true;
     return x.ten.toLowerCase().includes(searchTerm);
+  }).filter(x => {
+    if (!availState.showBusyOnly) return true;
+    return x.busy;
   });
 
   const freeCount = items.filter(x => !x.busy).length;
@@ -1622,11 +1634,12 @@ function renderAvail() {
   // Summary
   const summary = document.getElementById('avail-summary');
   if (summary) {
+    const isFiltered = availState.showBusyOnly;
     summary.innerHTML = `
-      <div class="avail-summary-card ${freeCount > 0 ? 'available' : 'full'}">
+      <div class="avail-summary-card ${isFiltered ? 'full' : (freeCount > 0 ? 'available' : 'full')}">
         <div class="avail-count">
-          <span class="count-num">${freeCount}</span>
-          <span class="count-label">${isVay ? 'váy' : 'phụ kiện'} trống</span>
+          <span class="count-num">${isFiltered ? busyCount : items.length}</span>
+          <span class="count-label">${isFiltered ? (isVay ? 'váy bận' : 'phụ kiện bận') : (isVay ? 'váy' : 'phụ kiện')}</span>
         </div>
         <div class="avail-date">${isoToVN(date)} · ${goi}</div>
       </div>
@@ -1636,9 +1649,9 @@ function renderAvail() {
   // List
   const list = document.getElementById('avail-list');
   if (list) {
-    // Sort: free first, then busy
+    // Sort: when busy-only filter is on, just alphabetical; otherwise free first
     items.sort((a, b) => {
-      if (a.busy !== b.busy) return a.busy ? 1 : -1;
+      if (!availState.showBusyOnly && a.busy !== b.busy) return a.busy ? 1 : -1;
       return a.ten.localeCompare(b.ten);
     });
 
@@ -2052,7 +2065,6 @@ function refreshCurView() {
   else if (curView === 'v-orders') renderOrders();
   else if (curView === 'v-kho') renderKho();
   else if (curView === 'v-pk') renderPk();
-  else if (curView === 'v-soc') renderSoc();
 }
 
 /* ============================================================
@@ -2689,69 +2701,6 @@ window.saveNewOrder = function() {
 };
 
 /* ============================================================
- *  CASH BOOK (SỔ THU/CHI)
- * ============================================================ */
-let curSocSearch = '';
-function renderSoc() {
-  const list = $('#soc-list');
-  list.innerHTML = '';
-  const q = curSocSearch.toLowerCase().trim();
-  let arr = (db.tt || []).slice();
-  if (q) arr = arr.filter(t => (t.ma || '').toLowerCase().includes(q) || (t.ten || '').toLowerCase().includes(q));
-  arr.sort((a, b) => (b.ngay || '').localeCompare(a.ngay || ''));
-
-  const totalCoc = arr.reduce((s, t) => s + (t.tienCoc || 0), 0);
-  const totalHoan = arr.reduce((s, t) => s + Math.max(0, t.hoan || 0), 0);
-  const totalChi = arr.reduce((s, t) => s + (t.chiphi || 0), 0);
-
-  if (!arr.length) {
-    list.appendChild(el('div', { class: 'empty', html: '<div class="icon">💰</div><div class="title">Chưa có giao dịch</div>' }));
-    return;
-  }
-
-  // Summary
-  const sum = el('div', { class: 'card', style: 'background:linear-gradient(135deg,#fef3c7,#fde68a);border:none' });
-  sum.innerHTML = `
-    <div class="kv"><span class="lbl">Tổng cọc</span><span class="val price">${fmtVND(totalCoc)}</span></div>
-    <div class="kv"><span class="lbl">Tổng hoàn</span><span class="val price">${fmtVND(totalHoan)}</span></div>
-    <div class="kv"><span class="lbl">Tổng chi khác</span><span class="val price">${fmtVND(totalChi)}</span></div>
-  `;
-  list.appendChild(sum);
-
-  arr.forEach(t => {
-    const card = el('div', { class: 'card row' });
-    card.style.cursor = 'pointer';
-    card.onclick = () => {
-      const msg = Calc_textGuiKhach(t);
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(msg).then(() => toast('Đã copy tin Zalo', 'success'));
-      } else {
-        alert(msg);
-      }
-    };
-    const tenVay = donTenVay(db.don.find(d => (d.Ma_Don || d.id) === t.ma) || {});
-    card.innerHTML = `
-      <div class="grow">
-        <b>${escapeHtml(t.ma)} · ${escapeHtml(t.ten || '—')}</b>
-        <small>${isoToVN(t.ngay?.slice(0, 10))} · ${escapeHtml(tenVay.join(', ') || '—')}</small>
-      </div>
-      <div style="text-align:right">
-        <div class="price" style="color:${(t.hoan||0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtVND(t.hoan)}</div>
-        <small class="muted">cọc ${fmtVND(t.tienCoc)}</small>
-      </div>
-    `;
-    list.appendChild(card);
-  });
-}
-$('#search-soc').oninput = e => { curSocSearch = e.target.value; renderSoc(); };
-
-function Calc_textGuiKhach(t) {
-  const hoan = t.hoan || 0;
-  if (hoan < 0) return `⚠️ CHECK: Hoàn cọc âm = ${fmtVND(hoan)}`;
-  return `Dạ nàng đã cọc ${fmtVND(t.tienCoc)} • Hoàn lại: ${fmtVND(hoan)} • Nàng gửi STK ngân hàng để shop CK nha.`;
-}
-
-/* ============================================================
  *  REFUND ORDERS LIST (Đơn đã hoàn cọc) - Full Screen
  * ============================================================ */
 let curRefundSearch = '';
@@ -2859,7 +2808,6 @@ function renderRefundOrdersFull() {
         else if (view === 'v-orders') renderOrders();
         else if (view === 'v-kho') renderKho();
         else if (view === 'v-pk') renderPk();
-        else if (view === 'v-soc') renderSoc();
         else if (view === 'v-avail') renderAvail();
         showSyncIndicator('pulled');
       } else {

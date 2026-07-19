@@ -26,7 +26,6 @@
   </div>
   <div class="header-right">
     <button class="header-btn" onclick="openRefundOrders()" title="Đơn đã hoàn cọc">💰</button>
-    <button class="header-btn" onclick="go('v-soc')" title="Sổ thu/chi">📊</button>
     <button class="header-btn" onclick="shareBookingForm()" title="Chia sẻ link đặt thuê">🔗</button>
     <button class="header-btn" onclick="exportToSheets()" title="Xuất dữ liệu Google Sheets">📤</button>
   </div>
@@ -114,6 +113,10 @@
   <div class="check-header">
     <h3>✨ Check Váy Trống</h3>
     <p class="muted">Chọn ngày & gói thuê để xem váy/phụ kiện còn trống</p>
+    <div class="avail-show-toggle toggle-group">
+      <button class="toggle-btn active" data-show="busy" onclick="switchAvailShow('busy')">BẬN</button>
+      <button class="toggle-btn" data-show="all" onclick="switchAvailShow('all')">Tất cả</button>
+    </div>
   </div>
 
   <!-- Date & Package selection -->
@@ -164,11 +167,6 @@
   </div>
 </section>
 
-<!-- ===== CASH BOOK ===== -->
-<section class="view" id="v-soc">
-  <input class="search" id="search-soc" placeholder="Tìm giao dịch..." />
-  <div id="soc-list"></div>
-</section>
 
 <!-- ===== BOTTOM NAV ===== -->
 <nav class="bottom">
@@ -210,13 +208,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- Supabase Service Layer -->
-<script src="supabase-service.js?v=5"></script>
+<script src="supabase-service.js?v=6"></script>
 
 <!-- Main App (defines functions first) -->
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 
 <!-- Supabase App Integration (wraps functions after they're defined) -->
-<script src="supabase-app.js?v=8"></script>
+<script src="supabase-app.js?v=9"></script>
 
 <script>
   if ('serviceWorker' in navigator) {
