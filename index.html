@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=25" />
+<link rel="stylesheet" href="styles.css?v=29" />
 </head>
 <body>
 <div class="app">
@@ -191,7 +191,8 @@
 <div class="modal" id="m-edit-item"><div class="sheet" id="ei-body"></div></div>
 <div class="modal" id="m-edit-order"><div class="sheet" id="eo-body"></div></div>
 <div class="modal" id="m-refund"><div class="sheet" id="r-body"></div></div>
-<div class="modal" id="m-confirm"><div class="sheet" id="cf-body" style="max-height:280px"></div></div>
+<div class="modal" id="m-confirm"><div class="sheet" id="cf-body"></div></div>
+<div class="modal" id="m-login"><div class="login-card" id="login-body"></div></div>
 <div class="modal" id="m-refund-orders"><div class="sheet" id="ro-body" style="max-height:85vh"></div></div>
 <div class="modal" id="m-refund-screenshot"><div class="sheet" id="rss-body"></div></div>
 
@@ -208,13 +209,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <!-- Supabase Service Layer -->
-<script src="supabase-service.js?v=6"></script>
+<script src="supabase-service.js?v=7"></script>
 
 <!-- Main App (defines functions first) -->
-<script src="app.js?v=21"></script>
+<script src="app.js?v=23"></script>
 
 <!-- Supabase App Integration (wraps functions after they're defined) -->
-<script src="supabase-app.js?v=9"></script>
+<script src="supabase-app.js?v=17"></script>
 
 <script>
   if ('serviceWorker' in navigator) {

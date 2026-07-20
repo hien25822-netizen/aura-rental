@@ -33,7 +33,7 @@ const isoOf = d => {
   return `${y}-${m}-${day}`;
 };
 
-let db = JSON.parse(localStorage.getItem(STORE) || '{}');
+var db = JSON.parse(localStorage.getItem(STORE) || '{}');
 // Migration: convert old lowercase format → PascalCase
 if (db.don && db.don.length && !db.don[0].Ma_Don) {
   db.don = db.don.map(r => migrateRecord(r, 'order'));
@@ -362,9 +362,18 @@ function toast(msg, type = '') {
 /* ============================================================
  *  MODAL helpers
  * ============================================================ */
-function openModal(id) { $('#' + id).classList.add('show'); }
-function closeModal(id) { $('#' + id).classList.remove('show'); }
-function closeAllModals() { $$('.modal').forEach(m => m.classList.remove('show')); }
+function openModal(id) {
+  document.body.classList.add('modal-open-lock');
+  $('#' + id).classList.add('show');
+}
+function closeModal(id) {
+  $('#' + id).classList.remove('show');
+  if (!$$('.modal.show').length) document.body.classList.remove('modal-open-lock');
+}
+function closeAllModals() {
+  $$('.modal').forEach(m => m.classList.remove('show'));
+  document.body.classList.remove('modal-open-lock');
+}
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal')) closeAllModals();
   if (e.target.dataset.close != null) closeAllModals();

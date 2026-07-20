@@ -81,38 +81,24 @@ const IS_DEMO_MODE = !window.APP_CONFIG?.supabaseUrl;
 
 function showLoginModal() {
   const html = `
-    <div class="sheet-head">
-      <h2 style="font-family:var(--font-display);font-style:italic">🔐 Đăng nhập</h2>
-      <button class="sheet-close" data-close>×</button>
-    </div>
-    <div class="sheet-body" style="padding:24px">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:48px;margin-bottom:12px">👗</div>
-        <h3 style="font-family:var(--font-display);font-size:20px;margin:0">Aura Rental</h3>
-        <p class="muted" style="font-size:13px;margin:8px 0 0">Quản lý thuê váy chuyên nghiệp</p>
+    <span class="login-logo">👗</span>
+    <h2>Aura Rental</h2>
+    <p class="login-subtitle">Quản lý thuê váy chuyên nghiệp</p>
+    <form id="supabase-login-form" onsubmit="handleSupabaseLogin(event)">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" required placeholder="phuong@aura.vn" />
       </div>
-      <form id="supabase-login-form" onsubmit="handleSupabaseLogin(event)">
-        <div class="form-group">
-          <label>Email <span class="req">*</span></label>
-          <input type="email" name="email" required placeholder="phuong@aura.vn"
-                 style="width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;font-size:15px" />
-        </div>
-        <div class="form-group">
-          <label>Mật khẩu <span class="req">*</span></label>
-          <input type="password" name="password" required placeholder="••••••••"
-                 style="width:100%;padding:14px 16px;border:1.5px solid var(--border);border-radius:10px;font-size:15px" />
-        </div>
-        <button type="submit" class="btn primary" style="width:100%;padding:14px;font-size:15px;font-weight:700">
-          Đăng nhập
-        </button>
-        <p class="muted" style="text-align:center;margin-top:16px;font-size:13px">
-          Chưa có tài khoản? Liên hệ Phuong để được tạo.
-        </p>
-      </form>
-    </div>
+      <div class="form-group">
+        <label>Mật khẩu</label>
+        <input type="password" name="password" required placeholder="••••••••" />
+      </div>
+      <button type="submit" class="btn primary btn-login">Đăng nhập</button>
+      <p class="login-help">Chưa có tài khoản? Liên hệ Phuong để được tạo.</p>
+    </form>
   `;
-  $('#cf-body').innerHTML = html;
-  openModal('m-confirm');
+  $('#login-body').innerHTML = html;
+  openModal('m-login');
 }
 
 window.handleSupabaseLogin = async function(e) {
@@ -124,8 +110,9 @@ window.handleSupabaseLogin = async function(e) {
   btn.textContent = 'Đang đăng nhập...';
 
   try {
-    await SupabaseService.signIn(fd.get('email'), fd.get('password'));
-    closeModal('m-confirm');
+    const data = await SupabaseService.signIn(fd.get('email'), fd.get('password'));
+    closeModal('m-login');
+    document.body.classList.remove('auth-locked');
     toast('Đăng nhập thành công!', 'success');
     await loadFromSupabase();
     setupRealtime();
@@ -172,7 +159,7 @@ window.handleSupabaseLogout = async function() {
 // ============================================================
 
 async function loadFromSupabase() {
-  if (!SupabaseService.isConfigured()) {
+  if (!db || !SupabaseService.isConfigured()) {
     console.log('Supabase not configured - using localStorage');
     return;
   }
@@ -272,106 +259,158 @@ function loadFromLocalStorage() {
 // REALTIME SUBSCRIPTIONS
 // ============================================================
 
+// Debounce helper — coalesce rapid events for the same table
+function debounceSync(fn, delay = 500) {
+  let timer = null;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// Sync state to update the UI after any data change
+function syncStateAndRender() {
+  if (!db) return;
+  localStorage.setItem(STORE, JSON.stringify(db));
+  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
+    renderCurrentView();
+  } else if (curView === 'v-kho') {
+    renderKho();
+  } else if (curView === 'v-pk') {
+    renderPk();
+  }
+}
+
+let _realtimeStatus = 'connecting';
+let _realtimeRetryCount = 0;
+const MAX_REALTIME_RETRIES = 3;
+
 function setupRealtime() {
   if (!SupabaseService.isConfigured()) return;
 
   SupabaseService.unsubscribeAll();
 
-  // Subscribe to dress changes
-  SupabaseService.subscribeToChanges('dresses', payload => {
-    handleRealtimeDressChange(payload);
+  _realtimeStatus = 'connecting';
+  SyncBanner.show('Đang kết nối realtime...', '🔄');
+
+  // Subscribe to all tables — all handlers now refetch + merge consistently
+  const tables = ['dresses', 'accessories', 'orders', 'payments', 'bookings'];
+  let connectedCount = 0;
+
+  tables.forEach(table => {
+    const sub = SupabaseService.subscribeToChanges(table, debounceSync(payload => handleRealtimeChange(table, payload)));
+    // Check connection after 3 seconds
+    setTimeout(() => {
+      connectedCount++;
+      if (connectedCount === tables.length) {
+        _realtimeStatus = 'connected';
+        _realtimeRetryCount = 0;
+        SyncBanner.success('🔗 Kết nối realtime thành công!');
+        console.log('✅ Realtime subscriptions active — all', tables.length, 'tables connected');
+      }
+    }, 3000);
   });
 
-  // Subscribe to accessory changes
-  SupabaseService.subscribeToChanges('accessories', payload => {
-    handleRealtimeAccessoryChange(payload);
-  });
+  // If not connected in 8 seconds, fallback to fast polling
+  setTimeout(() => {
+    if (_realtimeStatus !== 'connected') {
+      console.warn('⚠️ Realtime not connected — enabling fast polling fallback');
+      _realtimeStatus = 'polling-only';
+      startFastPolling();
+    }
+  }, 8000);
 
-  // Subscribe to order changes
-  SupabaseService.subscribeToChanges('orders', payload => {
-    handleRealtimeOrderChange(payload);
-  });
+  // Poll for bookings every 10 seconds (faster for new bookings)
+  startBookingPolling(10000);
+  // Periodic full sync every 30 seconds as fallback (was 60s — now faster)
+  startFullSyncPolling(30000);
 
-  // Subscribe to payment changes
-  SupabaseService.subscribeToChanges('payments', payload => {
-    handleRealtimePaymentChange(payload);
-  });
+  // Cross-tab sync: listen to storage events from other tabs on same device
+  setupCrossTabSync();
 
-  // Subscribe to booking changes
-  SupabaseService.subscribeToChanges('bookings', payload => {
-    handleRealtimeBookingChange(payload);
-  });
+  console.log('🚀 Realtime setup initiated for', tables.join(', '));
+}
 
-  // Poll for bookings every 30 seconds
-  startBookingPolling();
+async function handleRealtimeChange(table, payload) {
+  console.log(`[Realtime] ${table} changed:`, payload.eventType);
+  switch (table) {
+    case 'dresses': await handleRealtimeDressChange(payload); break;
+    case 'accessories': await handleRealtimeAccessoryChange(payload); break;
+    case 'orders': await handleRealtimeOrderChange(payload); break;
+    case 'payments': await handleRealtimePaymentChange(payload); break;
+    case 'bookings': await handleRealtimeBookingChange(payload); break;
+  }
+}
 
-  console.log('✅ Realtime subscriptions active');
+// Fast polling fallback when realtime is not connected
+let fastPollingInterval = null;
+function startFastPolling() {
+  if (fastPollingInterval) return;
+  console.log('⚡ Fast polling active (every 10s)');
+  fastPollingInterval = setInterval(async () => {
+    if (!db || !SupabaseService.isConfigured()) return;
+    try {
+      await loadFromSupabase();
+      _realtimeStatus = 'polling';
+      SyncBanner.info('🔄 Đang đồng bộ...');
+      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
+        renderCurrentView();
+      } else if (curView === 'v-kho') {
+        renderKho();
+      } else if (curView === 'v-pk') {
+        renderPk();
+      }
+    } catch (err) {
+      console.warn('Fast polling error:', err);
+    }
+  }, 10000);
 }
 
 async function handleRealtimeDressChange(payload) {
-  const { eventType, new: newRecord, old: oldRecord } = payload;
-
-  if (eventType === 'INSERT') {
-    const dress = SupabaseService.normalizeDress(newRecord);
-    if (!db.vay.find(d => d._dbId === dress._dbId)) {
-      db.vay.push(dress);
-      if (curView === 'v-kho') renderKho();
-      SyncBanner.info('📋 Váy mới được thêm từ thiết bị khác');
-    }
-  } else if (eventType === 'UPDATE') {
-    const idx = db.vay.findIndex(d => d._dbId === newRecord.id);
-    if (idx >= 0) {
-      db.vay[idx] = SupabaseService.normalizeDress(newRecord);
-      if (curView === 'v-kho') renderKho();
-      SyncBanner.info('📋 Váy được cập nhật từ thiết bị khác');
-    }
-  } else if (eventType === 'DELETE') {
-    db.vay = db.vay.filter(d => d._dbId !== oldRecord.id);
-    if (curView === 'v-kho') renderKho();
-    SyncBanner.info('📋 Váy được xóa từ thiết bị khác');
+  if (!db) return;
+  try {
+    const dresses = await SupabaseService.fetchDresses();
+    const localByDbId = {};
+    (db.vay || []).forEach(v => { if (v._dbId) localByDbId[v._dbId] = v; });
+    const merged = (dresses || []).map(sup => {
+      const local = localByDbId[sup._dbId];
+      return local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
+    });
+    db.vay = merged;
+    syncStateAndRender();
+    SyncBanner.info('📋 Váy được cập nhật từ thiết bị khác');
+  } catch (err) {
+    console.warn('Realtime dress sync error:', err);
   }
-
-  localStorage.setItem(STORE, JSON.stringify(db));
 }
 
 async function handleRealtimeAccessoryChange(payload) {
-  const { eventType, new: newRecord, old: oldRecord } = payload;
-
-  if (eventType === 'INSERT') {
-    const acc = SupabaseService.normalizeAccessory(newRecord);
-    if (!db.pk.find(p => p._dbId === acc._dbId)) {
-      db.pk.push(acc);
-      if (curView === 'v-pk') renderPk();
-      SyncBanner.info('📋 Phụ kiện mới được thêm từ thiết bị khác');
-    }
-  } else if (eventType === 'UPDATE') {
-    const idx = db.pk.findIndex(p => p._dbId === newRecord.id);
-    if (idx >= 0) {
-      db.pk[idx] = SupabaseService.normalizeAccessory(newRecord);
-      if (curView === 'v-pk') renderPk();
-      SyncBanner.info('📋 Phụ kiện được cập nhật từ thiết bị khác');
-    }
-  } else if (eventType === 'DELETE') {
-    db.pk = db.pk.filter(p => p._dbId !== oldRecord.id);
-    if (curView === 'v-pk') renderPk();
-    SyncBanner.info('📋 Phụ kiện được xóa từ thiết bị khác');
+  if (!db) return;
+  try {
+    const accessories = await SupabaseService.fetchAccessories();
+    const localByDbId = {};
+    (db.pk || []).forEach(p => { if (p._dbId) localByDbId[p._dbId] = p; });
+    const merged = (accessories || []).map(sup => {
+      const local = localByDbId[sup._dbId];
+      return local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
+    });
+    db.pk = merged;
+    syncStateAndRender();
+    SyncBanner.info('📋 Phụ kiện được cập nhật từ thiết bị khác');
+  } catch (err) {
+    console.warn('Realtime accessory sync error:', err);
   }
-
-  localStorage.setItem(STORE, JSON.stringify(db));
 }
 
 async function handleRealtimeOrderChange(payload) {
+  if (!db) return;
   try {
     const orders = await SupabaseService.fetchOrders();
-
-    // Merge with existing local orders to preserve resolved dress/accessory names
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
-
     const merged = (orders || []).map(supOrder => {
       const local = localByDbId[supOrder._dbId];
       if (local) {
-        // Preserve locally-resolved dhvs (Ten_Vay, Size) and Ma_PK (Ten_PK)
         return {
           ...supOrder,
           dhvs: local.dhvs && local.dhvs.length ? local.dhvs : supOrder.dhvs,
@@ -381,13 +420,8 @@ async function handleRealtimeOrderChange(payload) {
       }
       return supOrder;
     });
-
     db.don = merged;
-    localStorage.setItem(STORE, JSON.stringify(db));
-
-    if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-      renderCurrentView();
-    }
+    syncStateAndRender();
     SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
   } catch (err) {
     console.warn('Realtime order sync error:', err);
@@ -395,25 +429,26 @@ async function handleRealtimeOrderChange(payload) {
 }
 
 async function handleRealtimePaymentChange(payload) {
-  const payments = await SupabaseService.fetchPayments();
-  db.tt = payments || [];
-  localStorage.setItem(STORE, JSON.stringify(db));
-
-  if (curView === 'v-soc') {
-    renderSoc();
+  if (!db) return;
+  try {
+    const payments = await SupabaseService.fetchPayments();
+    db.tt = payments || [];
+    localStorage.setItem(STORE, JSON.stringify(db));
+  } catch (err) {
+    console.warn('Realtime payment sync error:', err);
   }
 }
 
 async function handleRealtimeBookingChange(payload) {
+  if (!db) return;
   await syncBookingsToLocal();
 }
 
 async function syncBookingsToLocal() {
-  if (!SupabaseService.isConfigured()) return;
+  if (!db || !SupabaseService.isConfigured()) return;
   try {
     const bookings = await SupabaseService.fetchBookings();
 
-    // Fetch ALL dresses from Supabase to resolve names (db.vay uses Ma_Vay, booking_dresses uses UUID)
     let allDresses = {};
     let allAccessories = {};
     try {
@@ -424,18 +459,15 @@ async function syncBookingsToLocal() {
       (dresses || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
       (accessories || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
     } catch (e) {
-      // Fallback to local db.vay
       (db.vay || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
       (db.pk || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
     }
 
     const normalized = (bookings || []).map(b => {
-      // Resolve dress IDs to dress objects with names
       const dhvs = (b._dressIds || []).map(dressId => {
         const dress = allDresses[dressId];
         return dress ? { vay: dressId, Ma_Vay: dress.Ma_Vay || dressId, Ten_Vay: dress.Ten_Vay || dress.ten || 'Váy', Size: dress.Size || '' } : { vay: dressId, Ma_Vay: dressId };
       });
-      // Resolve accessory IDs to names
       const Ma_PK = (b._accIds || []).map(accId => {
         const acc = allAccessories[accId];
         return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || acc.ten || 'Phụ kiện' } : accId;
@@ -467,16 +499,12 @@ async function syncBookingsToLocal() {
       };
     });
 
-    // Merge into db.don
     const existingBookings = db.don.filter(d => d._fromBooking);
     const existingIds = new Set(existingBookings.map(b => b._dbId));
     const newBookings = normalized.filter(b => !existingIds.has(b._dbId));
     if (newBookings.length > 0) {
       db.don = [...db.don, ...newBookings];
-      localStorage.setItem(STORE, JSON.stringify(db));
-      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-        renderCurrentView();
-      }
+      syncStateAndRender();
       SyncBanner.success(`Có ${newBookings.length} đơn đặt thuê mới từ website!`);
     }
   } catch (err) {
@@ -485,11 +513,102 @@ async function syncBookingsToLocal() {
 }
 
 let bookingPollInterval = null;
-function startBookingPolling() {
+function startBookingPolling(interval = 10000) {
   if (bookingPollInterval) clearInterval(bookingPollInterval);
   bookingPollInterval = setInterval(() => {
-    syncBookingsToLocal();
-  }, 30000);
+    if (db) syncBookingsToLocal().catch(console.warn);
+  }, interval);
+}
+
+let fullSyncInterval = null;
+function startFullSyncPolling(interval = 60000) {
+  if (fullSyncInterval) clearInterval(fullSyncInterval);
+  fullSyncInterval = setInterval(async () => {
+    if (!db) return;
+    try {
+      await loadFromSupabase();
+      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
+        renderCurrentView();
+      }
+    } catch (err) {
+      console.warn('Full sync polling error:', err);
+    }
+  }, interval);
+}
+
+// ============================================================
+// CROSS-TAB SYNC (same device, multiple browser tabs)
+// ============================================================
+let crossTabDebounce = null;
+
+function setupCrossTabSync() {
+  window.addEventListener('storage', e => {
+    if (e.key !== STORE) return;
+    if (e.newValue === null) return; // cleared — skip
+
+    clearTimeout(crossTabDebounce);
+    crossTabDebounce = setTimeout(() => {
+      try {
+        const remote = JSON.parse(e.newValue);
+        if (!remote || typeof remote !== 'object') return;
+
+        // Merge remote data into local db — remote wins on _ts conflict
+        const mergedDon = mergeOrderLists(db.don || [], remote.don || []);
+        const mergedVay = mergeItemLists(db.vay || [], remote.vay || []);
+        const mergedPk = mergeItemLists(db.pk || [], remote.pk || []);
+
+        db.don = mergedDon;
+        db.vay = mergedVay;
+        db.pk = mergedPk;
+        if (remote.tt) db.tt = remote.tt;
+        if (remote.dhv) db.dhv = remote.dhv;
+        if (remote.form) db.form = remote.form;
+
+        syncStateAndRender();
+        SyncBanner.info('🔄 Dữ liệu được đồng bộ từ tab khác');
+      } catch (err) {
+        console.warn('Cross-tab sync parse error:', err);
+      }
+    }, 300);
+  });
+}
+
+function mergeOrderLists(local, remote) {
+  const byId = {};
+  local.forEach(o => { if (o._dbId) byId[o._dbId] = { ...o }; });
+  remote.forEach(o => {
+    if (!o._dbId) return;
+    const existing = byId[o._dbId];
+    if (!existing) {
+      byId[o._dbId] = o;
+    } else {
+      const existingTs = existing._ts || 0;
+      const remoteTs = o._ts || 0;
+      if (remoteTs > existingTs) {
+        byId[o._dbId] = { ...o, dhvs: existing.dhvs, Ma_PK: existing.Ma_PK };
+      }
+    }
+  });
+  return Object.values(byId);
+}
+
+function mergeItemLists(local, remote) {
+  const byId = {};
+  local.forEach(item => { if (item._dbId) byId[item._dbId] = { ...item }; });
+  remote.forEach(item => {
+    if (!item._dbId) return;
+    const existing = byId[item._dbId];
+    if (!existing) {
+      byId[item._dbId] = item;
+    } else {
+      const existingTs = existing._ts || 0;
+      const remoteTs = item._ts || 0;
+      if (remoteTs > existingTs) {
+        byId[item._dbId] = item;
+      }
+    }
+  });
+  return Object.values(byId);
 }
 
 // ============================================================
@@ -679,6 +798,20 @@ window.deleteItem = function(kind, id) {
 // ============================================================
 
 async function initWithSupabase() {
+  // Cross-tab sync works in ALL modes (demo or full)
+  setupCrossTabSync();
+
+  // Wait for app.js to finish loading (it defines `db`)
+  let retries = 0;
+  while (typeof db === 'undefined' && retries < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    retries++;
+  }
+  if (typeof db === 'undefined') {
+    console.error('db not defined after 5s — app.js may have failed to load');
+    return;
+  }
+
   if (IS_DEMO_MODE) {
     console.log('🎭 Demo mode - using localStorage only');
     loadFromLocalStorage();
@@ -687,30 +820,24 @@ async function initWithSupabase() {
   }
 
   try {
-    // Initialize Supabase auth
     const user = await SupabaseService.init();
 
-    // Setup realtime IMMEDIATELY if Supabase is configured (before login)
-    // so changes sync even without authentication
     if (SupabaseService.isConfigured()) {
       setupRealtime();
-      startBookingPolling();
-      // Initial booking sync
       syncBookingsToLocal();
     }
 
     if (user) {
-      // Logged in - load from Supabase
       console.log('✅ Logged in as:', user.email);
       await loadFromSupabase();
+      go('v-cal');
+      document.body.classList.remove('auth-locked');
     } else {
-      // Not logged in - show login
       console.log('🔐 Not authenticated');
-      loadFromLocalStorage(); // Load cached data while showing login
+      loadFromLocalStorage();
       showLoginModal();
+      document.body.classList.add('auth-locked');
     }
-
-    go('v-cal');
 
   } catch (err) {
     console.error('Init failed:', err);
@@ -829,4 +956,24 @@ if (document.readyState === 'loading') {
   }, 100);
 }
 
-console.log('✅ Supabase integration loaded');
+// Disable Google Apps Script sync when Supabase is active — prevents race conditions
+if (typeof Sync !== 'undefined') {
+  const _origSyncStart = Sync.start;
+  Sync.start = function() {
+    if (SupabaseService.isConfigured()) {
+      console.log('ℹ️ Google Sheets sync disabled — using Supabase realtime');
+      return;
+    }
+    _origSyncStart.call(Sync);
+  };
+
+  const _origSave = window.save;
+  window.save = function() {
+    _origSave.apply(this, arguments);
+    if (SupabaseService.isConfigured()) {
+      clearTimeout(window._syncTimer);
+    }
+  };
+}
+
+console.log('✅ Supabase integration loaded v16');
