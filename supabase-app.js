@@ -154,38 +154,44 @@ window.handleSupabaseLogout = async function() {
   }
 };
 
-// Force resync from Supabase — refresh data on demand
-window.forceResync = async function() {
+// Force resync — does a hard cache clear + reload (Cmd+Shift+R behavior)
+window.forceResync = function() {
   const btn = document.getElementById('btn-resync');
   if (btn) {
     btn.disabled = true;
     btn.textContent = '⏳';
   }
 
-  try {
-    if (typeof SyncBanner !== 'undefined') {
-      SyncBanner.show('Đang đồng bộ từ server...', '🔄');
-    }
-    if (SupabaseService.isConfigured()) {
-      await loadFromSupabase();
-      await syncBookingsToLocal();
-    } else {
-      loadFromLocalStorage();
-    }
-    if (typeof renderCurrentView === 'function') renderCurrentView();
-    if (typeof toast === 'function') toast('Đã đồng bộ dữ liệu mới nhất', 'success');
-    if (typeof SyncBanner !== 'undefined') {
-      SyncBanner.success('✅ Đã đồng bộ');
-    }
-  } catch (err) {
-    console.error('Force resync error:', err);
-    if (typeof toast === 'function') toast('Lỗi đồng bộ: ' + err.message, 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🔄';
-    }
+  // Show feedback immediately
+  if (typeof SyncBanner !== 'undefined') {
+    SyncBanner.show('Đang xoá cache & tải lại...', '🔄');
   }
+
+  // Step 1: Delete service worker registration
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      for (const reg of registrations) {
+        reg.unregister();
+      }
+    });
+  }
+
+  // Step 2: Clear all browser caches
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      for (const name of names) {
+        caches.delete(name);
+      }
+    });
+  }
+
+  // Step 3: Clear localStorage (force fresh re-seed)
+  localStorage.clear();
+
+  // Step 4: Hard reload by navigating to same URL with cache-bust param
+  const url = new URL(window.location.href);
+  url.searchParams.set('_r', Date.now());
+  window.location.href = url.toString();
 };
 
 // ============================================================
@@ -741,8 +747,21 @@ window.saveEditOrder = function(id) {
     setTimeout(async () => {
       try {
         const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-        if (order && order._dbId) {
-          await SupabaseService.updateOrder(order._dbId, order);
+        if (order) {
+          if (order._dbId) {
+            await SupabaseService.updateOrder(order._dbId, order);
+          } else {
+            // Order not yet in Supabase — create it
+            const sup = await SupabaseService.createOrder(order);
+            order._dbId = sup._dbId;
+            order.id = sup.id;
+            if (order.dhvs) {
+              for (const dhv of order.dhvs) {
+                if (dhv.vay) await SupabaseService.incrementDressRentalCount(dhv.vay);
+              }
+            }
+            localStorage.setItem(STORE, JSON.stringify(db));
+          }
         }
       } catch (err) {
         console.warn('Failed to sync edit order to Supabase:', err);
