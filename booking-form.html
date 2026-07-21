@@ -922,16 +922,8 @@ async function init() {
 
 async function loadInventory(silent = false) {
   try {
-    // Try localStorage first
-    const data = localStorage.getItem(CONFIG.STORE_KEY);
-    if (data) {
-      const db = JSON.parse(data);
-      dresses = (db.vay || []).map(normalizeVay);
-      accessories = (db.pk || []).map(normalizePK);
-    }
-
-    // If empty, fetch directly from Supabase
-    if (dresses.length === 0 && accessories.length === 0 && window.supabaseClient) {
+    // Always fetch from Supabase first to ensure _dbId is populated
+    if (window.supabaseClient) {
       try {
         const [dressData, accData] = await Promise.all([
           window.supabaseClient.from('dresses').select('*'),
@@ -942,13 +934,15 @@ async function loadInventory(silent = false) {
           dresses = dressData.data
             .filter(d => !d.deleted_at)
             .map(d => normalizeVay({
-              Ma_Vay: d.ma_vay || d.ma_vay,
+              Ma_Vay: d.ma_vay,
               Ten_Vay: d.ten_vay,
               Size: d.size,
               Anh_Vay: d.anh_vay || '',
-              Gia_Thue_12h: d.gia_12h || 0,
-              Gia_Thue_1_Ngay: d.gia_1_ngay || 0,
-              Gia_Thue_3_Ngay: d.gia_3_ngay || 0,
+              Gia_Thue_12h: d.gia_thue_12h || 0,
+              Gia_Thue_1_Ngay: d.gia_thue_1_ngay || 0,
+              Gia_Thue_3_Ngay: d.gia_thue_3_ngay || 0,
+              _dbId: d.id,
+              id: d.id,
             }));
         }
 
@@ -960,15 +954,29 @@ async function loadInventory(silent = false) {
               Ten_PK: a.ten_pk,
               Loai: a.loai,
               Anh_PK: a.anh_pk || '',
-              Gia_Thue_1_Ngay: a.gia_1_ngay || 0,
+              Gia_Thue_12h: a.gia_thue_12h || 0,
+              Gia_Thue_1_Ngay: a.gia_thue_1_ngay || 0,
+              Gia_Thue_3_Ngay: a.gia_thue_3_ngay || 0,
+              _dbId: a.id,
+              id: a.id,
             }));
         }
-
-        console.log('Loaded from Supabase:', dresses.length, 'dresses,', accessories.length, 'accessories');
       } catch (e) {
-        console.error('Supabase fetch error:', e);
+        console.warn('Supabase fetch failed, falling back to localStorage:', e);
       }
     }
+
+    // Fallback to localStorage if Supabase returned empty
+    if (dresses.length === 0 && accessories.length === 0) {
+      const data = localStorage.getItem(CONFIG.STORE_KEY);
+      if (data) {
+        const db = JSON.parse(data);
+        dresses = (db.vay || []).map(normalizeVay);
+        accessories = (db.pk || []).map(normalizePK);
+      }
+    }
+
+    console.log('Loaded inventory:', dresses.length, 'dresses,', accessories.length, 'accessories');
   } catch (e) {
     console.error('Load inventory error:', e);
   }
@@ -983,6 +991,8 @@ function normalizeVay(v) {
     Gia_Thue_12h: v.Gia_Thue_12h || v.t12 || 0,
     Gia_Thue_1_Ngay: v.Gia_Thue_1_Ngay || v.t1 || 0,
     Gia_Thue_3_Ngay: v.Gia_Thue_3_Ngay || v.t3 || 0,
+    _dbId: v._dbId || v.id,
+    id: v._dbId || v.id,
   };
 }
 
@@ -992,7 +1002,11 @@ function normalizePK(p) {
     Ten_PK: p.Ten_PK || p.ten,
     Loai: p.Loai || p.loai,
     Anh_PK: p.Anh_PK || p.anh || '',
+    Gia_Thue_12h: p.Gia_Thue_12h || 0,
     Gia_Thue_1_Ngay: p.Gia_Thue_1_Ngay || p.t1 || 0,
+    Gia_Thue_3_Ngay: p.Gia_Thue_3_Ngay || p.t3 || 0,
+    _dbId: p._dbId || p.id,
+    id: p._dbId || p.id,
   };
 }
 

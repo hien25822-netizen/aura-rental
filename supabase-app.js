@@ -154,6 +154,40 @@ window.handleSupabaseLogout = async function() {
   }
 };
 
+// Force resync from Supabase — refresh data on demand
+window.forceResync = async function() {
+  const btn = document.getElementById('btn-resync');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳';
+  }
+
+  try {
+    if (typeof SyncBanner !== 'undefined') {
+      SyncBanner.show('Đang đồng bộ từ server...', '🔄');
+    }
+    if (SupabaseService.isConfigured()) {
+      await loadFromSupabase();
+      await syncBookingsToLocal();
+    } else {
+      loadFromLocalStorage();
+    }
+    if (typeof renderCurrentView === 'function') renderCurrentView();
+    if (typeof toast === 'function') toast('Đã đồng bộ dữ liệu mới nhất', 'success');
+    if (typeof SyncBanner !== 'undefined') {
+      SyncBanner.success('✅ Đã đồng bộ');
+    }
+  } catch (err) {
+    console.error('Force resync error:', err);
+    if (typeof toast === 'function') toast('Lỗi đồng bộ: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄';
+    }
+  }
+};
+
 // ============================================================
 // DATA LOADING
 // ============================================================
@@ -1035,4 +1069,4 @@ if (typeof Sync !== 'undefined') {
   };
 }
 
-console.log('✅ Supabase integration loaded v21');
+console.log('✅ Supabase integration loaded v22');
