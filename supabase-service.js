@@ -497,7 +497,7 @@ async function updateOrder(id, updates) {
 
   const { dhvs, pks, ...orderData } = updates;
 
-  // Update order fields
+  // Update order fields — include all fields that can change
   const { error: orderErr } = await supabase
     .from('orders')
     .update({
@@ -516,6 +516,7 @@ async function updateOrder(id, updates) {
       chi_phi_khac: orderData.Chi_Phi_Khac,
       trang_thai_hoan_coc: orderData.Trang_Thai_Hoan_Coc,
       thoi_gian_hoan_coc: orderData.Thoi_Gian_Hoan_Coc,
+      hoan: orderData.hoan,
     })
     .eq('id', id);
 
@@ -940,4 +941,4 @@ window.SupabaseService = {
   normalizePayment
 };
 
-console.log('✅ SupabaseService loaded');
+console.log('✅ SupabaseService loaded v8');

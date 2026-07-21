@@ -770,6 +770,51 @@ window.submitItem = async function(kind, id) {
   }
 };
 
+// Wrapper for setOrderType — syncs status changes to Supabase
+const _origSetOrderType = window.setOrderType;
+window.setOrderType = function(id, type) {
+  // Call original first (updates local db)
+  _origSetOrderType(id, type);
+
+  // Sync to Supabase
+  if (SupabaseService.isConfigured()) {
+    setTimeout(async () => {
+      try {
+        const order = db.don.find(o => (o.Ma_Don || o.id) === id);
+        if (order && order._dbId) {
+          await SupabaseService.updateOrder(order._dbId, order);
+        }
+      } catch (err) {
+        console.warn('Failed to sync setOrderType to Supabase:', err);
+      }
+    }, 100);
+  }
+};
+
+// Wrapper for saveRefund — syncs refund to Supabase
+const _origSaveRefund = window.saveRefund;
+window.saveRefund = function() {
+  // Call original first (updates local db)
+  _origSaveRefund();
+
+  // Sync refund payment to Supabase
+  if (SupabaseService.isConfigured()) {
+    setTimeout(async () => {
+      try {
+        const latestPayment = db.tt && db.tt[0];
+        if (latestPayment && !latestPayment._dbId) {
+          const supPayment = await SupabaseService.createPayment(latestPayment);
+          latestPayment._dbId = supPayment._dbId;
+          latestPayment.id = supPayment.id;
+          localStorage.setItem(STORE, JSON.stringify(db));
+        }
+      } catch (err) {
+        console.warn('Failed to sync refund to Supabase:', err);
+      }
+    }, 100);
+  }
+};
+
 // Wrapper for deleteOrder — syncs to Supabase so other devices get updated
 const _origDeleteOrder = window.deleteOrder;
 window.deleteOrder = function(id) {
@@ -1000,4 +1045,4 @@ if (typeof Sync !== 'undefined') {
   };
 }
 
-console.log('✅ Supabase integration loaded v18');
+console.log('✅ Supabase integration loaded v19');
