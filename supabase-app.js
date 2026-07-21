@@ -259,15 +259,6 @@ function loadFromLocalStorage() {
 // REALTIME SUBSCRIPTIONS
 // ============================================================
 
-// Debounce helper — coalesce rapid events for the same table
-function debounceSync(fn, delay = 500) {
-  let timer = null;
-  return function(...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
-
 // Sync state to update the UI after any data change
 function syncStateAndRender() {
   if (!db) return;
@@ -278,6 +269,11 @@ function syncStateAndRender() {
     renderKho();
   } else if (curView === 'v-pk') {
     renderPk();
+  }
+  // Also re-render detail modal if it's open
+  const detailModal = document.getElementById('m-detail');
+  if (detailModal?.classList.contains('open') && window._openDetailId) {
+    openOrderDetail(window._openDetailId);
   }
 }
 
@@ -298,7 +294,7 @@ function setupRealtime() {
   let connectedCount = 0;
 
   tables.forEach(table => {
-    const sub = SupabaseService.subscribeToChanges(table, debounceSync(payload => handleRealtimeChange(table, payload)));
+    const sub = SupabaseService.subscribeToChanges(table, payload => handleRealtimeChange(table, payload));
     // Check connection after 3 seconds
     setTimeout(() => {
       connectedCount++;
@@ -425,6 +421,11 @@ async function handleRealtimeOrderChange(payload) {
     db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
     renderCurrentView();
+    // Re-render detail modal if open
+    const detailModal = document.getElementById('m-detail');
+    if (detailModal?.classList.contains('open') && window._openDetailId) {
+      openOrderDetail(window._openDetailId);
+    }
     SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
   } catch (err) {
     console.warn('Realtime order sync error:', err);
@@ -437,7 +438,7 @@ async function handleRealtimePaymentChange(payload) {
     const payments = await SupabaseService.fetchPayments();
     db.tt = payments || [];
     localStorage.setItem(STORE, JSON.stringify(db));
-    // Re-render refund orders view if it's open
+    syncStateAndRender();
     if (document.getElementById('m-refund-orders')?.classList.contains('open')) {
       if (typeof renderRefundOrders === 'function') renderRefundOrders();
     }
@@ -641,6 +642,21 @@ window.saveToSupabase = async function() {
   } catch (err) {
     console.warn('Supabase sync failed:', err);
   }
+};
+
+// ============================================================
+// DETAIL MODAL TRACKING — so realtime handlers can re-render it
+// ============================================================
+const _origOpenOrderDetail = window.openOrderDetail;
+window.openOrderDetail = function(id) {
+  window._openDetailId = id;
+  return _origOpenOrderDetail.apply(this, arguments);
+};
+
+const _origCloseModal = window.closeModal;
+window.closeModal = function(id) {
+  if (id === 'm-detail') window._openDetailId = null;
+  return _origCloseModal.apply(this, arguments);
 };
 
 // ============================================================
@@ -1019,4 +1035,4 @@ if (typeof Sync !== 'undefined') {
   };
 }
 
-console.log('✅ Supabase integration loaded v20');
+console.log('✅ Supabase integration loaded v21');

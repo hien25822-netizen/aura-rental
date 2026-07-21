@@ -220,7 +220,17 @@ async function createDress(dress) {
     .single();
 
   if (error) throw error;
-  return normalizeDress(data);
+  const sup = normalizeDress(data);
+  // Gán _dbId vào local object để booking-form nhận diện được
+  if (typeof db !== 'undefined' && db?.vay) {
+    const localDress = db.vay.find(v => v.Ma_Vay === dress.Ma_Vay);
+    if (localDress) {
+      localDress._dbId = data.id;
+      localDress.id = data.id;
+      localStorage.setItem(STORE, JSON.stringify(db));
+    }
+  }
+  return sup;
 }
 
 /**
@@ -326,7 +336,17 @@ async function createAccessory(acc) {
     .single();
 
   if (error) throw error;
-  return normalizeAccessory(data);
+  const sup = normalizeAccessory(data);
+  // Gán _dbId vào local object để booking-form nhận diện được
+  if (typeof db !== 'undefined' && db?.pk) {
+    const localAcc = db.pk.find(p => p.Ma_PK === acc.Ma_PK);
+    if (localAcc) {
+      localAcc._dbId = data.id;
+      localAcc.id = data.id;
+      localStorage.setItem(STORE, JSON.stringify(db));
+    }
+  }
+  return sup;
 }
 
 /**
@@ -729,6 +749,9 @@ function subscribeToChanges(table, callback) {
         callback(payload);
       }
     )
+    .on('error', err => {
+      console.error(`[Realtime] ${table} channel error:`, err);
+    })
     .subscribe();
 
   realtimeSubscriptions.push(subscription);
@@ -941,4 +964,4 @@ window.SupabaseService = {
   normalizePayment
 };
 
-console.log('✅ SupabaseService loaded v8');
+console.log('✅ SupabaseService loaded v9');
