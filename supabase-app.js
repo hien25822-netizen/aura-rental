@@ -406,6 +406,8 @@ async function handleRealtimeOrderChange(payload) {
   if (!db) return;
   try {
     const orders = await SupabaseService.fetchOrders();
+    // SUPABASE IS SOURCE OF TRUTH — replace ALL local orders with Supabase data
+    // This ensures deleted orders on Supabase are also removed from local
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
     const merged = (orders || []).map(supOrder => {
@@ -421,7 +423,8 @@ async function handleRealtimeOrderChange(payload) {
       return supOrder;
     });
     db.don = merged;
-    syncStateAndRender();
+    localStorage.setItem(STORE, JSON.stringify(db));
+    renderCurrentView();
     SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
   } catch (err) {
     console.warn('Realtime order sync error:', err);
@@ -767,6 +770,27 @@ window.submitItem = async function(kind, id) {
   }
 };
 
+// Wrapper for deleteOrder — syncs to Supabase so other devices get updated
+const _origDeleteOrder = window.deleteOrder;
+window.deleteOrder = function(id) {
+  // Get order before deletion for Supabase sync
+  const order = db.don.find(o => (o.Ma_Don || o.id) === id);
+
+  // Call original (deletes from local)
+  _origDeleteOrder(id);
+
+  // Sync to Supabase (soft delete)
+  if (order && order._dbId && SupabaseService.isConfigured()) {
+    setTimeout(async () => {
+      try {
+        await SupabaseService.deleteOrder(order._dbId);
+      } catch (err) {
+        console.warn('Failed to delete order from Supabase:', err);
+      }
+    }, 100);
+  }
+};
+
 // Wrapper for deleteItem
 const _origDeleteItem = window.deleteItem;
 window.deleteItem = function(kind, id) {
@@ -976,4 +1000,4 @@ if (typeof Sync !== 'undefined') {
   };
 }
 
-console.log('✅ Supabase integration loaded v16');
+console.log('✅ Supabase integration loaded v18');
