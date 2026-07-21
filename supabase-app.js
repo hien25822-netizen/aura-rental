@@ -437,6 +437,10 @@ async function handleRealtimePaymentChange(payload) {
     const payments = await SupabaseService.fetchPayments();
     db.tt = payments || [];
     localStorage.setItem(STORE, JSON.stringify(db));
+    // Re-render refund orders view if it's open
+    if (document.getElementById('m-refund-orders')?.classList.contains('open')) {
+      if (typeof renderRefundOrders === 'function') renderRefundOrders();
+    }
   } catch (err) {
     console.warn('Realtime payment sync error:', err);
   }
@@ -644,39 +648,6 @@ window.saveToSupabase = async function() {
 // These wrap the existing functions to also save to Supabase
 // ============================================================
 
-// Wrapper for createDress
-const _origSaveNewItem = window.saveNewItem;
-window.saveNewItem = async function(kind) {
-  const result = await _origSaveNewItem(kind);
-
-  if (result && SupabaseService.isConfigured()) {
-    try {
-      if (kind === 'vay') {
-        const dress = db.vay.find(v => v.Ten_Vay === result.Ten_Vay);
-        if (dress && !dress._dbId) {
-          // This is a new local record - sync to Supabase
-          const supabaseRecord = await SupabaseService.createDress(dress);
-          dress._dbId = supabaseRecord._dbId;
-          dress.id = supabaseRecord.id;
-          localStorage.setItem(STORE, JSON.stringify(db));
-        }
-      } else if (kind === 'pk') {
-        const acc = db.pk.find(p => p.Ten_PK === result.Ten_PK);
-        if (acc && !acc._dbId) {
-          const supabaseRecord = await SupabaseService.createAccessory(acc);
-          acc._dbId = supabaseRecord._dbId;
-          acc.id = supabaseRecord.id;
-          localStorage.setItem(STORE, JSON.stringify(db));
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to sync new item to Supabase:', err);
-    }
-  }
-
-  return result;
-};
-
 // Wrapper for saveNewOrder
 const _origSaveNewOrder = window.saveNewOrder;
 window.saveNewOrder = async function() {
@@ -733,29 +704,32 @@ window.saveEditOrder = function(id) {
 // Wrapper for submitItem (add/edit dress/accessory)
 const _origSubmitItem = window.submitItem;
 window.submitItem = async function(kind, id) {
+  // Capture the ID that will be generated for new items
+  const pendingNewId = !id ? (kind === 'vay' ? uid('V') : uid('P')) : null;
+
   // Call original first
   await _origSubmitItem(kind, id);
 
   if (SupabaseService.isConfigured()) {
     try {
       const table = kind === 'vay' ? 'vay' : 'pk';
-      const item = id ? db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id) : null;
 
-      if (!item) return;
-
-      if (id && item._dbId) {
-        // Update existing
-        if (kind === 'vay') {
-          await SupabaseService.updateDress(item._dbId, item);
-        } else {
-          await SupabaseService.updateAccessory(item._dbId, item);
+      if (id) {
+        // Edit existing item
+        const item = db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
+        if (item && item._dbId) {
+          if (kind === 'vay') {
+            await SupabaseService.updateDress(item._dbId, item);
+          } else {
+            await SupabaseService.updateAccessory(item._dbId, item);
+          }
         }
-      } else if (!id) {
-        // New item - find the one we just added
+      } else {
+        // New item — find by the pre-generated ID
         const newItem = db[table].find(x =>
-          (kind === 'vay' ? x.Ten_Vay === item.Ten_Vay : x.Ten_PK === item.Ten_PK) && !x._dbId
+          (kind === 'vay' ? x.Ma_Vay : x.Ma_PK) === pendingNewId
         );
-        if (newItem) {
+        if (newItem && !newItem._dbId) {
           const supabaseRecord = kind === 'vay'
             ? await SupabaseService.createDress(newItem)
             : await SupabaseService.createAccessory(newItem);
@@ -1045,4 +1019,4 @@ if (typeof Sync !== 'undefined') {
   };
 }
 
-console.log('✅ Supabase integration loaded v19');
+console.log('✅ Supabase integration loaded v20');

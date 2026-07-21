@@ -2047,6 +2047,7 @@ window.saveEditOrder = function(id) {
   o.Dia_Chi = fd.get('dc') || '';
   o.Su_Kien = fd.get('sukien') || '';
   o.Ghi_Chu = fd.get('ghichu') || '';
+  o._ts = Date.now(); // Fix realtime merge conflict
   // Dresses
   const vayIds = $$('#eo-vays .eo-pill.selected').map(p => p.dataset.vay);
   o.dhvs = vayIds.map(v => ({ vay: v }));
