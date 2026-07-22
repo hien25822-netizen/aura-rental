@@ -185,8 +185,8 @@ window.forceResync = function() {
     });
   }
 
-  // Step 3: Clear localStorage (force fresh re-seed)
-  localStorage.clear();
+  // Step 3: Clear only app data store (keep Supabase auth session)
+  localStorage.removeItem('aura_v7');
 
   // Step 4: Hard reload by navigating to same URL with cache-bust param
   const url = new URL(window.location.href);
