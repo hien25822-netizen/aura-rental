@@ -154,44 +154,40 @@ window.handleSupabaseLogout = async function() {
   }
 };
 
-// Force resync — does a hard cache clear + reload (Cmd+Shift+R behavior)
-window.forceResync = function() {
+// Force resync — fetch latest data from Supabase (no cache clear, preserves edits)
+window.forceResync = async function() {
   const btn = document.getElementById('btn-resync');
   if (btn) {
     btn.disabled = true;
     btn.textContent = '⏳';
   }
 
-  // Show feedback immediately
   if (typeof SyncBanner !== 'undefined') {
-    SyncBanner.show('Đang xoá cache & tải lại...', '🔄');
+    SyncBanner.show('Đang tải dữ liệu mới nhất...', '🔄');
   }
 
-  // Step 1: Delete service worker registration
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      for (const reg of registrations) {
-        reg.unregister();
-      }
-    });
+  try {
+    if (SupabaseService.isConfigured()) {
+      await loadFromSupabase();
+      await syncBookingsToLocal();
+    }
+    if (typeof refreshCurView === 'function') refreshCurView();
+    if (typeof toast === 'function') toast('Đã cập nhật dữ liệu mới nhất', 'success');
+    if (typeof SyncBanner !== 'undefined') {
+      SyncBanner.success('✅ Cập nhật thành công');
+    }
+  } catch (err) {
+    console.error('Force resync error:', err);
+    if (typeof toast === 'function') toast('Lỗi cập nhật: ' + err.message, 'error');
+    if (typeof SyncBanner !== 'undefined') {
+      SyncBanner.error('❌ Lỗi cập nhật');
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔄';
+    }
   }
-
-  // Step 2: Clear all browser caches
-  if ('caches' in window) {
-    caches.keys().then(names => {
-      for (const name of names) {
-        caches.delete(name);
-      }
-    });
-  }
-
-  // Step 3: Clear only app data store (keep Supabase auth session)
-  localStorage.removeItem('aura_v7');
-
-  // Step 4: Hard reload by navigating to same URL with cache-bust param
-  const url = new URL(window.location.href);
-  url.searchParams.set('_r', Date.now());
-  window.location.href = url.toString();
 };
 
 // ============================================================
