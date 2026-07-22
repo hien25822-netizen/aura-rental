@@ -909,7 +909,7 @@ window.setOrderType = (id, type) => {
     o.Hinh_Thuc_Nhan = o.Hinh_Thuc_Nhan || 'Đặt ship';
   }
   save();
-  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) renderCurrentView();
+  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) refreshCurView();
   closeModal('m-confirm');
   toast('Đã đổi loại đơn → ' + type, 'success');
 };

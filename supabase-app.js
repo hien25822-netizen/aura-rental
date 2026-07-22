@@ -116,7 +116,7 @@ window.handleSupabaseLogin = async function(e) {
     toast('Đăng nhập thành công!', 'success');
     await loadFromSupabase();
     setupRealtime();
-    renderCurrentView();
+    refreshCurView();
   } catch (err) {
     toast('Đăng nhập thất bại: ' + err.message, 'error');
     btn.disabled = false;
@@ -304,7 +304,7 @@ function syncStateAndRender() {
   if (!db) return;
   localStorage.setItem(STORE, JSON.stringify(db));
   if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-    renderCurrentView();
+    refreshCurView();
   } else if (curView === 'v-kho') {
     renderKho();
   } else if (curView === 'v-pk') {
@@ -390,7 +390,7 @@ function startFastPolling() {
       _realtimeStatus = 'polling';
       SyncBanner.info('🔄 Đang đồng bộ...');
       if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-        renderCurrentView();
+        refreshCurView();
       } else if (curView === 'v-kho') {
         renderKho();
       } else if (curView === 'v-pk') {
@@ -460,7 +460,7 @@ async function handleRealtimeOrderChange(payload) {
     });
     db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
-    renderCurrentView();
+    refreshCurView();
     // Re-render detail modal if open
     const detailModal = document.getElementById('m-detail');
     if (detailModal?.classList.contains('open') && window._openDetailId) {
@@ -576,7 +576,7 @@ function startFullSyncPolling(interval = 60000) {
     try {
       await loadFromSupabase();
       if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-        renderCurrentView();
+        refreshCurView();
       }
     } catch (err) {
       console.warn('Full sync polling error:', err);
@@ -824,8 +824,15 @@ window.setOrderType = function(id, type) {
     setTimeout(async () => {
       try {
         const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-        if (order && order._dbId) {
-          await SupabaseService.updateOrder(order._dbId, order);
+        if (order) {
+          if (order._dbId) {
+            await SupabaseService.updateOrder(order._dbId, order);
+          } else {
+            const sup = await SupabaseService.createOrder(order);
+            order._dbId = sup._dbId;
+            order.id = sup.id;
+            localStorage.setItem(STORE, JSON.stringify(db));
+          }
         }
       } catch (err) {
         console.warn('Failed to sync setOrderType to Supabase:', err);
