@@ -1176,13 +1176,6 @@ function togglePK(id, el) {
   }
   el.querySelector('input').checked = selectedPKs.includes(id);
 }
-    el.classList.remove('selected');
-  } else {
-    selectedPKs.push(id);
-    el.classList.add('selected');
-  }
-  el.querySelector('input').checked = selectedPKs.includes(id);
-}
 
 function setupRadioOptions() {
   // All radio option groups
