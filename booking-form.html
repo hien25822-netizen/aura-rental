@@ -786,10 +786,14 @@ var CONFIG = {
 // State
 var dresses = [];
 var accessories = [];
-var selectedVays = [];
-var selectedPKs = [];
+var selectedVays = [];       // dress codes (Ma_Vay strings)
+var selectedVayUUIDs = [];   // UUIDs for Supabase junction tables
+var selectedPKs = [];        // accessory codes (Ma_PK strings)
+var selectedPKUUIDs = [];     // UUIDs for Supabase junction tables
 var searchVayTerm = '';
 var searchPKTerm = '';
+var dressCodeToUUID = {};   // Ma_Vay string → UUID for Supabase junction
+var accessoryCodeToUUID = {};  // Ma_PK string → UUID for Supabase junction
 
 // Helper functions from app.js (simplified versions)
 function parseD(s) { var x=new Date(s); x.setHours(0,0,0,0); return x; }
@@ -976,6 +980,12 @@ async function loadInventory(silent = false) {
       }
     }
 
+    // Build UUID maps for Supabase junction table inserts
+    dressCodeToUUID = {};
+    dresses.forEach(d => { if (d.Ma_Vay && d._dbId) dressCodeToUUID[d.Ma_Vay] = d._dbId; });
+    accessoryCodeToUUID = {};
+    accessories.forEach(a => { if (a.Ma_PK && a._dbId) accessoryCodeToUUID[a.Ma_PK] = a._dbId; });
+
     console.log('Loaded inventory:', dresses.length, 'dresses,', accessories.length, 'accessories');
   } catch (e) {
     console.error('Load inventory error:', e);
@@ -1048,14 +1058,11 @@ function renderItems() {
       );
     }
 
-    // Check availability for each dress
-    filteredDresses = filteredDresses.map(v => {
+    // Filter out busy dresses (only show available ones)
+    filteredDresses = filteredDresses.filter(v => {
       const busy = selectedDate ? isVayBusy(v.Ma_Vay, selectedDate, selectedGoi) : false;
-      return { ...v, busy };
+      return !busy;
     });
-
-    // Sort: free first, then busy
-    filteredDresses.sort((a, b) => a.busy - b.busy);
 
     if (filteredDresses.length === 0) {
       vayGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Không tìm thấy váy nào.</p>';
@@ -1101,14 +1108,11 @@ function renderItems() {
       );
     }
 
-    // Check availability for each accessory
-    filteredPKs = filteredPKs.map(p => {
+    // Filter out busy accessories (only show available ones)
+    filteredPKs = filteredPKs.filter(p => {
       const busy = selectedDate ? isPKBusy(p.Ma_PK, selectedDate, selectedGoi) : false;
-      return { ...p, busy };
+      return !busy;
     });
-
-    // Sort: free first, then busy
-    filteredPKs.sort((a, b) => a.busy - b.busy);
 
     if (filteredPKs.length === 0) {
       pkGrid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: var(--muted); padding: 20px;">Không tìm thấy phụ kiện nào.</p>';
@@ -1149,9 +1153,11 @@ function toggleVay(id, el) {
   const idx = selectedVays.indexOf(id);
   if (idx >= 0) {
     selectedVays.splice(idx, 1);
+    selectedVayUUIDs.splice(idx, 1);
     el.classList.remove('selected');
   } else {
     selectedVays.push(id);
+    selectedVayUUIDs.push(dressCodeToUUID[id] || id);
     el.classList.add('selected');
   }
   el.querySelector('input').checked = selectedVays.includes(id);
@@ -1161,6 +1167,15 @@ function togglePK(id, el) {
   const idx = selectedPKs.indexOf(id);
   if (idx >= 0) {
     selectedPKs.splice(idx, 1);
+    selectedPKUUIDs.splice(idx, 1);
+    el.classList.remove('selected');
+  } else {
+    selectedPKs.push(id);
+    selectedPKUUIDs.push(accessoryCodeToUUID[id] || id);
+    el.classList.add('selected');
+  }
+  el.querySelector('input').checked = selectedPKs.includes(id);
+}
     el.classList.remove('selected');
   } else {
     selectedPKs.push(id);
@@ -1345,24 +1360,9 @@ async function saveBooking(booking) {
         const db = JSON.parse(mainStore);
         const dresses = db.vay || [];
 
-        // Find dress UUIDs for selected dress codes
-        const dressIds = [];
-        for (const vayCode of selectedVays) {
-          const dress = dresses.find(d => (d.Ma_Vay || d.ma) === vayCode);
-          if (dress && dress._dbId) {
-            dressIds.push(dress._dbId);
-          }
-        }
-
-        // Find accessory UUIDs for selected accessory codes
-        const accessoryIds = [];
-        const accessories = db.pk || [];
-        for (const pkCode of selectedPKs) {
-          const acc = accessories.find(a => (a.Ma_PK || a.ma) === pkCode);
-          if (acc && acc._dbId) {
-            accessoryIds.push(acc._dbId);
-          }
-        }
+        // Use pre-built UUID arrays (set by toggleVay/togglePK)
+        const dressIds = selectedVayUUIDs.filter(Boolean);
+        const accessoryIds = selectedPKUUIDs.filter(Boolean);
 
         // Submit to Supabase
         const bookingData = {

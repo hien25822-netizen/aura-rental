@@ -543,13 +543,41 @@ async function syncBookingsToLocal() {
       };
     });
 
-    const existingBookings = db.don.filter(d => d._fromBooking);
-    const existingIds = new Set(existingBookings.map(b => b._dbId));
-    const newBookings = normalized.filter(b => !existingIds.has(b._dbId));
-    if (newBookings.length > 0) {
-      db.don = [...db.don, ...newBookings];
-      syncStateAndRender();
-      SyncBanner.success(`Có ${newBookings.length} đơn đặt thuê mới từ website!`);
+    // Merge: update existing bookings, add new ones
+    const existingById = {};
+    (db.don || []).forEach(d => { if (d._dbId) existingById[d._dbId] = d; });
+
+    let newCount = 0;
+    normalized.forEach(b => {
+      const existing = existingById[b._dbId];
+      if (existing) {
+        // Update existing — preserve local _ts so realtime merge doesn't overwrite newer edits
+        Object.assign(existing, {
+          Insta_Khach: b.Insta_Khach,
+          SDT: b.SDT,
+          Goa_Thue: b.Goa_Thue,
+          Ngay_Lay: b.Ngay_Lay,
+          Gio_Lay: b.Gio_Lay,
+          Ngay_Tra: b.Ngay_Tra,
+          Hinh_Thuc_Coc: b.Hinh_Thuc_Coc,
+          Hinh_Thuc_Nhan: b.Hinh_Thuc_Nhan,
+          Dia_Chi: b.Dia_Chi,
+          Su_Kien: b.Su_Kien,
+          Ghi_Chu: b.Ghi_Chu,
+          dhvs: b.dhvs,
+          Ma_PK: b.Ma_PK,
+          _dressIds: b._dressIds,
+          _accIds: b._accIds,
+        });
+      } else {
+        db.don.push(b);
+        newCount++;
+      }
+    });
+
+    syncStateAndRender();
+    if (newCount > 0) {
+      SyncBanner.success(`Có ${newCount} đơn đặt thuê mới từ website!`);
     }
   } catch (err) {
     console.warn('Booking sync error:', err);
