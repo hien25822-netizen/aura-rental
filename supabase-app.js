@@ -255,6 +255,10 @@ async function loadFromSupabase() {
     db.don = mergedOrders;
     db.tt = payments || [];
 
+    // CRITICAL: sync booking-form orders from Supabase bookings table
+    // — they live in a separate table and must NOT be wiped when orders sync
+    await syncBookingsToLocal();
+
     // Save merged data to localStorage
     localStorage.setItem(STORE, JSON.stringify(db));
 
@@ -456,6 +460,8 @@ async function handleRealtimeOrderChange(payload) {
     });
     db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
+    // Preserve booking-form orders — they live in separate bookings table, must not be wiped
+    await syncBookingsToLocal();
     refreshCurView();
     // Re-render detail modal if open
     const detailModal = document.getElementById('m-detail');
@@ -518,7 +524,7 @@ async function syncBookingsToLocal() {
         return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || acc.ten || 'Phụ kiện' } : accId;
       });
 
-      // Tính Ngay_Tra từ Goa_Thue + Ngay_Lay (bookings table không có column ngay_tra)
+      // Tính Ngay_Tra từ Goi_Thue + Ngay_Lay (bookings table không có column ngay_tra)
       const ngayLay = b.ngay_lay;
       let ngayTra = b.ngay_tra || ngayLay;
       if (ngayLay && !b.ngay_tra) {
@@ -539,7 +545,7 @@ async function syncBookingsToLocal() {
         Insta_Khach: b.insta_khach,
         SDT: b.sdt,
         Insta: b.insta_khach,
-        Goa_Thue: b.goi_thue,
+        Goi_Thue: b.goi_thue,
         Ngay_Lay: ngayLay,
         Gio_Lay: b.gio_lay,
         Ngay_Tra: ngayTra,
@@ -569,7 +575,7 @@ async function syncBookingsToLocal() {
         Object.assign(existing, {
           Insta_Khach: b.Insta_Khach,
           SDT: b.SDT,
-          Goa_Thue: b.Goi_Thue,
+          Goi_Thue: b.Goi_Thue,
           Ngay_Lay: b.Ngay_Lay,
           Gio_Lay: b.Gio_Lay,
           Ngay_Tra: b.Ngay_Tra,
