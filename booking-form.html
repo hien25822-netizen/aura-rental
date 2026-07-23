@@ -1157,7 +1157,9 @@ function toggleVay(id, el) {
     el.classList.remove('selected');
   } else {
     selectedVays.push(id);
-    selectedVayUUIDs.push(dressCodeToUUID[id] || id);
+    const uuid = dressCodeToUUID[id];
+    // Chỉ push UUID nếu thực sự có UUID — nếu không, giữ null để submit biết missing
+    selectedVayUUIDs.push(uuid || null);
     el.classList.add('selected');
   }
   el.querySelector('input').checked = selectedVays.includes(id);
@@ -1171,7 +1173,8 @@ function togglePK(id, el) {
     el.classList.remove('selected');
   } else {
     selectedPKs.push(id);
-    selectedPKUUIDs.push(accessoryCodeToUUID[id] || id);
+    const uuid = accessoryCodeToUUID[id];
+    selectedPKUUIDs.push(uuid || null);
     el.classList.add('selected');
   }
   el.querySelector('input').checked = selectedPKs.includes(id);
@@ -1347,15 +1350,41 @@ async function saveBooking(booking) {
   // Submit to Supabase if configured
   if (window.supabaseClient && window.SUPABASE_CONFIG?.supabaseUrl) {
     try {
-      // Get dress IDs from main app's inventory
-      const mainStore = localStorage.getItem(CONFIG.STORE_KEY);
-      if (mainStore) {
-        const db = JSON.parse(mainStore);
-        const dresses = db.vay || [];
+      // Use pre-built UUID arrays (set by toggleVay/togglePK)
+      let dressIds = selectedVayUUIDs.filter(Boolean);
+      let accessoryIds = selectedPKUUIDs.filter(Boolean);
 
-        // Use pre-built UUID arrays (set by toggleVay/togglePK)
-        const dressIds = selectedVayUUIDs.filter(Boolean);
-        const accessoryIds = selectedPKUUIDs.filter(Boolean);
+      // Fallback: nếu UUID maps rỗng (cross-device, chưa vào main app),
+      // fetch thẳng từ Supabase theo ma_vay / ma_pk
+      const missingDressCodes = (dressIds.length === 0 && selectedVays.length > 0)
+        ? selectedVays.filter(code => !dressCodeToUUID[code])
+        : [];
+      const missingAccCodes = (accessoryIds.length === 0 && selectedPKs.length > 0)
+        ? selectedPKs.filter(code => !accessoryCodeToUUID[code])
+        : [];
+
+      if (missingDressCodes.length > 0) {
+        const { data: dressRows } = await window.supabaseClient
+          .from('dresses').select('id,ma_vay').in('ma_vay', missingDressCodes);
+        (dressRows || []).forEach(r => { dressCodeToUUID[r.ma_vay] = r.id; });
+        // Rebuild dressIds from codes now that maps populated
+        dressIds = selectedVayUUIDs
+          .map((u, i) => u || dressCodeToUUID[selectedVays[i]])
+          .filter(Boolean);
+      }
+
+      if (missingAccCodes.length > 0) {
+        const { data: accRows } = await window.supabaseClient
+          .from('accessories').select('id,ma_pk').in('ma_pk', missingAccCodes);
+        (accRows || []).forEach(r => { accessoryCodeToUUID[r.ma_pk] = r.id; });
+        accessoryIds = selectedPKUUIDs
+          .map((u, i) => u || accessoryCodeToUUID[selectedPKs[i]])
+          .filter(Boolean);
+      }
+
+      if (selectedVays.length === 0 || dressIds.length === selectedVays.length) {
+        // OK — proceed with insert
+      }
 
         // Submit to Supabase
         const bookingData = {

@@ -486,6 +486,7 @@ async function handleRealtimePaymentChange(payload) {
 async function handleRealtimeBookingChange(payload) {
   if (!db) return;
   await syncBookingsToLocal();
+  if (typeof refreshCurView === 'function') refreshCurView();
 }
 
 async function syncBookingsToLocal() {
@@ -517,6 +518,19 @@ async function syncBookingsToLocal() {
         return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || acc.ten || 'Phụ kiện' } : accId;
       });
 
+      // Tính Ngay_Tra từ Goa_Thue + Ngay_Lay (bookings table không có column ngay_tra)
+      const ngayLay = b.ngay_lay;
+      let ngayTra = b.ngay_tra || ngayLay;
+      if (ngayLay && !b.ngay_tra) {
+        const goi = (b.goi_thue || '').toLowerCase();
+        const d = new Date(ngayLay + 'T00:00:00');
+        if (goi.includes('3')) d.setDate(d.getDate() + 2);
+        else if (goi.includes('1') || goi.includes('ngày') || goi.includes('ngay')) d.setDate(d.getDate() + 1);
+        // '12h' → same day, giữ nguyên
+        const yyyy = d.getFullYear(), mm = String(d.getMonth()+1).padStart(2,'0'), dd = String(d.getDate()).padStart(2,'0');
+        ngayTra = `${yyyy}-${mm}-${dd}`;
+      }
+
       return {
         id: b.id,
         _dbId: b.id,
@@ -526,9 +540,9 @@ async function syncBookingsToLocal() {
         SDT: b.sdt,
         Insta: b.insta_khach,
         Goa_Thue: b.goi_thue,
-        Ngay_Lay: b.ngay_lay,
+        Ngay_Lay: ngayLay,
         Gio_Lay: b.gio_lay,
-        Ngay_Tra: b.ngay_tra,
+        Ngay_Tra: ngayTra,
         Hinh_Thuc_Coc: b.hinh_thuc_coc,
         Hinh_Thuc_Nhan: b.hinh_thuc_nhan,
         Dia_Chi: b.dia_chi,
@@ -585,7 +599,7 @@ async function syncBookingsToLocal() {
 }
 
 let bookingPollInterval = null;
-function startBookingPolling(interval = 10000) {
+function startBookingPolling(interval = 5000) {
   if (bookingPollInterval) clearInterval(bookingPollInterval);
   bookingPollInterval = setInterval(() => {
     if (db) syncBookingsToLocal().catch(console.warn);
