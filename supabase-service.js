@@ -752,6 +752,14 @@ function subscribeToChanges(table, callback) {
     .on('error', err => {
       console.error(`[Realtime] ${table} channel error:`, err);
     })
+    .on('system', msg => {
+      // Supabase realtime system events (connected, disconnected, etc.)
+      if (msg.event === 'connected') {
+        console.log(`[Realtime] ${table} channel connected`);
+      } else if (msg.event === 'disconnected') {
+        console.warn(`[Realtime] ${table} channel disconnected — relying on polling`);
+      }
+    })
     .subscribe();
 
   realtimeSubscriptions.push(subscription);

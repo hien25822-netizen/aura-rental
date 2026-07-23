@@ -303,13 +303,8 @@ function loadFromLocalStorage() {
 function syncStateAndRender() {
   if (!db) return;
   localStorage.setItem(STORE, JSON.stringify(db));
-  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-    refreshCurView();
-  } else if (curView === 'v-kho') {
-    renderKho();
-  } else if (curView === 'v-pk') {
-    renderPk();
-  }
+  // Always re-render current view — cross-browser/device sync must update regardless of which tab/view
+  refreshCurView();
   // Also re-render detail modal if it's open
   const detailModal = document.getElementById('m-detail');
   if (detailModal?.classList.contains('open') && window._openDetailId) {
@@ -334,7 +329,7 @@ function setupRealtime() {
   let connectedCount = 0;
 
   tables.forEach(table => {
-    const sub = SupabaseService.subscribeToChanges(table, payload => handleRealtimeChange(table, payload));
+    SupabaseService.subscribeToChanges(table, payload => handleRealtimeChange(table, payload));
     // Check connection after 3 seconds
     setTimeout(() => {
       connectedCount++;
@@ -358,11 +353,28 @@ function setupRealtime() {
 
   // Poll for bookings every 5 seconds (faster for new bookings)
   startBookingPolling(5000);
-  // Periodic full sync every 30 seconds as fallback (was 60s — now faster)
-  startFullSyncPolling(30000);
+  // Periodic full sync every 15 seconds as fallback — keeps cross-device sync responsive
+  startFullSyncPolling(15000);
 
   // Cross-tab sync: listen to storage events from other tabs on same device
   setupCrossTabSync();
+
+  // Cross-device/browswer sync: re-sync when tab becomes visible again
+  // Supabase realtime may drop connections when tab is hidden — force full sync on visibility
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      console.log('[Visibility] Tab visible — syncing...');
+      if (db && SupabaseService.isConfigured()) {
+        try {
+          await loadFromSupabase();
+          refreshCurView();
+          SyncBanner.info('🔄 Đã đồng bộ dữ liệu mới nhất');
+        } catch (err) {
+          console.warn('Visibility sync error:', err);
+        }
+      }
+    }
+  });
 
   console.log('🚀 Realtime setup initiated for', tables.join(', '));
 }
@@ -382,24 +394,19 @@ async function handleRealtimeChange(table, payload) {
 let fastPollingInterval = null;
 function startFastPolling() {
   if (fastPollingInterval) return;
-  console.log('⚡ Fast polling active (every 10s)');
+  console.log('⚡ Fast polling active (every 5s)');
   fastPollingInterval = setInterval(async () => {
     if (!db || !SupabaseService.isConfigured()) return;
     try {
       await loadFromSupabase();
       _realtimeStatus = 'polling';
       SyncBanner.info('🔄 Đang đồng bộ...');
-      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-        refreshCurView();
-      } else if (curView === 'v-kho') {
-        renderKho();
-      } else if (curView === 'v-pk') {
-        renderPk();
-      }
+      // Always refresh current view for cross-device sync
+      refreshCurView();
     } catch (err) {
       console.warn('Fast polling error:', err);
     }
-  }, 10000);
+  }, 5000);
 }
 
 async function handleRealtimeDressChange(payload) {
@@ -461,8 +468,8 @@ async function handleRealtimeOrderChange(payload) {
     db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
     // Preserve booking-form orders — they live in separate bookings table, must not be wiped
+    // syncBookingsToLocal() already calls syncStateAndRender() which calls refreshCurView()
     await syncBookingsToLocal();
-    refreshCurView();
     // Re-render detail modal if open
     const detailModal = document.getElementById('m-detail');
     if (detailModal?.classList.contains('open') && window._openDetailId) {
@@ -619,9 +626,8 @@ function startFullSyncPolling(interval = 60000) {
     if (!db) return;
     try {
       await loadFromSupabase();
-      if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) {
-        refreshCurView();
-      }
+      // Always refresh — cross-device sync depends on seeing updates in any view
+      refreshCurView();
     } catch (err) {
       console.warn('Full sync polling error:', err);
     }
