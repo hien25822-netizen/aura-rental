@@ -352,8 +352,8 @@ function setupRealtime() {
     }
   }, 8000);
 
-  // Poll for bookings every 10 seconds (faster for new bookings)
-  startBookingPolling(10000);
+  // Poll for bookings every 5 seconds (faster for new bookings)
+  startBookingPolling(5000);
   // Periodic full sync every 30 seconds as fallback (was 60s — now faster)
   startFullSyncPolling(30000);
 
@@ -569,7 +569,7 @@ async function syncBookingsToLocal() {
         Object.assign(existing, {
           Insta_Khach: b.Insta_Khach,
           SDT: b.SDT,
-          Goa_Thue: b.Goa_Thue,
+          Goa_Thue: b.Goi_Thue,
           Ngay_Lay: b.Ngay_Lay,
           Gio_Lay: b.Gio_Lay,
           Ngay_Tra: b.Ngay_Tra,

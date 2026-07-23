@@ -1280,16 +1280,18 @@ async function handleSubmit(e) {
     _ts: Date.now(),
   };
 
-  // Calculate Ngay_Tra
+  // Calculate Ngay_Tra (use local date components, NOT toISOString — toISOString returns UTC)
   const layDate = new Date(form.ngayLay.value);
   if (form.goi.value === '12h') {
     booking.Ngay_Tra = form.ngayLay.value;
   } else if (form.goi.value === '1 ngày') {
     layDate.setDate(layDate.getDate() + 1);
-    booking.Ngay_Tra = layDate.toISOString().split('T')[0];
   } else if (form.goi.value === '3 ngày') {
     layDate.setDate(layDate.getDate() + 2);
-    booking.Ngay_Tra = layDate.toISOString().split('T')[0];
+  }
+  if (form.goi.value !== '12h') {
+    const y = layDate.getFullYear(), m = String(layDate.getMonth()+1).padStart(2,'0'), d = String(layDate.getDate()).padStart(2,'0');
+    booking.Ngay_Tra = `${y}-${m}-${d}`;
   }
 
   try {
