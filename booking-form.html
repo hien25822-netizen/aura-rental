@@ -1382,55 +1382,50 @@ async function saveBooking(booking) {
           .filter(Boolean);
       }
 
-      if (selectedVays.length === 0 || dressIds.length === selectedVays.length) {
-        // OK — proceed with insert
-      }
+      // Submit to Supabase
+      const bookingData = {
+        ma_booking: booking.id,
+        trang_thai: 'Chờ xác nhận',
+        insta_khach: booking.Insta_Khach,
+        sdt: booking.SDT,
+        goi_thue: booking.Goi_Thue,
+        ngay_lay: booking.Ngay_Lay,
+        gio_lay: booking.Gio_Lay,
+        ngay_tra: booking.Ngay_Tra,
+        hinh_thuc_nhan: booking.Hinh_Thuc_Nhan,
+        dia_chi: booking.Dia_Chi,
+        hinh_thuc_coc: booking.Hinh_Thuc_Coc,
+        su_kien: booking.Su_Kien,
+        ghi_chu: booking.Ghi_Chu,
+      };
 
-        // Submit to Supabase
-        const bookingData = {
-          ma_booking: booking.id,
-          trang_thai: 'Chờ xác nhận',
-          insta_khach: booking.Insta_Khach,
-          sdt: booking.SDT,
-          goi_thue: booking.Goi_Thue,
-          ngay_lay: booking.Ngay_Lay,
-          gio_lay: booking.Gio_Lay,
-          ngay_tra: booking.Ngay_Tra,
-          hinh_thuc_nhan: booking.Hinh_Thuc_Nhan,
-          dia_chi: booking.Dia_Chi,
-          hinh_thuc_coc: booking.Hinh_Thuc_Coc,
-          su_kien: booking.Su_Kien,
-          ghi_chu: booking.Ghi_Chu,
-        };
+      const { data, error } = await window.supabaseClient
+        .from('bookings')
+        .insert(bookingData)
+        .select()
+        .single();
 
-        const { data, error } = await window.supabaseClient
-          .from('bookings')
-          .insert(bookingData)
-          .select()
-          .single();
+      if (error) {
+        console.warn('Supabase booking insert error:', error);
+      } else {
+        console.log('✅ Booking saved to Supabase:', data.id);
 
-        if (error) {
-          console.warn('Supabase booking insert error:', error);
-        } else {
-          console.log('✅ Booking saved to Supabase:', data.id);
+        // If we have the booking ID, also insert dress/accessory relations
+        if (data.id) {
+          if (dressIds.length > 0) {
+            const dressRels = dressIds.map(did => ({
+              booking_id: data.id,
+              dress_id: did
+            }));
+            await window.supabaseClient.from('booking_dresses').insert(dressRels);
+          }
 
-          // If we have the booking ID, also insert dress/accessory relations
-          if (data.id) {
-            if (dressIds.length > 0) {
-              const dressRels = dressIds.map(did => ({
-                booking_id: data.id,
-                dress_id: did
-              }));
-              await window.supabaseClient.from('booking_dresses').insert(dressRels);
-            }
-
-            if (accessoryIds.length > 0) {
-              const accRels = accessoryIds.map(aid => ({
-                booking_id: data.id,
-                accessory_id: aid
-              }));
-              await window.supabaseClient.from('booking_accessories').insert(accRels);
-            }
+          if (accessoryIds.length > 0) {
+            const accRels = accessoryIds.map(aid => ({
+              booking_id: data.id,
+              accessory_id: aid
+            }));
+            await window.supabaseClient.from('booking_accessories').insert(accRels);
           }
         }
       }
