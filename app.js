@@ -1388,14 +1388,39 @@ window.submitItem = async function(kind, id) {
   if (id) {
     const o = db[table].find(x => (isVay ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
     Object.assign(o, data);
+    // Sync update to Supabase
+    if (o._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+      const updateFn = isVay ? SupabaseService.updateDress : SupabaseService.updateAccessory;
+      updateFn(o._dbId, o).catch(err => console.warn('Supabase update failed:', err));
+    }
     toast('Đã cập nhật', 'success');
   } else {
     if (isVay) {
       const dress = { Ma_Vay: uid('V'), Ten_Vay: data.Ten_Vay, Size: data.Size, Gia_Vay_Goc: data.Gia_Vay_Goc, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_Vay: data.Anh_Vay || '', Ghi_Chu: data.Ghi_Chu, So_Lan_Thue: 0 };
       db.vay.push(dress);
+      // Sync to Supabase
+      if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+        SupabaseService.createDress(dress).then(created => {
+          if (created?._dbId) {
+            dress._dbId = created._dbId;
+            dress.id = created._dbId;
+            save();
+          }
+        }).catch(err => console.warn('Supabase createDress failed:', err));
+      }
     } else {
       const pk = { Ma_PK: uid('P'), Ten_PK: data.Ten_PK, Loai: data.Loai, So_Luong_Tong: data.So_Luong_Tong, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_PK: data.Anh_PK || '', Ghi_Chu: data.Ghi_Chu };
       db.pk.push(pk);
+      // Sync to Supabase
+      if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+        SupabaseService.createAccessory(pk).then(created => {
+          if (created?._dbId) {
+            pk._dbId = created._dbId;
+            pk.id = created._dbId;
+            save();
+          }
+        }).catch(err => console.warn('Supabase createAccessory failed:', err));
+      }
     }
     toast('Đã thêm', 'success');
   }
@@ -1420,6 +1445,11 @@ window.deleteItem = function(kind, id) {
   if (!confirm(msg)) return;
   db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
   save();
+  // Sync delete to Supabase
+  if (item?._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    const deleteFn = kind === 'vay' ? SupabaseService.deleteDress : SupabaseService.deleteAccessory;
+    deleteFn(item._dbId).catch(err => console.warn('Supabase delete failed:', err));
+  }
   closeModal('m-edit-item');
   toast(`Đã xóa ${name}`, 'success');
   if (curView === 'v-kho') renderKho();
@@ -2055,6 +2085,14 @@ window.saveEditOrder = function(id) {
   const pkIds = $$('#eo-pks .eo-pill.selected').map(p => p.dataset.pk);
   o.Ma_PK = pkIds;
   save();
+  // Sync to Supabase for cross-device sync
+  if (o._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    SupabaseService.updateOrder(o._dbId, {
+      ...o,
+      dhvs: o.dhvs,
+      pks: pkIds
+    }).catch(err => console.warn('Supabase updateOrder failed:', err));
+  }
   closeModal('m-edit-order');
   toast('Đã lưu đơn', 'success');
   refreshCurView();
@@ -2062,9 +2100,14 @@ window.saveEditOrder = function(id) {
 
 window.deleteOrder = function(id) {
   if (!confirm('Xóa đơn này? Hành động không thể hoàn tác.')) return;
+  const order = db.don.find(x => (x.Ma_Don || x.id) === id);
   db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
   db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
   save();
+  // Sync deletion to Supabase
+  if (order?._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    SupabaseService.deleteOrder(order._dbId).catch(err => console.warn('Supabase deleteOrder failed:', err));
+  }
   closeModal('m-detail');
   toast('Đã xóa đơn', 'success');
   refreshCurView();
@@ -2704,6 +2747,19 @@ window.saveNewOrder = function() {
     if (dress) (dress.So_Lan_Thue = (dress.So_Lan_Thue || 0) + 1);
   });
   save();
+  // Sync to Supabase for cross-device sync
+  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.() && !order._fromBooking) {
+    SupabaseService.createOrder({
+      ...order,
+      dhvs: vayIds.map(v => ({ vay: v })),
+      pks: pkIds
+    }).then(created => {
+      if (created?._dbId) {
+        order._dbId = created._dbId;
+        save();
+      }
+    }).catch(err => console.warn('Supabase createOrder failed:', err));
+  }
   closeModal('m-new');
   toast(`Đã tạo đơn ${id}`, 'success');
   if (curView !== 'v-orders') go('v-orders');

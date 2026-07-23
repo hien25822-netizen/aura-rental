@@ -480,10 +480,16 @@ async function createOrder(order) {
   if (dhvs?.length) {
     const dressInserts = dhvs
       .filter(d => d.dress_id || d.vay)
-      .map(d => ({
-        order_id: newOrder.id,
-        dress_id: d.dress_id || d.vay
-      }));
+      .map(d => {
+        // Convert local Ma_Vay code to Supabase UUID
+        let dressId = d.dress_id || d.vay;
+        if (d.vay && !d.dress_id) {
+          const localDress = (typeof db !== 'undefined' && db.vay) ? db.vay.find(v => v.Ma_Vay === d.vay) : null;
+          if (localDress?._dbId) dressId = localDress._dbId;
+        }
+        return { order_id: newOrder.id, dress_id: dressId };
+      })
+      .filter(d => d.dress_id); // skip if no UUID
 
     if (dressInserts.length) {
       await supabase.from('order_dresses').insert(dressInserts);
@@ -546,11 +552,20 @@ async function updateOrder(id, updates) {
   if (dhvs !== undefined) {
     await supabase.from('order_dresses').delete().eq('order_id', id);
     if (dhvs?.length) {
-      await supabase.from('order_dresses').insert(
-        dhvs
-          .filter(d => d.dress_id || d.vay)
-          .map(d => ({ order_id: id, dress_id: d.dress_id || d.vay }))
-      );
+      const dressInserts = dhvs
+        .filter(d => d.dress_id || d.vay)
+        .map(d => {
+          let dressId = d.dress_id || d.vay;
+          if (d.vay && !d.dress_id) {
+            const localDress = (typeof db !== 'undefined' && db.vay) ? db.vay.find(v => v.Ma_Vay === d.vay) : null;
+            if (localDress?._dbId) dressId = localDress._dbId;
+          }
+          return { order_id: id, dress_id: dressId };
+        })
+        .filter(d => d.dress_id);
+      if (dressInserts.length) {
+        await supabase.from('order_dresses').insert(dressInserts);
+      }
     }
   }
 
@@ -558,11 +573,21 @@ async function updateOrder(id, updates) {
   if (pks !== undefined) {
     await supabase.from('order_accessories').delete().eq('order_id', id);
     if (pks?.length) {
-      await supabase.from('order_accessories').insert(
-        pks
-          .filter(a => a)
-          .map(a => ({ order_id: id, accessory_id: typeof a === 'string' ? a : a.Ma_PK }))
-      );
+      const accInserts = pks
+        .filter(a => a)
+        .map(a => {
+          let accId = typeof a === 'string' ? a : a.Ma_PK;
+          // Convert local Ma_PK code to UUID
+          if (typeof accId === 'string') {
+            const localAcc = (typeof db !== 'undefined' && db.pk) ? db.pk.find(p => p.Ma_PK === accId) : null;
+            if (localAcc?._dbId) accId = localAcc._dbId;
+          }
+          return { order_id: id, accessory_id: accId };
+        })
+        .filter(a => a.accessory_id);
+      if (accInserts.length) {
+        await supabase.from('order_accessories').insert(accInserts);
+      }
     }
   }
 }
