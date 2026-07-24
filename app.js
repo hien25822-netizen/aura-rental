@@ -900,18 +900,39 @@ function openTypePicker(o) {
   `;
   openModal('m-confirm');
 }
-window.setOrderType = (id, type) => {
+window.setOrderType = async (id, type) => {
   const o = db.don.find(x => (x.Ma_Don || x.id) === id);
   if (!o) return;
   o.Trang_Thai_Don = type;
   if (o.Trang_Thai_Don === 'Đặt ship' || o.Trang_Thai_Don === 'Fitting xa') {
-    // Auto-suggest Hinh_Thuc_Nhan
     o.Hinh_Thuc_Nhan = o.Hinh_Thuc_Nhan || 'Đặt ship';
   }
+  o._ts = Date.now();
+
+  // Sync to Supabase BEFORE close modal (blocking)
+  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    try {
+      if (o._dbId) {
+        await SupabaseService.updateOrder(o._dbId, o);
+      } else {
+        const existing = await SupabaseService.findOrderByMaDon(o.Ma_Don);
+        if (existing) {
+          o._dbId = existing._dbId;
+          await SupabaseService.updateOrder(existing._dbId, o);
+        } else {
+          const created = await SupabaseService.createOrder(o);
+          if (created?._dbId) o._dbId = created._dbId;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase sync failed:', err);
+    }
+  }
+
   save();
-  if (['v-cal', 'v-orders', 'v-avail'].includes(curView)) refreshCurView();
   closeModal('m-confirm');
   toast('Đã đổi loại đơn → ' + type, 'success');
+  refreshCurView();
 };
 
 /* ============================================================
