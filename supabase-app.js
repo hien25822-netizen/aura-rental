@@ -325,7 +325,13 @@ function setupRealtime() {
   SyncBanner.show('Đang kết nối realtime...', '🔄');
 
   // Subscribe to all tables — all handlers now refetch + merge consistently
-  const tables = ['dresses', 'accessories', 'orders', 'payments', 'bookings'];
+  // Includes junction tables (order_dresses, order_accessories) so dress/accessory
+  // assignment changes on other devices trigger real-time updates
+  const tables = [
+    'dresses', 'accessories', 'orders',
+    'order_dresses', 'order_accessories',
+    'payments', 'bookings'
+  ];
   let connectedCount = 0;
 
   tables.forEach(table => {
@@ -385,6 +391,8 @@ async function handleRealtimeChange(table, payload) {
     case 'dresses': await handleRealtimeDressChange(payload); break;
     case 'accessories': await handleRealtimeAccessoryChange(payload); break;
     case 'orders': await handleRealtimeOrderChange(payload); break;
+    case 'order_dresses': await handleRealtimeOrderDressChange(payload); break;
+    case 'order_accessories': await handleRealtimeOrderAccessoryChange(payload); break;
     case 'payments': await handleRealtimePaymentChange(payload); break;
     case 'bookings': await handleRealtimeBookingChange(payload); break;
   }
@@ -450,7 +458,7 @@ async function handleRealtimeOrderChange(payload) {
   try {
     const orders = await SupabaseService.fetchOrders();
     // SUPABASE IS SOURCE OF TRUTH — replace ALL local orders with Supabase data
-    // This ensures deleted orders on Supabase are also removed from local
+    // dhvs and Ma_PK come from Supabase via fetchOrders() which reads order_dresses table
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
     const merged = (orders || []).map(supOrder => {
@@ -458,23 +466,16 @@ async function handleRealtimeOrderChange(payload) {
       if (local) {
         return {
           ...supOrder,
-          dhvs: local.dhvs && local.dhvs.length ? local.dhvs : supOrder.dhvs,
-          Ma_PK: local.Ma_PK && local.Ma_PK.length ? local.Ma_PK : supOrder.Ma_PK,
           _fromBooking: local._fromBooking,
+          // supOrder.dhvs/Ma_PK come from fetchOrders which reads junction tables — use them
         };
       }
       return supOrder;
     });
     db.don = merged;
     localStorage.setItem(STORE, JSON.stringify(db));
-    // Preserve booking-form orders — they live in separate bookings table, must not be wiped
-    // syncBookingsToLocal() already calls syncStateAndRender() which calls refreshCurView()
     await syncBookingsToLocal();
-    // Re-render detail modal if open
-    const detailModal = document.getElementById('m-detail');
-    if (detailModal?.classList.contains('open') && window._openDetailId) {
-      openOrderDetail(window._openDetailId);
-    }
+    syncStateAndRender();
     SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
   } catch (err) {
     console.warn('Realtime order sync error:', err);
@@ -493,6 +494,49 @@ async function handleRealtimePaymentChange(payload) {
     }
   } catch (err) {
     console.warn('Realtime payment sync error:', err);
+  }
+}
+
+// Junction table change — refetch orders to get updated dress/accessory assignments
+async function handleRealtimeOrderDressChange(payload) {
+  if (!db) return;
+  console.log('[Realtime] order_dresses changed:', payload.eventType, payload.new?.id || payload.old?.id);
+  try {
+    const orders = await SupabaseService.fetchOrders();
+    const localByDbId = {};
+    (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
+    const merged = (orders || []).map(supOrder => {
+      const local = localByDbId[supOrder._dbId];
+      if (local) return { ...supOrder, _fromBooking: local._fromBooking };
+      return supOrder;
+    });
+    db.don = merged;
+    localStorage.setItem(STORE, JSON.stringify(db));
+    syncStateAndRender();
+    SyncBanner.info('👗 Váy trong đơn được cập nhật từ thiết bị khác');
+  } catch (err) {
+    console.warn('Realtime order_dresses sync error:', err);
+  }
+}
+
+async function handleRealtimeOrderAccessoryChange(payload) {
+  if (!db) return;
+  console.log('[Realtime] order_accessories changed:', payload.eventType, payload.new?.id || payload.old?.id);
+  try {
+    const orders = await SupabaseService.fetchOrders();
+    const localByDbId = {};
+    (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
+    const merged = (orders || []).map(supOrder => {
+      const local = localByDbId[supOrder._dbId];
+      if (local) return { ...supOrder, _fromBooking: local._fromBooking };
+      return supOrder;
+    });
+    db.don = merged;
+    localStorage.setItem(STORE, JSON.stringify(db));
+    syncStateAndRender();
+    SyncBanner.info('💍 Phụ kiện trong đơn được cập nhật từ thiết bị khác');
+  } catch (err) {
+    console.warn('Realtime order_accessories sync error:', err);
   }
 }
 
@@ -620,7 +664,7 @@ function startBookingPolling(interval = 5000) {
 }
 
 let fullSyncInterval = null;
-function startFullSyncPolling(interval = 60000) {
+function startFullSyncPolling(interval = 15000) {
   if (fullSyncInterval) clearInterval(fullSyncInterval);
   fullSyncInterval = setInterval(async () => {
     if (!db) return;
@@ -683,7 +727,8 @@ function mergeOrderLists(local, remote) {
       const existingTs = existing._ts || 0;
       const remoteTs = o._ts || 0;
       if (remoteTs > existingTs) {
-        byId[o._dbId] = { ...o, dhvs: existing.dhvs, Ma_PK: existing.Ma_PK };
+        // Remote wins — Supabase is source of truth
+        byId[o._dbId] = { ...o };
       }
     }
   });
