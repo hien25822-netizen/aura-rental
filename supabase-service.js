@@ -605,6 +605,27 @@ async function deleteOrder(id) {
     .eq('id', id);
 
   if (error) throw error;
+
+  // Also delete relations
+  await supabase.from('order_dresses').delete().eq('order_id', id);
+  await supabase.from('order_accessories').delete().eq('order_id', id);
+}
+
+/**
+ * Find order by Ma_Don (for migration of old local orders to Supabase)
+ * @param {string} maDon
+ */
+async function findOrderByMaDon(maDon) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('ma_don', maDon)
+    .single();
+  if (error || !data) return null;
+  return { _dbId: data.id };
+}
+  if (error) throw error;
 }
 
 // ============================================================
@@ -974,6 +995,7 @@ window.SupabaseService = {
   createOrder,
   updateOrder,
   deleteOrder,
+  findOrderByMaDon,
 
   // Payments
   fetchPayments,

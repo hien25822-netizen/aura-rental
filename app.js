@@ -1929,6 +1929,7 @@ function openEditOrder(id) {
     <div class="eo-modal-content">
       <form id="eo-form" onsubmit="event.preventDefault(); saveEditOrder('${id}')">
 
+
         <!-- Customer Info -->
         <div class="eo-section">
           <div class="eo-section-title">👤 Khách hàng</div>
@@ -2032,7 +2033,7 @@ function openEditOrder(id) {
     </div>
     <div class="sheet-foot">
       <button type="button" class="btn ghost" data-close>Hủy</button>
-      <button type="submit" class="btn btn-primary" onclick="document.getElementById('eo-form').requestSubmit()">Lưu thay đổi</button>
+      <button type="button" class="btn btn-primary" id="eo-save-btn">Lưu thay đổi</button>
     </div>
   `;
 
@@ -2051,6 +2052,17 @@ function openEditOrder(id) {
   closeModal('m-detail');
   openModal('m-edit-order');
 
+  // Lắng nghe nút Lưu — gọi saveEditOrder với id được lưu trong data attribute
+  const btn = document.getElementById('eo-save-btn');
+  if (btn) {
+    btn.onclick = () => saveEditOrder(id);
+  }
+  // Handle Enter key in form
+  const form = document.getElementById('eo-form');
+  if (form) {
+    form.onsubmit = e => { e.preventDefault(); saveEditOrder(id); };
+  }
+
   window.recalcTra = () => {
     const goi = frm('goi').value;
     const lay = frm('lay').value;
@@ -2060,7 +2072,7 @@ function openEditOrder(id) {
   function frm(name) { return document.querySelector(`#eo-form [name="${name}"]`); }
 }
 
-window.saveEditOrder = function(id) {
+window.saveEditOrder = async function(id) {
   const o = db.don.find(x => (x.Ma_Don || x.id) === id);
   if (!o) return;
   const f = $('#eo-form');
@@ -2077,22 +2089,41 @@ window.saveEditOrder = function(id) {
   o.Dia_Chi = fd.get('dc') || '';
   o.Su_Kien = fd.get('sukien') || '';
   o.Ghi_Chu = fd.get('ghichu') || '';
-  o._ts = Date.now(); // Fix realtime merge conflict
+  o._ts = Date.now();
   // Dresses
   const vayIds = $$('#eo-vays .eo-pill.selected').map(p => p.dataset.vay);
   o.dhvs = vayIds.map(v => ({ vay: v }));
   // Accessories
   const pkIds = $$('#eo-pks .eo-pill.selected').map(p => p.dataset.pk);
   o.Ma_PK = pkIds;
-  save();
-  // Sync to Supabase for cross-device sync
-  if (o._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-    SupabaseService.updateOrder(o._dbId, {
-      ...o,
-      dhvs: o.dhvs,
-      pks: pkIds
-    }).catch(err => console.warn('Supabase updateOrder failed:', err));
+
+  // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới được đóng modal
+  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    const btn = document.getElementById('eo-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
+    try {
+      if (o._dbId) {
+        // Has _dbId — update existing
+        await SupabaseService.updateOrder(o._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
+      } else {
+        // No _dbId — find by ma_don, then create if not found
+        const existing = await SupabaseService.findOrderByMaDon(o.Ma_Don);
+        if (existing) {
+          o._dbId = existing._dbId;
+          await SupabaseService.updateOrder(existing._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
+        } else {
+          const created = await SupabaseService.createOrder({ ...o, dhvs: o.dhvs, pks: pkIds });
+          if (created?._dbId) o._dbId = created._dbId;
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase sync failed:', err);
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Lưu thay đổi'; }
   }
+
+  // Sau khi Supabase xong → lưu localStorage → đóng modal
+  save();
   closeModal('m-edit-order');
   toast('Đã lưu đơn', 'success');
   refreshCurView();
@@ -2261,6 +2292,10 @@ window.saveRefund = function() {
     ghichu: $('#r-ghichu')?.value || '',
   });
   save();
+  // Sync refund to Supabase
+  if (refundDon._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+    SupabaseService.updateOrder(refundDon._dbId, refundDon).catch(err => console.warn('Supabase refund sync failed:', err));
+  }
   closeModal('m-refund');
   toast('Đã hoàn cọc', 'success');
   refreshCurView();
@@ -2706,7 +2741,7 @@ window.filterPKItems = function(search) {
   });
 };
 
-window.saveNewOrder = function() {
+window.saveNewOrder = async function() {
   const f = $('#n-form');
   const fd = new FormData(f);
   // Sửa lỗi: lấy váy từ checked inputs thay vì class .selected
@@ -2746,20 +2781,27 @@ window.saveNewOrder = function() {
     const dress = db.vay.find(x => (x.Ma_Vay || x.ma) === v);
     if (dress) (dress.So_Lan_Thue = (dress.So_Lan_Thue || 0) + 1);
   });
-  save();
-  // Sync to Supabase for cross-device sync
+
+  // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới đóng modal
   if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.() && !order._fromBooking) {
-    SupabaseService.createOrder({
-      ...order,
-      dhvs: vayIds.map(v => ({ vay: v })),
-      pks: pkIds
-    }).then(created => {
+    save();
+    try {
+      const created = await SupabaseService.createOrder({
+        ...order,
+        dhvs: vayIds.map(v => ({ vay: v })),
+        pks: pkIds
+      });
       if (created?._dbId) {
         order._dbId = created._dbId;
         save();
       }
-    }).catch(err => console.warn('Supabase createOrder failed:', err));
+    } catch (err) {
+      console.warn('Supabase createOrder failed:', err);
+    }
+  } else {
+    save();
   }
+
   closeModal('m-new');
   toast(`Đã tạo đơn ${id}`, 'success');
   if (curView !== 'v-orders') go('v-orders');
