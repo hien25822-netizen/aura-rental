@@ -1019,4 +1019,4 @@ window.SupabaseService = {
   normalizePayment
 };
 
-console.log('✅ SupabaseService loaded v9');
+console.log('✅ SupabaseService loaded v10');

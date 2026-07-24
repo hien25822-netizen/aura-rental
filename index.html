@@ -209,14 +209,25 @@
 <!-- Supabase Client Library -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<!-- Supabase Service Layer -->
-<script src="supabase-service.js?v=10"></script>
-
-<!-- Main App (defines functions first) -->
-<script src="app.js?v=25"></script>
-
-<!-- Supabase App Integration (wraps functions after they're defined) -->
-<script src="supabase-app.js?v=24"></script>
+<!-- Supabase Service Layer (dynamic load to bypass HTTP cache) -->
+<script>
+(function() {
+  var t = Date.now();
+  function loadScript(src, onload) {
+    var s = document.createElement('script');
+    s.src = src + '&t=' + t;
+    s.onload = onload;
+    document.head.appendChild(s);
+  }
+  loadScript('supabase-service.js?v=15', function() {
+    loadScript('app.js?v=27', function() {
+      loadScript('supabase-app.js?v=26', function() {
+        console.log('All scripts loaded dynamically');
+      });
+    });
+  });
+})();
+</script>
 
 <script>
   if ('serviceWorker' in navigator) {

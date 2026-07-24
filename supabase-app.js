@@ -110,7 +110,7 @@ window.handleSupabaseLogin = async function(e) {
   btn.textContent = 'Đang đăng nhập...';
 
   try {
-    const data = await SupabaseService.signIn(fd.get('email'), fd.get('password'));
+    const data = await window.SupabaseService.signIn(fd.get('email'), fd.get('password'));
     closeModal('m-login');
     document.body.classList.remove('auth-locked');
     toast('Đăng nhập thành công!', 'success');
@@ -145,7 +145,7 @@ function showLogoutConfirm() {
 
 window.handleSupabaseLogout = async function() {
   try {
-    await SupabaseService.signOut();
+    await window.SupabaseService.signOut();
     closeModal('m-confirm');
     toast('Đã đăng xuất', 'success');
     showLoginModal();
@@ -167,7 +167,7 @@ window.forceResync = async function() {
   }
 
   try {
-    if (SupabaseService.isConfigured()) {
+    if (window.SupabaseService.isConfigured()) {
       await loadFromSupabase();
       await syncBookingsToLocal();
     }
@@ -195,7 +195,7 @@ window.forceResync = async function() {
 // ============================================================
 
 async function loadFromSupabase() {
-  if (!db || !SupabaseService.isConfigured()) {
+  if (!db || !window.SupabaseService.isConfigured()) {
     console.log('Supabase not configured - using localStorage');
     return;
   }
@@ -204,10 +204,10 @@ async function loadFromSupabase() {
     SyncBanner.show('Đang đồng bộ dữ liệu...', '🔄');
 
     const [dresses, accessories, orders, payments] = await Promise.all([
-      SupabaseService.fetchDresses(),
-      SupabaseService.fetchAccessories(),
-      SupabaseService.fetchOrders(),
-      SupabaseService.fetchPayments()
+      window.SupabaseService.fetchDresses(),
+      window.SupabaseService.fetchAccessories(),
+      window.SupabaseService.fetchOrders(),
+      window.SupabaseService.fetchPayments()
     ]);
 
     // Build maps from Supabase data
@@ -317,9 +317,9 @@ let _realtimeRetryCount = 0;
 const MAX_REALTIME_RETRIES = 3;
 
 function setupRealtime() {
-  if (!SupabaseService.isConfigured()) return;
+  if (!window.SupabaseService.isConfigured()) return;
 
-  SupabaseService.unsubscribeAll();
+  window.SupabaseService.unsubscribeAll();
 
   _realtimeStatus = 'connecting';
   SyncBanner.show('Đang kết nối realtime...', '🔄');
@@ -335,7 +335,7 @@ function setupRealtime() {
   let connectedCount = 0;
 
   tables.forEach(table => {
-    SupabaseService.subscribeToChanges(table, payload => handleRealtimeChange(table, payload));
+    window.SupabaseService.subscribeToChanges(table, payload => handleRealtimeChange(table, payload));
     // Check connection after 3 seconds
     setTimeout(() => {
       connectedCount++;
@@ -370,7 +370,7 @@ function setupRealtime() {
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
       console.log('[Visibility] Tab visible — syncing...');
-      if (db && SupabaseService.isConfigured()) {
+      if (db && window.SupabaseService.isConfigured()) {
         try {
           await loadFromSupabase();
           refreshCurView();
@@ -404,7 +404,7 @@ function startFastPolling() {
   if (fastPollingInterval) return;
   console.log('⚡ Fast polling active (every 5s)');
   fastPollingInterval = setInterval(async () => {
-    if (!db || !SupabaseService.isConfigured()) return;
+    if (!db || !window.SupabaseService.isConfigured()) return;
     try {
       await loadFromSupabase();
       _realtimeStatus = 'polling';
@@ -420,7 +420,7 @@ function startFastPolling() {
 async function handleRealtimeDressChange(payload) {
   if (!db) return;
   try {
-    const dresses = await SupabaseService.fetchDresses();
+    const dresses = await window.SupabaseService.fetchDresses();
     const localByDbId = {};
     (db.vay || []).forEach(v => { if (v._dbId) localByDbId[v._dbId] = v; });
     const merged = (dresses || []).map(sup => {
@@ -438,7 +438,7 @@ async function handleRealtimeDressChange(payload) {
 async function handleRealtimeAccessoryChange(payload) {
   if (!db) return;
   try {
-    const accessories = await SupabaseService.fetchAccessories();
+    const accessories = await window.SupabaseService.fetchAccessories();
     const localByDbId = {};
     (db.pk || []).forEach(p => { if (p._dbId) localByDbId[p._dbId] = p; });
     const merged = (accessories || []).map(sup => {
@@ -456,7 +456,7 @@ async function handleRealtimeAccessoryChange(payload) {
 async function handleRealtimeOrderChange(payload) {
   if (!db) return;
   try {
-    const orders = await SupabaseService.fetchOrders();
+    const orders = await window.SupabaseService.fetchOrders();
     // SUPABASE IS SOURCE OF TRUTH — replace ALL local orders with Supabase data
     // dhvs and Ma_PK come from Supabase via fetchOrders() which reads order_dresses table
     const localByDbId = {};
@@ -485,7 +485,7 @@ async function handleRealtimeOrderChange(payload) {
 async function handleRealtimePaymentChange(payload) {
   if (!db) return;
   try {
-    const payments = await SupabaseService.fetchPayments();
+    const payments = await window.SupabaseService.fetchPayments();
     db.tt = payments || [];
     localStorage.setItem(STORE, JSON.stringify(db));
     syncStateAndRender();
@@ -502,7 +502,7 @@ async function handleRealtimeOrderDressChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_dresses changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
-    const orders = await SupabaseService.fetchOrders();
+    const orders = await window.SupabaseService.fetchOrders();
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
     const merged = (orders || []).map(supOrder => {
@@ -523,7 +523,7 @@ async function handleRealtimeOrderAccessoryChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_accessories changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
-    const orders = await SupabaseService.fetchOrders();
+    const orders = await window.SupabaseService.fetchOrders();
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
     const merged = (orders || []).map(supOrder => {
@@ -547,16 +547,16 @@ async function handleRealtimeBookingChange(payload) {
 }
 
 async function syncBookingsToLocal() {
-  if (!db || !SupabaseService.isConfigured()) return;
+  if (!db || !window.SupabaseService.isConfigured()) return;
   try {
-    const bookings = await SupabaseService.fetchBookings();
+    const bookings = await window.SupabaseService.fetchBookings();
 
     let allDresses = {};
     let allAccessories = {};
     try {
       const [dresses, accessories] = await Promise.all([
-        SupabaseService.fetchDresses(),
-        SupabaseService.fetchAccessories()
+        window.SupabaseService.fetchDresses(),
+        window.SupabaseService.fetchAccessories()
       ]);
       (dresses || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
       (accessories || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
@@ -764,7 +764,7 @@ const _origSave = window.save;
 
 // Enhanced save that syncs to Supabase
 window.saveToSupabase = async function() {
-  if (!SupabaseService.isConfigured()) return;
+  if (!window.SupabaseService.isConfigured()) return;
 
   // Save to localStorage first (always)
   localStorage.setItem(STORE, JSON.stringify(db));
@@ -804,11 +804,11 @@ const _origSaveNewOrder = window.saveNewOrder;
 window.saveNewOrder = async function() {
   const result = await _origSaveNewOrder();
 
-  if (result && SupabaseService.isConfigured()) {
+  if (result && window.SupabaseService.isConfigured()) {
     try {
       const order = db.don[0]; // Most recent
       if (order && !order._dbId) {
-        const supabaseOrder = await SupabaseService.createOrder(order);
+        const supabaseOrder = await window.SupabaseService.createOrder(order);
         order._dbId = supabaseOrder._dbId;
         order.id = supabaseOrder.id;
 
@@ -816,7 +816,7 @@ window.saveNewOrder = async function() {
         if (order.dhvs) {
           for (const dhv of order.dhvs) {
             if (dhv.vay) {
-              await SupabaseService.incrementDressRentalCount(dhv.vay);
+              await window.SupabaseService.incrementDressRentalCount(dhv.vay);
             }
           }
         }
@@ -838,21 +838,21 @@ window.saveEditOrder = function(id) {
   _origSaveEditOrder(id);
 
   // Sync to Supabase
-  if (SupabaseService.isConfigured()) {
+  if (window.SupabaseService.isConfigured()) {
     setTimeout(async () => {
       try {
         const order = db.don.find(o => (o.Ma_Don || o.id) === id);
         if (order) {
           if (order._dbId) {
-            await SupabaseService.updateOrder(order._dbId, order);
+            await window.SupabaseService.updateOrder(order._dbId, order);
           } else {
             // Order not yet in Supabase — create it
-            const sup = await SupabaseService.createOrder(order);
+            const sup = await window.SupabaseService.createOrder(order);
             order._dbId = sup._dbId;
             order.id = sup.id;
             if (order.dhvs) {
               for (const dhv of order.dhvs) {
-                if (dhv.vay) await SupabaseService.incrementDressRentalCount(dhv.vay);
+                if (dhv.vay) await window.SupabaseService.incrementDressRentalCount(dhv.vay);
               }
             }
             localStorage.setItem(STORE, JSON.stringify(db));
@@ -874,7 +874,7 @@ window.submitItem = async function(kind, id) {
   // Call original first
   await _origSubmitItem(kind, id);
 
-  if (SupabaseService.isConfigured()) {
+  if (window.SupabaseService.isConfigured()) {
     try {
       const table = kind === 'vay' ? 'vay' : 'pk';
 
@@ -883,9 +883,9 @@ window.submitItem = async function(kind, id) {
         const item = db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
         if (item && item._dbId) {
           if (kind === 'vay') {
-            await SupabaseService.updateDress(item._dbId, item);
+            await window.SupabaseService.updateDress(item._dbId, item);
           } else {
-            await SupabaseService.updateAccessory(item._dbId, item);
+            await window.SupabaseService.updateAccessory(item._dbId, item);
           }
         }
       } else {
@@ -895,8 +895,8 @@ window.submitItem = async function(kind, id) {
         );
         if (newItem && !newItem._dbId) {
           const supabaseRecord = kind === 'vay'
-            ? await SupabaseService.createDress(newItem)
-            : await SupabaseService.createAccessory(newItem);
+            ? await window.SupabaseService.createDress(newItem)
+            : await window.SupabaseService.createAccessory(newItem);
           newItem._dbId = supabaseRecord._dbId;
           newItem.id = supabaseRecord.id;
           localStorage.setItem(STORE, JSON.stringify(db));
@@ -915,15 +915,15 @@ window.setOrderType = function(id, type) {
   _origSetOrderType(id, type);
 
   // Sync to Supabase
-  if (SupabaseService.isConfigured()) {
+  if (window.SupabaseService.isConfigured()) {
     setTimeout(async () => {
       try {
         const order = db.don.find(o => (o.Ma_Don || o.id) === id);
         if (order) {
           if (order._dbId) {
-            await SupabaseService.updateOrder(order._dbId, order);
+            await window.SupabaseService.updateOrder(order._dbId, order);
           } else {
-            const sup = await SupabaseService.createOrder(order);
+            const sup = await window.SupabaseService.createOrder(order);
             order._dbId = sup._dbId;
             order.id = sup.id;
             localStorage.setItem(STORE, JSON.stringify(db));
@@ -943,12 +943,12 @@ window.saveRefund = function() {
   _origSaveRefund();
 
   // Sync refund payment to Supabase
-  if (SupabaseService.isConfigured()) {
+  if (window.SupabaseService.isConfigured()) {
     setTimeout(async () => {
       try {
         const latestPayment = db.tt && db.tt[0];
         if (latestPayment && !latestPayment._dbId) {
-          const supPayment = await SupabaseService.createPayment(latestPayment);
+          const supPayment = await window.SupabaseService.createPayment(latestPayment);
           latestPayment._dbId = supPayment._dbId;
           latestPayment.id = supPayment.id;
           localStorage.setItem(STORE, JSON.stringify(db));
@@ -970,10 +970,10 @@ window.deleteOrder = function(id) {
   _origDeleteOrder(id);
 
   // Sync to Supabase (soft delete)
-  if (order && order._dbId && SupabaseService.isConfigured()) {
+  if (order && order._dbId && window.SupabaseService.isConfigured()) {
     setTimeout(async () => {
       try {
-        await SupabaseService.deleteOrder(order._dbId);
+        await window.SupabaseService.deleteOrder(order._dbId);
       } catch (err) {
         console.warn('Failed to delete order from Supabase:', err);
       }
@@ -992,13 +992,13 @@ window.deleteItem = function(kind, id) {
   _origDeleteItem(kind, id);
 
   // Sync to Supabase
-  if (item && item._dbId && SupabaseService.isConfigured()) {
+  if (item && item._dbId && window.SupabaseService.isConfigured()) {
     setTimeout(async () => {
       try {
         if (kind === 'vay') {
-          await SupabaseService.deleteDress(item._dbId);
+          await window.SupabaseService.deleteDress(item._dbId);
         } else {
-          await SupabaseService.deleteAccessory(item._dbId);
+          await window.SupabaseService.deleteAccessory(item._dbId);
         }
       } catch (err) {
         console.warn('Failed to delete item from Supabase:', err);
@@ -1034,9 +1034,9 @@ async function initWithSupabase() {
   }
 
   try {
-    const user = await SupabaseService.init();
+    const user = await window.SupabaseService.init();
 
-    if (SupabaseService.isConfigured()) {
+    if (window.SupabaseService.isConfigured()) {
       setupRealtime();
       syncBookingsToLocal();
     }
@@ -1076,7 +1076,7 @@ function addAuthButton() {
   authBtn.title = 'Tài khoản';
 
   // Update button based on auth state
-  SupabaseService.onAuthChange((user) => {
+  window.SupabaseService.onAuthChange((user) => {
     const btn = document.getElementById('auth-btn');
     if (btn) {
       if (user) {
@@ -1092,7 +1092,7 @@ function addAuthButton() {
   });
 
   // Set initial state
-  if (SupabaseService.isAuthenticated()) {
+  if (window.SupabaseService.isAuthenticated()) {
     authBtn.textContent = '👤';
     authBtn.onclick = showLogoutConfirm;
   } else {
@@ -1174,7 +1174,7 @@ if (document.readyState === 'loading') {
 if (typeof Sync !== 'undefined') {
   const _origSyncStart = Sync.start;
   Sync.start = function() {
-    if (SupabaseService.isConfigured()) {
+    if (window.SupabaseService.isConfigured()) {
       console.log('ℹ️ Google Sheets sync disabled — using Supabase realtime');
       return;
     }
@@ -1184,7 +1184,7 @@ if (typeof Sync !== 'undefined') {
   const _origSave = window.save;
   window.save = function() {
     _origSave.apply(this, arguments);
-    if (SupabaseService.isConfigured()) {
+    if (window.SupabaseService.isConfigured()) {
       clearTimeout(window._syncTimer);
     }
   };

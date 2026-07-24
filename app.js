@@ -910,17 +910,17 @@ window.setOrderType = async (id, type) => {
   o._ts = Date.now();
 
   // Sync to Supabase BEFORE close modal (blocking)
-  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+  if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     try {
       if (o._dbId) {
-        await SupabaseService.updateOrder(o._dbId, o);
+        await window.SupabaseService.updateOrder(o._dbId, o);
       } else {
-        const existing = await SupabaseService.findOrderByMaDon(o.Ma_Don);
+        const existing = await window.SupabaseService.findOrderByMaDon(o.Ma_Don);
         if (existing) {
           o._dbId = existing._dbId;
-          await SupabaseService.updateOrder(existing._dbId, o);
+          await window.SupabaseService.updateOrder(existing._dbId, o);
         } else {
-          const created = await SupabaseService.createOrder(o);
+          const created = await window.SupabaseService.createOrder(o);
           if (created?._dbId) o._dbId = created._dbId;
         }
       }
@@ -1410,8 +1410,8 @@ window.submitItem = async function(kind, id) {
     const o = db[table].find(x => (isVay ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
     Object.assign(o, data);
     // Sync update to Supabase
-    if (o._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-      const updateFn = isVay ? SupabaseService.updateDress : SupabaseService.updateAccessory;
+    if (o._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+      const updateFn = isVay ? window.SupabaseService.updateDress : window.SupabaseService.updateAccessory;
       updateFn(o._dbId, o).catch(err => console.warn('Supabase update failed:', err));
     }
     toast('Đã cập nhật', 'success');
@@ -1420,8 +1420,8 @@ window.submitItem = async function(kind, id) {
       const dress = { Ma_Vay: uid('V'), Ten_Vay: data.Ten_Vay, Size: data.Size, Gia_Vay_Goc: data.Gia_Vay_Goc, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_Vay: data.Anh_Vay || '', Ghi_Chu: data.Ghi_Chu, So_Lan_Thue: 0 };
       db.vay.push(dress);
       // Sync to Supabase
-      if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-        SupabaseService.createDress(dress).then(created => {
+      if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        window.SupabaseService.createDress(dress).then(created => {
           if (created?._dbId) {
             dress._dbId = created._dbId;
             dress.id = created._dbId;
@@ -1433,8 +1433,8 @@ window.submitItem = async function(kind, id) {
       const pk = { Ma_PK: uid('P'), Ten_PK: data.Ten_PK, Loai: data.Loai, So_Luong_Tong: data.So_Luong_Tong, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_PK: data.Anh_PK || '', Ghi_Chu: data.Ghi_Chu };
       db.pk.push(pk);
       // Sync to Supabase
-      if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-        SupabaseService.createAccessory(pk).then(created => {
+      if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        window.SupabaseService.createAccessory(pk).then(created => {
           if (created?._dbId) {
             pk._dbId = created._dbId;
             pk.id = created._dbId;
@@ -1467,8 +1467,8 @@ window.deleteItem = function(kind, id) {
   db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
   save();
   // Sync delete to Supabase
-  if (item?._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-    const deleteFn = kind === 'vay' ? SupabaseService.deleteDress : SupabaseService.deleteAccessory;
+  if (item?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+    const deleteFn = kind === 'vay' ? window.SupabaseService.deleteDress : window.SupabaseService.deleteAccessory;
     deleteFn(item._dbId).catch(err => console.warn('Supabase delete failed:', err));
   }
   closeModal('m-edit-item');
@@ -2119,21 +2119,21 @@ window.saveEditOrder = async function(id) {
   o.Ma_PK = pkIds;
 
   // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới được đóng modal
-  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
+  if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     const btn = document.getElementById('eo-save-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
     try {
       if (o._dbId) {
         // Has _dbId — update existing
-        await SupabaseService.updateOrder(o._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
+        await window.SupabaseService.updateOrder(o._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
       } else {
         // No _dbId — find by ma_don, then create if not found
-        const existing = await SupabaseService.findOrderByMaDon(o.Ma_Don);
+        const existing = await window.SupabaseService.findOrderByMaDon(o.Ma_Don);
         if (existing) {
           o._dbId = existing._dbId;
-          await SupabaseService.updateOrder(existing._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
+          await window.SupabaseService.updateOrder(existing._dbId, { ...o, dhvs: o.dhvs, pks: pkIds });
         } else {
-          const created = await SupabaseService.createOrder({ ...o, dhvs: o.dhvs, pks: pkIds });
+          const created = await window.SupabaseService.createOrder({ ...o, dhvs: o.dhvs, pks: pkIds });
           if (created?._dbId) o._dbId = created._dbId;
         }
       }
@@ -2157,8 +2157,8 @@ window.deleteOrder = function(id) {
   db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
   save();
   // Sync deletion to Supabase
-  if (order?._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-    SupabaseService.deleteOrder(order._dbId).catch(err => console.warn('Supabase deleteOrder failed:', err));
+  if (order?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+    window.SupabaseService.deleteOrder(order._dbId).catch(err => console.warn('Supabase deleteOrder failed:', err));
   }
   closeModal('m-detail');
   toast('Đã xóa đơn', 'success');
@@ -2314,8 +2314,8 @@ window.saveRefund = function() {
   });
   save();
   // Sync refund to Supabase
-  if (refundDon._dbId && typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.()) {
-    SupabaseService.updateOrder(refundDon._dbId, refundDon).catch(err => console.warn('Supabase refund sync failed:', err));
+  if (refundDon._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+    window.SupabaseService.updateOrder(refundDon._dbId, refundDon).catch(err => console.warn('Supabase refund sync failed:', err));
   }
   closeModal('m-refund');
   toast('Đã hoàn cọc', 'success');
@@ -2804,10 +2804,10 @@ window.saveNewOrder = async function() {
   });
 
   // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới đóng modal
-  if (typeof SupabaseService !== 'undefined' && SupabaseService.isConfigured?.() && !order._fromBooking) {
+  if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.() && !order._fromBooking) {
     save();
     try {
-      const created = await SupabaseService.createOrder({
+      const created = await window.SupabaseService.createOrder({
         ...order,
         dhvs: vayIds.map(v => ({ vay: v })),
         pks: pkIds
