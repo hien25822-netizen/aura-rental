@@ -575,17 +575,36 @@ document.addEventListener('touchend', () => { _ptrActive = false; }, { passive: 
 /* ============================================================
  *  MODAL helpers
  * ============================================================ */
+let _modalScrollY = 0;
 function openModal(id) {
+  if (!$$('.modal.show').length) {
+    _modalScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  }
   document.body.classList.add('modal-open-lock');
+  if (_modalScrollY > 0) {
+    document.body.style.top = `-${_modalScrollY}px`;
+  }
   $('#' + id).classList.add('show');
 }
 function closeModal(id) {
   $('#' + id).classList.remove('show');
-  if (!$$('.modal.show').length) document.body.classList.remove('modal-open-lock');
+  if (!$$('.modal.show').length) {
+    document.body.classList.remove('modal-open-lock');
+    document.body.style.top = '';
+    if (_modalScrollY > 0) {
+      window.scrollTo({ top: _modalScrollY, left: 0, behavior: 'instant' });
+    }
+    _modalScrollY = 0;
+  }
 }
 function closeAllModals() {
   $$('.modal').forEach(m => m.classList.remove('show'));
   document.body.classList.remove('modal-open-lock');
+  document.body.style.top = '';
+  if (_modalScrollY > 0) {
+    window.scrollTo({ top: _modalScrollY, left: 0, behavior: 'instant' });
+  }
+  _modalScrollY = 0;
 }
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal')) closeAllModals();
