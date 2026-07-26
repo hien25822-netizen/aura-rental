@@ -45,7 +45,7 @@ ngayTraThuc(goi, lay):
 - **Flow:** Customer fills form → saves to localStorage → syncs to main app
 - **Real-time:** Uses storage event listeners + polling to update dress/accessory list
 - **Orders:** Prefixed with 'B' (e.g., 'B1751234567890')
-- **Filter:** `curOrderFilter === 'new-booking'` shows booking-form orders
+- **Filter:** Date picker (`#order-date`) filters by Ngay_Lay; bookings start with 'B'
 
 ### Data Flow:
 ```

@@ -1197,7 +1197,7 @@ window.setOrderType = async (id, type) => {
 /* ============================================================
  *  ORDERS VIEW
  * ============================================================ */
-let curOrderFilter = 'all';
+let curOrderDate = null;
 let curOrderTypeFilter = 'type-all';
 let curOrderSearch = '';
 function renderOrders() {
@@ -1207,24 +1207,12 @@ function renderOrders() {
   const todayIso = isoOf(today);
 
   let arr = db.don.slice();
-  // Filter
-  if (curOrderFilter === 'all') arr = arr.filter(o => !isHoanOrder(o));
-  else if (curOrderFilter === 'today') arr = arr.filter(o => !isHoanOrder(o) && ((o.Ngay_Lay || o.lay) === todayIso || (o.Ngay_Tra || o.tra) === todayIso));
-  else if (curOrderFilter === 'week') {
-    const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
-    arr = arr.filter(o => {
-      if (isHoanOrder(o)) return false;
-      const lay = o.Ngay_Lay || o.lay;
-      return lay && lay >= todayIso && lay <= isoOf(weekEnd);
-    });
+  // Filter theo ngày lấy (Ngay_Lay) — null = hiện tất cả (trừ đã hoàn)
+  if (curOrderDate) {
+    arr = arr.filter(o => !isHoanOrder(o) && (o.Ngay_Lay || o.lay) === curOrderDate);
+  } else {
+    arr = arr.filter(o => !isHoanOrder(o));
   }
-  else if (curOrderFilter === 'preparing') arr = arr.filter(o => !isHoanOrder(o) && statusForDate(o, todayIso) === 'Chuan_Bi');
-  else if (curOrderFilter === 'renting') arr = arr.filter(o => !isHoanOrder(o) && statusForDate(o, todayIso) === 'Dang_Thue');
-  else if (curOrderFilter === 'returning') arr = arr.filter(o => !isHoanOrder(o) && statusForDate(o, todayIso) === 'Tra_Ve');
-  else if (curOrderFilter === 'overdue') arr = arr.filter(o => !isHoanOrder(o) && statusForDate(o, todayIso) === 'Qua_Han');
-  else if (curOrderFilter === 'refunded') arr = arr.filter(o => isHoanOrder(o));
-  else if (curOrderFilter === 'deposited') arr = arr.filter(o => !isHoanOrder(o) && (o.Hinh_Thuc_Coc || o.coc)); // Có cọc, chưa hoàn
-  else if (curOrderFilter === 'new-booking') arr = arr.filter(o => (o.Ma_Don || o.id || '').startsWith('B')); // Đơn từ form booking
 
   // Lọc theo loại đơn
   if (curOrderTypeFilter !== 'type-all') {
@@ -1264,9 +1252,9 @@ function renderOrders() {
   });
 
   if (!arr.length) {
-    // Skeleton: first-load only — db.don empty AND filter is 'all'
+    // Skeleton: first-load only — db.don empty AND không filter ngày
     if (!db.don || db.don.length === 0) {
-      if (curOrderFilter === 'all') {
+      if (!curOrderDate) {
         showSkeleton(list, 8);
         return;
       }
@@ -1274,10 +1262,10 @@ function renderOrders() {
     const q = curOrderSearch.toLowerCase().trim();
     const msg = q
       ? 'Không tìm thấy đơn nào'
-      : curOrderFilter === 'refunded'
-        ? 'Chưa có đơn hoàn cọc'
+      : curOrderDate
+        ? `Chưa có đơn lấy ngày ${isoToVN(curOrderDate)}`
         : 'Chưa có đơn nào';
-    const cta = !q && curOrderFilter === 'all'
+    const cta = !q && !curOrderDate
       ? '<button class="btn primary" onclick="openNewOrder()">＋ Tạo đơn đầu tiên</button>'
       : '';
     list.innerHTML = `<div class="empty empty-cta"><div class="icon">📭</div><div class="title">${msg}</div>${cta}</div>`;
@@ -1287,12 +1275,7 @@ function renderOrders() {
   // Group orders by Ngay_Lay for display
   const ordersByDate = {};
   arr.forEach(o => {
-    let dateKey = o.Ngay_Lay || o.lay || 'unknown';
-    // Nếu filter "Hôm nay" và đơn có Ngay_Tra = hôm nay, hiển thị dưới "Hôm nay"
-    if (curOrderFilter === 'today') {
-      const ngayTra = o.Ngay_Tra || o.Ngay_Tra_Thuc || o.tra;
-      if (ngayTra === todayIso) dateKey = todayIso;
-    }
+    const dateKey = o.Ngay_Lay || o.lay || 'unknown';
     if (!ordersByDate[dateKey]) ordersByDate[dateKey] = [];
     ordersByDate[dateKey].push(o);
   });
@@ -1413,9 +1396,30 @@ function OrderCardListCard(o, refDate = new Date()) {
 $('#search').oninput = debounce(e => { curOrderSearch = e.target.value; renderOrders(); }, 300);
 $$('#order-chips button').forEach(b => b.onclick = () => {
   $$('#order-chips button').forEach(x => x.classList.toggle('on', x === b));
-  curOrderFilter = b.dataset.f;
+  $('#order-date').value = '';
+  if (b.dataset.f === 'all') {
+    curOrderDate = null;
+  } else {
+    const offset = { today: 0, tomorrow: 1, yesterday: -1 }[b.dataset.f];
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    curOrderDate = isoOf(d);
+    $('#order-date').value = curOrderDate;
+  }
   renderOrders();
 });
+
+$('#order-date').onchange = (e) => {
+  const v = e.target.value;
+  if (v) {
+    curOrderDate = v;
+    $$('#order-chips button').forEach(x => x.classList.remove('on'));
+  } else {
+    curOrderDate = null;
+    $$('#order-chips button')[0].classList.add('on');
+  }
+  renderOrders();
+};
 
 $$('#order-type-chips button').forEach(b => b.onclick = () => {
   $$('#order-type-chips button').forEach(x => x.classList.toggle('on', x === b));
