@@ -1132,6 +1132,7 @@ function rowKV(lbl, val, truncate = false) {
 }
 
 function typeClass(type) {
+  if (type === 'Chờ xác nhận') return 'ChoXacNhan';
   if (type === 'Fitting xa') return 'FittingXa';
   if (type === 'Đặt ship') return 'DatShip';
   if (type === 'Fitting') return 'Fitting';
