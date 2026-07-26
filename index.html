@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=29" />
+<link rel="stylesheet" href="styles.css?v=30" />
 </head>
 <body>
 <div class="app">
@@ -25,6 +25,7 @@
     <span class="pill" id="pill">M6/2026</span>
   </div>
   <div class="header-right">
+    <button id="pending-sync-badge" class="pending-sync-badge" style="display:none">🔄 0 chưa đồng bộ</button>
     <button class="header-btn" onclick="forceResync()" title="Cập nhật dữ liệu từ server" id="btn-resync">🔄</button>
     <button class="header-btn" onclick="openRefundOrders()" title="Đơn đã hoàn cọc">💰</button>
     <button class="header-btn" onclick="shareBookingForm()" title="Chia sẻ link đặt thuê">🔗</button>
@@ -84,7 +85,10 @@
 
 <!-- ===== DRESSES (KHO VÁY) ===== -->
 <section class="view" id="v-kho">
-  <input class="search" id="search-kho" placeholder="Tìm váy..." />
+  <div class="view-toolbar">
+    <input class="search" id="search-kho" placeholder="Tìm váy..." />
+    <button class="header-btn" onclick="openBulkImportModal()" title="Nhập Excel" style="flex-shrink:0">📥</button>
+  </div>
   <div class="chips" id="kho-chips">
     <button class="on" data-loai="">Tất cả size</button>
     <button data-loai="S">Size S</button>
@@ -209,6 +213,54 @@
 <!-- Supabase Client Library -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<!-- SheetJS for Excel parsing -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<!-- Bulk Import Modal -->
+<div id="bulk-import-overlay" class="modal-overlay" style="display:none">
+  <div id="bulk-import-modal" class="modal-box bulk-import-modal">
+    <div class="modal-header">
+      <h3>📥 Nhập Excel</h3>
+      <button class="icon-btn" onclick="closeBulkImportModal()">✕</button>
+    </div>
+    <div id="bulk-import-body">
+      <div id="bulk-step-upload">
+        <div class="bulk-drop-zone" id="bulk-drop-zone">
+          <input type="file" id="bulk-file-input" accept=".xlsx,.xls,.csv" style="display:none" />
+          <div class="bulk-drop-icon">📊</div>
+          <div class="bulk-drop-text">Kéo file Excel vào đây<br><small>hoặc bấm để chọn file</small></div>
+        </div>
+        <div class="bulk-format-hint">
+          <b>Format cột:</b> Tên váy | Size | Giá gốc | 12h | 1 ngày | 3 ngày | Ghi chú
+        </div>
+      </div>
+      <div id="bulk-step-preview" style="display:none">
+        <div id="bulk-preview-info" class="bulk-preview-info"></div>
+        <div id="bulk-preview-table-wrapper">
+          <table id="bulk-preview-table" class="bulk-preview-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="bulk-errors" class="bulk-errors" style="display:none"></div>
+      </div>
+      <div id="bulk-step-progress" style="display:none">
+        <div id="bulk-progress-text">Đang nhập...</div>
+        <div class="bulk-progress-bar"><div id="bulk-progress-fill"></div></div>
+        <div id="bulk-progress-count"></div>
+      </div>
+      <div id="bulk-step-done" style="display:none">
+        <div class="bulk-done-icon">✅</div>
+        <div id="bulk-done-text"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeBulkImportModal()">Đóng</button>
+      <button class="btn primary" id="bulk-btn-action" onclick="bulkImportNextStep()" disabled>Chọn file trước</button>
+    </div>
+  </div>
+</div>
+
 <!-- Supabase Service Layer (dynamic load to bypass HTTP cache) -->
 <script>
 (function() {
@@ -219,9 +271,9 @@
     s.onload = onload;
     document.head.appendChild(s);
   }
-  loadScript('supabase-service.js?v=15', function() {
-    loadScript('app.js?v=27', function() {
-      loadScript('supabase-app.js?v=26', function() {
+  loadScript('supabase-service.js?v=18', function() {
+    loadScript('app.js?v=31', function() {
+      loadScript('supabase-app.js?v=30', function() {
         console.log('All scripts loaded dynamically');
       });
     });

@@ -69,6 +69,35 @@ const SyncBanner = {
   }
 };
 
+// Debounce helper — collapse rapid SyncBanner calls (realtime events fire in bursts)
+const _bannerDebounce = {};
+function debouncedBanner(method, msg, icon, delay = 2000) {
+  const key = method;
+  if (_bannerDebounce[key]) {
+    clearTimeout(_bannerDebounce[key].t);
+    _bannerDebounce[key].pending = msg;
+    _bannerDebounce[key].t = setTimeout(() => {
+      const pendingMsg = _bannerDebounce[key].pending || msg;
+      SyncBanner[method](pendingMsg, icon);
+      _bannerDebounce[key] = null;
+    }, delay);
+    return;
+  }
+  SyncBanner[method](msg, icon);
+  _bannerDebounce[key] = {
+    t: setTimeout(() => { _bannerDebounce[key] = null; }, delay)
+  };
+}
+
+// Smart diff — compare two arrays by JSON shape. Returns true if they differ.
+function arraysDiffer(a, b) {
+  if (!a || !b) return true;
+  if (a.length !== b.length) return true;
+  const sa = JSON.stringify(a);
+  const sb = JSON.stringify(b);
+  return sa !== sb;
+}
+
 // ============================================================
 // CONFIG CHECK
 // ============================================================
@@ -168,7 +197,7 @@ window.forceResync = async function() {
 
   try {
     if (window.SupabaseService.isConfigured()) {
-      await loadFromSupabase();
+      await loadFromSupabase(true); // force = bypass mutex
       await syncBookingsToLocal();
     }
     if (typeof refreshCurView === 'function') refreshCurView();
@@ -194,14 +223,20 @@ window.forceResync = async function() {
 // DATA LOADING
 // ============================================================
 
-async function loadFromSupabase() {
-  if (!db || !window.SupabaseService.isConfigured()) {
-    console.log('Supabase not configured - using localStorage');
+let _loadInProgress = false;
+
+async function loadFromSupabase(force = false) {
+  if (_loadInProgress && !force) {
+    console.log('[loadFromSupabase] Skipped — already in progress');
     return;
   }
-
+  if (!_loadInProgress) _loadInProgress = true;
   try {
-    SyncBanner.show('Đang đồng bộ dữ liệu...', '🔄');
+    if (!db || !window.SupabaseService.isConfigured()) {
+      console.log('Supabase not configured - using localStorage');
+      return;
+    }
+    // No banner — sync runs silently in background
 
     const [dresses, accessories, orders, payments] = await Promise.all([
       window.SupabaseService.fetchDresses(),
@@ -210,22 +245,38 @@ async function loadFromSupabase() {
       window.SupabaseService.fetchPayments()
     ]);
 
-    // Build maps from Supabase data
+    // Build maps from Supabase data (dual-key: _dbId + Ma_Vay/Ma_PK)
     const supDresses = {};
-    (dresses || []).forEach(v => { if (v._dbId) supDresses[v._dbId] = v; });
+    (dresses || []).forEach(v => {
+      if (v._dbId) supDresses[v._dbId] = v;
+      if (v.Ma_Vay) supDresses[v.Ma_Vay] = v;
+    });
     const supAccessories = {};
-    (accessories || []).forEach(p => { if (p._dbId) supAccessories[p._dbId] = p; });
+    (accessories || []).forEach(p => {
+      if (p._dbId) supAccessories[p._dbId] = p;
+      if (p.Ma_PK) supAccessories[p.Ma_PK] = p;
+    });
     const supOrders = {};
     (orders || []).forEach(o => { if (o._dbId) supOrders[o._dbId] = o; });
 
     // Merge: Keep local data, update from Supabase if Supabase has newer data
     // Prefer Supabase for records that exist in both (it's the source of truth)
+    const GRACE_MS = 30000;
+    const nowItem = Date.now();
+    const recentlyDeletedItems = new Set();
+    if (db._deletedItemIds) {
+      Object.entries(db._deletedItemIds).forEach(([dbId, ts]) => {
+        if (nowItem - ts < GRACE_MS) recentlyDeletedItems.add(dbId);
+      });
+    }
     const mergedDresses = [];
     const localDressIds = new Set((db.vay || []).map(v => v._dbId));
     const supDressIds = new Set(Object.keys(supDresses));
 
-    // Add all Supabase dresses
-    (dresses || []).forEach(v => mergedDresses.push(v));
+    // Add all Supabase dresses (filter out locally-tombstoned)
+    (dresses || []).forEach(v => {
+      if (!recentlyDeletedItems.has(v._dbId)) mergedDresses.push(v);
+    });
 
     // Add local-only dresses (not in Supabase yet)
     (db.vay || []).forEach(v => {
@@ -235,15 +286,59 @@ async function loadFromSupabase() {
     });
 
     const mergedAccessories = [];
-    (accessories || []).forEach(p => mergedAccessories.push(p));
+    (accessories || []).forEach(p => {
+      if (!recentlyDeletedItems.has(p._dbId)) mergedAccessories.push(p);
+    });
     (db.pk || []).forEach(p => {
       if (!p._dbId || !supAccessories[p._dbId]) {
         mergedAccessories.push(p);
       }
     });
 
+    // Merge orders: prefer newer version by _ts (timestamp-based conflict resolution)
+    // GRACE PERIOD: orders modified in the last 30s always win — prevents race
+    // condition where Supabase fetch returns old data before the latest update landed
+    const now = Date.now();
     const mergedOrders = [];
-    (orders || []).forEach(o => mergedOrders.push(o));
+    const orderTimestamps = {};
+    // Record local timestamps first
+    (db.don || []).forEach(o => { if (o._ts) orderTimestamps[o._dbId] = o._ts; });
+
+    // Build set of pending creates (orders awaiting _dbId assignment from Supabase)
+    const pendingCreateIds = new Set();
+    if (db._pendingCreate && typeof window.isPendingCreate === 'function') {
+      Object.keys(db._pendingCreate).forEach(maDon => {
+        if (window.isPendingCreate(maDon)) pendingCreateIds.add(maDon);
+      });
+    }
+
+    // Add Supabase orders, but keep local if local is newer OR within grace period
+    // Also skip orders deleted locally within grace period (Supabase delete may not have landed yet)
+    // Also skip orders with locally-pending Ma_Don (waiting for _dbId assignment)
+    const recentlyDeleted = new Set();
+    if (db._deletedOrderIds) {
+      Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    (orders || []).forEach(o => {
+      if (recentlyDeleted.has(o._dbId)) return; // skip locally-deleted orders
+      if (pendingCreateIds.has(o.Ma_Don)) return; // pending create — keep local copy
+      const localTs = orderTimestamps[o._dbId];
+      const remoteTs = o._ts;
+      const local = db.don.find(x => x._dbId === o._dbId);
+      const isRecent = localTs && (now - localTs) < GRACE_MS;
+      if (isRecent && local) {
+        // Within grace period — keep local (user just edited this order)
+        mergedOrders.push(local);
+      } else if (localTs && remoteTs && localTs > remoteTs) {
+        // Local is older but still newer than remote
+        mergedOrders.push(local);
+      } else {
+        mergedOrders.push(o);
+      }
+    });
+    // Add local-only orders (not in Supabase yet) — includes pending creates
     (db.don || []).forEach(o => {
       if (!o._dbId || !supOrders[o._dbId]) {
         mergedOrders.push(o);
@@ -257,12 +352,15 @@ async function loadFromSupabase() {
 
     // CRITICAL: sync booking-form orders from Supabase bookings table
     // — they live in a separate table and must NOT be wiped when orders sync
-    await syncBookingsToLocal();
+    // Pass pre-built maps to avoid redundant fetches
+    await syncBookingsToLocal(supDresses, supAccessories);
 
     // Save merged data to localStorage
     localStorage.setItem(STORE, JSON.stringify(db));
+    // Rebuild in-memory indexes after remote data lands
+    if (typeof rebuildIndexes === 'function') rebuildIndexes();
 
-    SyncBanner.success(`Đã đồng bộ ${db.don.length} đơn, ${db.vay.length} váy, ${db.pk.length} phụ kiện`);
+    // Silent — no banner after sync
     console.log('Loaded:', {
       dresses: db.vay.length,
       accessories: db.pk.length,
@@ -272,8 +370,9 @@ async function loadFromSupabase() {
   } catch (err) {
     console.error('Load from Supabase failed:', err);
     toast('Lỗi tải dữ liệu: ' + err.message, 'error');
-    // Fallback to localStorage
-    loadFromLocalStorage();
+    // Don't overwrite db with localStorage — would clobber any partial merge
+  } finally {
+    _loadInProgress = false;
   }
 }
 
@@ -303,6 +402,8 @@ function loadFromLocalStorage() {
 function syncStateAndRender() {
   if (!db) return;
   localStorage.setItem(STORE, JSON.stringify(db));
+  // Rebuild in-memory indexes after remote mutation
+  if (typeof rebuildIndexes === 'function') rebuildIndexes();
   // Always re-render current view — cross-browser/device sync must update regardless of which tab/view
   refreshCurView();
   // Also re-render detail modal if it's open
@@ -348,19 +449,19 @@ function setupRealtime() {
     }, 3000);
   });
 
-  // If not connected in 8 seconds, fallback to fast polling
+  // If not connected in 8 seconds, fallback to polling
   setTimeout(() => {
     if (_realtimeStatus !== 'connected') {
-      console.warn('⚠️ Realtime not connected — enabling fast polling fallback');
+      console.warn('⚠️ Realtime not connected — enabling polling fallback');
       _realtimeStatus = 'polling-only';
       startFastPolling();
     }
   }, 8000);
 
-  // Poll for bookings every 5 seconds (faster for new bookings)
-  startBookingPolling(5000);
-  // Periodic full sync every 15 seconds as fallback — keeps cross-device sync responsive
+  // Single polling interval — avoids overlapping loadFromSupabase() calls
+  // 15s is enough for cross-device sync; bookings poll handles faster updates
   startFullSyncPolling(15000);
+  startBookingPolling(10000); // bookings need faster sync, 10s is fine
 
   // Cross-tab sync: listen to storage events from other tabs on same device
   setupCrossTabSync();
@@ -408,7 +509,7 @@ function startFastPolling() {
     try {
       await loadFromSupabase();
       _realtimeStatus = 'polling';
-      SyncBanner.info('🔄 Đang đồng bộ...');
+      // Silent — no banner during normal polling
       // Always refresh current view for cross-device sync
       refreshCurView();
     } catch (err) {
@@ -420,16 +521,55 @@ function startFastPolling() {
 async function handleRealtimeDressChange(payload) {
   if (!db) return;
   try {
+    const GRACE_MS = 30000;
+    const now = Date.now();
+    const recentlyDeleted = new Set();
+    if (db._deletedItemIds) {
+      Object.entries(db._deletedItemIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+
+    // Apply payload directly when eventType is known — avoids full refetch on every event
+    if (payload && payload.eventType === 'DELETE' && payload.old?._dbId) {
+      const idx = (db.vay || []).findIndex(v => v._dbId === payload.old._dbId);
+      if (idx !== -1) {
+        db.vay.splice(idx, 1);
+        localStorage.setItem(STORE, JSON.stringify(db));
+        if (typeof rebuildIndexes === 'function') rebuildIndexes();
+        syncStateAndRender();
+      }
+      return;
+    }
+    if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
+      const sup = payload.new;
+      const idx = (db.vay || []).findIndex(v => v._dbId === sup._dbId);
+      const local = idx !== -1 ? db.vay[idx] : null;
+      const merged = local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
+      if (idx !== -1) db.vay[idx] = merged;
+      else db.vay.push(merged);
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      syncStateAndRender();
+      return;
+    }
+
+    // Fallback: full refetch (eventType undefined / not provided)
     const dresses = await window.SupabaseService.fetchDresses();
     const localByDbId = {};
     (db.vay || []).forEach(v => { if (v._dbId) localByDbId[v._dbId] = v; });
-    const merged = (dresses || []).map(sup => {
-      const local = localByDbId[sup._dbId];
-      return local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
-    });
+    const merged = (dresses || [])
+      .filter(v => !recentlyDeleted.has(v._dbId))
+      .map(sup => {
+        const local = localByDbId[sup._dbId];
+        return local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
+      });
+    const prev = db.vay || [];
     db.vay = merged;
-    syncStateAndRender();
-    SyncBanner.info('📋 Váy được cập nhật từ thiết bị khác');
+    if (arraysDiffer(prev, merged)) {
+      syncStateAndRender();
+      debouncedBanner('info', '📋 Váy được cập nhật từ thiết bị khác', '📋');
+    }
   } catch (err) {
     console.warn('Realtime dress sync error:', err);
   }
@@ -438,16 +578,55 @@ async function handleRealtimeDressChange(payload) {
 async function handleRealtimeAccessoryChange(payload) {
   if (!db) return;
   try {
+    const GRACE_MS = 30000;
+    const now = Date.now();
+    const recentlyDeleted = new Set();
+    if (db._deletedItemIds) {
+      Object.entries(db._deletedItemIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+
+    // Apply payload directly when eventType is known — avoids full refetch on every event
+    if (payload && payload.eventType === 'DELETE' && payload.old?._dbId) {
+      const idx = (db.pk || []).findIndex(p => p._dbId === payload.old._dbId);
+      if (idx !== -1) {
+        db.pk.splice(idx, 1);
+        localStorage.setItem(STORE, JSON.stringify(db));
+        if (typeof rebuildIndexes === 'function') rebuildIndexes();
+        syncStateAndRender();
+      }
+      return;
+    }
+    if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
+      const sup = payload.new;
+      const idx = (db.pk || []).findIndex(p => p._dbId === sup._dbId);
+      const local = idx !== -1 ? db.pk[idx] : null;
+      const merged = local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
+      if (idx !== -1) db.pk[idx] = merged;
+      else db.pk.push(merged);
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      syncStateAndRender();
+      return;
+    }
+
+    // Fallback: full refetch (eventType undefined / not provided)
     const accessories = await window.SupabaseService.fetchAccessories();
     const localByDbId = {};
     (db.pk || []).forEach(p => { if (p._dbId) localByDbId[p._dbId] = p; });
-    const merged = (accessories || []).map(sup => {
-      const local = localByDbId[sup._dbId];
-      return local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
-    });
+    const merged = (accessories || [])
+      .filter(p => !recentlyDeleted.has(p._dbId))
+      .map(sup => {
+        const local = localByDbId[sup._dbId];
+        return local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
+      });
+    const prev = db.pk || [];
     db.pk = merged;
-    syncStateAndRender();
-    SyncBanner.info('📋 Phụ kiện được cập nhật từ thiết bị khác');
+    if (arraysDiffer(prev, merged)) {
+      syncStateAndRender();
+      debouncedBanner('info', '📋 Phụ kiện được cập nhật từ thiết bị khác', '📋');
+    }
   } catch (err) {
     console.warn('Realtime accessory sync error:', err);
   }
@@ -456,27 +635,83 @@ async function handleRealtimeAccessoryChange(payload) {
 async function handleRealtimeOrderChange(payload) {
   if (!db) return;
   try {
-    const orders = await window.SupabaseService.fetchOrders();
-    // SUPABASE IS SOURCE OF TRUTH — replace ALL local orders with Supabase data
-    // dhvs and Ma_PK come from Supabase via fetchOrders() which reads order_dresses table
+    const GRACE_MS = 30000;
+    const now = Date.now();
     const localByDbId = {};
+    const recentlyDeleted = new Set();
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
-    const merged = (orders || []).map(supOrder => {
-      const local = localByDbId[supOrder._dbId];
-      if (local) {
-        return {
-          ...supOrder,
-          _fromBooking: local._fromBooking,
-          // supOrder.dhvs/Ma_PK come from fetchOrders which reads junction tables — use them
-        };
+    if (db._deletedOrderIds) {
+      Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    // Pending creates (orders awaiting _dbId assignment) — keep local copy untouched
+    const pendingCreateMaDon = new Set();
+    if (db._pendingCreate && typeof window.isPendingCreate === 'function') {
+      Object.keys(db._pendingCreate).forEach(maDon => {
+        if (window.isPendingCreate(maDon)) pendingCreateMaDon.add(maDon);
+      });
+    }
+
+    // Apply payload directly when eventType is known — avoids full refetch on every event
+    if (payload && payload.eventType === 'DELETE' && payload.old?._dbId) {
+      const idx = (db.don || []).findIndex(o => o._dbId === payload.old._dbId);
+      if (idx !== -1) {
+        db.don.splice(idx, 1);
+        localStorage.setItem(STORE, JSON.stringify(db));
+        if (typeof rebuildIndexes === 'function') rebuildIndexes();
+        syncStateAndRender();
       }
-      return supOrder;
+      return;
+    }
+    if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
+      const supOrder = payload.new;
+      if (pendingCreateMaDon.has(supOrder.Ma_Don)) {
+        // Pending create — keep local copy untouched; will reconcile when _dbId arrives
+        return;
+      }
+      if (recentlyDeleted.has(supOrder._dbId)) return;
+      const idx = (db.don || []).findIndex(o => o._dbId === supOrder._dbId);
+      const local = idx !== -1 ? db.don[idx] : null;
+      // Preserve local edit if within grace period
+      const localTs = local?._ts || 0;
+      const isRecent = localTs && (now - localTs) < GRACE_MS;
+      const merged = (local && isRecent)
+        ? local
+        : (local ? { ...supOrder, _fromBooking: local._fromBooking } : supOrder);
+      if (idx !== -1) db.don[idx] = merged;
+      else db.don.push(merged);
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      syncStateAndRender();
+      return;
+    }
+
+    // Fallback: full refetch (eventType undefined / not provided)
+    const orders = await window.SupabaseService.fetchOrders();
+    const mergedAll = (orders || [])
+      .filter(supOrder => !recentlyDeleted.has(supOrder._dbId))
+      .filter(supOrder => !pendingCreateMaDon.has(supOrder.Ma_Don))
+      .map(supOrder => {
+      const local = localByDbId[supOrder._dbId];
+      if (!local) return supOrder;
+      const localTs = local._ts || 0;
+      const isRecent = localTs && (now - localTs) < GRACE_MS;
+      if (isRecent) return local; // preserve local edit
+      return {
+        ...supOrder,
+        _fromBooking: local._fromBooking,
+        // supOrder.dhvs/Ma_PK come from fetchOrders which reads junction tables — use them
+      };
     });
-    db.don = merged;
-    localStorage.setItem(STORE, JSON.stringify(db));
-    await syncBookingsToLocal();
-    syncStateAndRender();
-    SyncBanner.info('📋 Đơn hàng được cập nhật từ thiết bị khác');
+    const prevOrders = db.don || [];
+    db.don = mergedAll;
+    if (arraysDiffer(prevOrders, mergedAll)) {
+      localStorage.setItem(STORE, JSON.stringify(db));
+      await syncBookingsToLocal();
+      syncStateAndRender();
+      debouncedBanner('info', '📋 Đơn hàng được cập nhật từ thiết bị khác', '📋');
+    }
   } catch (err) {
     console.warn('Realtime order sync error:', err);
   }
@@ -497,23 +732,60 @@ async function handleRealtimePaymentChange(payload) {
   }
 }
 
-// Junction table change — refetch orders to get updated dress/accessory assignments
+// Junction table change — apply payload.new (order_id + dress_id/accessory_id) directly when possible
 async function handleRealtimeOrderDressChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_dresses changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
+    const GRACE_MS = 30000;
+    const now = Date.now();
+    const recentlyDeleted = new Set();
+    if (db._deletedOrderIds) {
+      Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    const pendingCreateMaDon = new Set();
+    if (db._pendingCreate && typeof window.isPendingCreate === 'function') {
+      Object.keys(db._pendingCreate).forEach(maDon => {
+        if (window.isPendingCreate(maDon)) pendingCreateMaDon.add(maDon);
+      });
+    }
+
+    // Apply payload directly when we have order_id + dress_id
+    if (payload && payload.new && payload.new.order_id && payload.new.dress_id) {
+      const order = (db.don || []).find(o => o._dbId === payload.new.order_id);
+      if (order && !recentlyDeleted.has(order._dbId) && !pendingCreateMaDon.has(order.Ma_Don)) {
+        const dressMa = vayByMaDon?.get?.(payload.new.dress_id) || (db.vay || []).find(v => v._dbId === payload.new.dress_id)?.Ma_Vay;
+        // Just trigger a re-render — the full junction-table state requires a refetch to stay accurate
+        syncStateAndRender();
+        debouncedBanner('info', '👗 Váy trong đơn được cập nhật từ thiết bị khác', '📋');
+        return;
+      }
+    }
+
+    // Fallback: full refetch
     const orders = await window.SupabaseService.fetchOrders();
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
-    const merged = (orders || []).map(supOrder => {
+    const merged = (orders || [])
+      .filter(supOrder => !recentlyDeleted.has(supOrder._dbId))
+      .filter(supOrder => !pendingCreateMaDon.has(supOrder.Ma_Don))
+      .map(supOrder => {
       const local = localByDbId[supOrder._dbId];
-      if (local) return { ...supOrder, _fromBooking: local._fromBooking };
-      return supOrder;
+      if (!local) return supOrder;
+      const localTs = local._ts || 0;
+      if (localTs && (now - localTs) < GRACE_MS) return local;
+      return { ...supOrder, _fromBooking: local._fromBooking };
     });
+    const prevDressesJ = db.don || [];
     db.don = merged;
-    localStorage.setItem(STORE, JSON.stringify(db));
-    syncStateAndRender();
-    SyncBanner.info('👗 Váy trong đơn được cập nhật từ thiết bị khác');
+    if (arraysDiffer(prevDressesJ, merged)) {
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      syncStateAndRender();
+      debouncedBanner('info', '👗 Váy trong đơn được cập nhật từ thiết bị khác', '📋');
+    }
   } catch (err) {
     console.warn('Realtime order_dresses sync error:', err);
   }
@@ -523,18 +795,53 @@ async function handleRealtimeOrderAccessoryChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_accessories changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
+    const GRACE_MS = 30000;
+    const now = Date.now();
+    const recentlyDeleted = new Set();
+    if (db._deletedOrderIds) {
+      Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    const pendingCreateMaDon = new Set();
+    if (db._pendingCreate && typeof window.isPendingCreate === 'function') {
+      Object.keys(db._pendingCreate).forEach(maDon => {
+        if (window.isPendingCreate(maDon)) pendingCreateMaDon.add(maDon);
+      });
+    }
+
+    // Apply payload directly when we have order_id + accessory_id
+    if (payload && payload.new && payload.new.order_id && payload.new.accessory_id) {
+      const order = (db.don || []).find(o => o._dbId === payload.new.order_id);
+      if (order && !recentlyDeleted.has(order._dbId) && !pendingCreateMaDon.has(order.Ma_Don)) {
+        syncStateAndRender();
+        debouncedBanner('info', '💍 Phụ kiện trong đơn được cập nhật từ thiết bị khác', '📋');
+        return;
+      }
+    }
+
+    // Fallback: full refetch
     const orders = await window.SupabaseService.fetchOrders();
     const localByDbId = {};
     (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
-    const merged = (orders || []).map(supOrder => {
+    const merged = (orders || [])
+      .filter(supOrder => !recentlyDeleted.has(supOrder._dbId))
+      .filter(supOrder => !pendingCreateMaDon.has(supOrder.Ma_Don))
+      .map(supOrder => {
       const local = localByDbId[supOrder._dbId];
-      if (local) return { ...supOrder, _fromBooking: local._fromBooking };
-      return supOrder;
+      if (!local) return supOrder;
+      const localTs = local._ts || 0;
+      if (localTs && (now - localTs) < GRACE_MS) return local;
+      return { ...supOrder, _fromBooking: local._fromBooking };
     });
+    const prevAcc = db.don || [];
     db.don = merged;
-    localStorage.setItem(STORE, JSON.stringify(db));
-    syncStateAndRender();
-    SyncBanner.info('💍 Phụ kiện trong đơn được cập nhật từ thiết bị khác');
+    if (arraysDiffer(prevAcc, merged)) {
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      syncStateAndRender();
+      debouncedBanner('info', '💍 Phụ kiện trong đơn được cập nhật từ thiết bị khác', '📋');
+    }
   } catch (err) {
     console.warn('Realtime order_accessories sync error:', err);
   }
@@ -546,33 +853,62 @@ async function handleRealtimeBookingChange(payload) {
   if (typeof refreshCurView === 'function') refreshCurView();
 }
 
-async function syncBookingsToLocal() {
+// Accept pre-fetched maps to avoid redundant fetches when called from loadFromSupabase
+async function syncBookingsToLocal(preDresses, preAccessories) {
   if (!db || !window.SupabaseService.isConfigured()) return;
   try {
     const bookings = await window.SupabaseService.fetchBookings();
 
-    let allDresses = {};
-    let allAccessories = {};
-    try {
-      const [dresses, accessories] = await Promise.all([
-        window.SupabaseService.fetchDresses(),
-        window.SupabaseService.fetchAccessories()
-      ]);
-      (dresses || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
-      (accessories || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
-    } catch (e) {
-      (db.vay || []).forEach(v => { if (v._dbId) allDresses[v._dbId] = v; });
-      (db.pk || []).forEach(p => { if (p._dbId) allAccessories[p._dbId] = p; });
+    let allDresses = preDresses || {};
+    let allAccessories = preAccessories || {};
+    // Build dual-key maps: index by both _dbId AND Ma_Vay/Ma_PK
+    // _dressIds/_accIds from booking_dresses/_accessories tables may contain either
+    if (!preDresses || !preAccessories) {
+      try {
+        const [dresses, accessories] = await Promise.all([
+          window.SupabaseService.fetchDresses(),
+          window.SupabaseService.fetchAccessories()
+        ]);
+        (dresses || []).forEach(v => {
+          if (v._dbId) allDresses[v._dbId] = v;
+          if (v.Ma_Vay) allDresses[v.Ma_Vay] = v;
+        });
+        (accessories || []).forEach(p => {
+          if (p._dbId) allAccessories[p._dbId] = p;
+          if (p.Ma_PK) allAccessories[p.Ma_PK] = p;
+        });
+      } catch (e) {
+        (db.vay || []).forEach(v => {
+          if (v._dbId) allDresses[v._dbId] = v;
+          if (v.Ma_Vay) allDresses[v.Ma_Vay] = v;
+        });
+        (db.pk || []).forEach(p => {
+          if (p._dbId) allAccessories[p._dbId] = p;
+          if (p.Ma_PK) allAccessories[p.Ma_PK] = p;
+        });
+      }
     }
 
     const normalized = (bookings || []).map(b => {
       const dhvs = (b._dressIds || []).map(dressId => {
         const dress = allDresses[dressId];
-        return dress ? { vay: dressId, Ma_Vay: dress.Ma_Vay || dressId, Ten_Vay: dress.Ten_Vay || dress.ten || 'Váy', Size: dress.Size || '' } : { vay: dressId, Ma_Vay: dressId };
+        if (dress) {
+          return { vay: dress.Ma_Vay || dressId, Ma_Vay: dress.Ma_Vay || dressId, Ten_Vay: dress.Ten_Vay || dress.ten || 'Váy', Size: dress.Size || '' };
+        }
+        // dressId is a Ma_Vay code — find in local db
+        const localDress = (db.vay || []).find(v => (v.Ma_Vay || v.ma) === dressId);
+        if (localDress) {
+          return { vay: dressId, Ma_Vay: dressId, Ten_Vay: localDress.Ten_Vay || localDress.ten || 'Váy', Size: localDress.Size || '' };
+        }
+        return { vay: dressId, Ma_Vay: dressId };
       });
       const Ma_PK = (b._accIds || []).map(accId => {
         const acc = allAccessories[accId];
-        return acc ? { Ma_PK: acc.Ma_PK || accId, Ten_PK: acc.Ten_PK || acc.ten || 'Phụ kiện' } : accId;
+        if (acc) {
+          return acc.Ma_PK || accId;
+        }
+        const localAcc = (db.pk || []).find(p => (p.Ma_PK || p.ma) === accId);
+        return localAcc ? (localAcc.Ma_PK || accId) : accId;
       });
 
       // Tính Ngay_Tra từ Goi_Thue + Ngay_Lay (bookings table không có column ngay_tra)
@@ -591,6 +927,7 @@ async function syncBookingsToLocal() {
       return {
         id: b.id,
         _dbId: b.id,
+        _bookingId: b.id, // Track source booking to prevent duplicate inserts
         Ma_Don: b.ma_booking,
         Trang_Thai_Don: 'Chờ xác nhận',
         Insta_Khach: b.insta_khach,
@@ -615,15 +952,23 @@ async function syncBookingsToLocal() {
     });
 
     // Merge: update existing bookings, add new ones
+    // Index by _dbId, Ma_Don, AND _bookingId to prevent duplicates
     const existingById = {};
-    (db.don || []).forEach(d => { if (d._dbId) existingById[d._dbId] = d; });
+    const existingByMa = {};
+    const existingByBooking = {};
+    (db.don || []).forEach(d => {
+      if (d._dbId) existingById[d._dbId] = d;
+      if (d.Ma_Don) existingByMa[d.Ma_Don] = d;
+      if (d._bookingId) existingByBooking[d._bookingId] = d;
+    });
 
     let newCount = 0;
     normalized.forEach(b => {
-      const existing = existingById[b._dbId];
+      const existing = existingById[b._dbId] || existingByMa[b.Ma_Don] || existingByBooking[b._bookingId];
       if (existing) {
         // Update existing — preserve local _ts so realtime merge doesn't overwrite newer edits
-        Object.assign(existing, {
+        // Only overwrite dhvs/Ma_PK if booking from Supabase actually has them
+        const update = {
           Insta_Khach: b.Insta_Khach,
           SDT: b.SDT,
           Goi_Thue: b.Goi_Thue,
@@ -635,11 +980,13 @@ async function syncBookingsToLocal() {
           Dia_Chi: b.Dia_Chi,
           Su_Kien: b.Su_Kien,
           Ghi_Chu: b.Ghi_Chu,
-          dhvs: b.dhvs,
-          Ma_PK: b.Ma_PK,
           _dressIds: b._dressIds,
           _accIds: b._accIds,
-        });
+        };
+        // Only update dresses/accessories if Supabase has them
+        if (b.dhvs && b.dhvs.length > 0) update.dhvs = b.dhvs;
+        if (b.Ma_PK && b.Ma_PK.length > 0) update.Ma_PK = b.Ma_PK;
+        Object.assign(existing, update);
       } else {
         db.don.push(b);
         newCount++;
@@ -674,6 +1021,14 @@ function startFullSyncPolling(interval = 15000) {
       refreshCurView();
     } catch (err) {
       console.warn('Full sync polling error:', err);
+    }
+    // Retry any orders that previously failed to sync
+    if (typeof retryPendingOrders === 'function') {
+      await retryPendingOrders();
+    }
+    // Retry pending soft-deletes that failed earlier
+    if (typeof retryPendingDeletes === 'function') {
+      await retryPendingDeletes();
     }
   }, interval);
 }
@@ -795,215 +1150,21 @@ window.closeModal = function(id) {
 };
 
 // ============================================================
-// SUPABASE CRUD WRAPPERS
-// These wrap the existing functions to also save to Supabase
+// DELETE-ORDER WRAPPER (soft-delete in Supabase)
+// All other CRUD ops (saveNewOrder, saveEditOrder, setOrderType,
+// submitItem, saveRefund, deleteItem) are handled inline in app.js.
+// Keeping this wrapper because deleteOrder in app.js does NOT await
+// the Supabase delete — it fires-and-forgets via .catch().
 // ============================================================
 
-// Wrapper for saveNewOrder
-const _origSaveNewOrder = window.saveNewOrder;
-window.saveNewOrder = async function() {
-  const result = await _origSaveNewOrder();
-
-  if (result && window.SupabaseService.isConfigured()) {
-    try {
-      const order = db.don[0]; // Most recent
-      if (order && !order._dbId) {
-        const supabaseOrder = await window.SupabaseService.createOrder(order);
-        order._dbId = supabaseOrder._dbId;
-        order.id = supabaseOrder.id;
-
-        // Update dress rental counts
-        if (order.dhvs) {
-          for (const dhv of order.dhvs) {
-            if (dhv.vay) {
-              await window.SupabaseService.incrementDressRentalCount(dhv.vay);
-            }
-          }
-        }
-
-        localStorage.setItem(STORE, JSON.stringify(db));
-      }
-    } catch (err) {
-      console.warn('Failed to sync new order to Supabase:', err);
-    }
-  }
-
-  return result;
-};
-
-// Wrapper for saveEditOrder
-const _origSaveEditOrder = window.saveEditOrder;
-window.saveEditOrder = function(id) {
-  // Call original first
-  _origSaveEditOrder(id);
-
-  // Sync to Supabase
-  if (window.SupabaseService.isConfigured()) {
-    setTimeout(async () => {
-      try {
-        const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-        if (order) {
-          if (order._dbId) {
-            await window.SupabaseService.updateOrder(order._dbId, order);
-          } else {
-            // Order not yet in Supabase — create it
-            const sup = await window.SupabaseService.createOrder(order);
-            order._dbId = sup._dbId;
-            order.id = sup.id;
-            if (order.dhvs) {
-              for (const dhv of order.dhvs) {
-                if (dhv.vay) await window.SupabaseService.incrementDressRentalCount(dhv.vay);
-              }
-            }
-            localStorage.setItem(STORE, JSON.stringify(db));
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to sync edit order to Supabase:', err);
-      }
-    }, 100);
-  }
-};
-
-// Wrapper for submitItem (add/edit dress/accessory)
-const _origSubmitItem = window.submitItem;
-window.submitItem = async function(kind, id) {
-  // Capture the ID that will be generated for new items
-  const pendingNewId = !id ? (kind === 'vay' ? uid('V') : uid('P')) : null;
-
-  // Call original first
-  await _origSubmitItem(kind, id);
-
-  if (window.SupabaseService.isConfigured()) {
-    try {
-      const table = kind === 'vay' ? 'vay' : 'pk';
-
-      if (id) {
-        // Edit existing item
-        const item = db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
-        if (item && item._dbId) {
-          if (kind === 'vay') {
-            await window.SupabaseService.updateDress(item._dbId, item);
-          } else {
-            await window.SupabaseService.updateAccessory(item._dbId, item);
-          }
-        }
-      } else {
-        // New item — find by the pre-generated ID
-        const newItem = db[table].find(x =>
-          (kind === 'vay' ? x.Ma_Vay : x.Ma_PK) === pendingNewId
-        );
-        if (newItem && !newItem._dbId) {
-          const supabaseRecord = kind === 'vay'
-            ? await window.SupabaseService.createDress(newItem)
-            : await window.SupabaseService.createAccessory(newItem);
-          newItem._dbId = supabaseRecord._dbId;
-          newItem.id = supabaseRecord.id;
-          localStorage.setItem(STORE, JSON.stringify(db));
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to sync item to Supabase:', err);
-    }
-  }
-};
-
-// Wrapper for setOrderType — syncs status changes to Supabase
-const _origSetOrderType = window.setOrderType;
-window.setOrderType = function(id, type) {
-  // Call original first (updates local db)
-  _origSetOrderType(id, type);
-
-  // Sync to Supabase
-  if (window.SupabaseService.isConfigured()) {
-    setTimeout(async () => {
-      try {
-        const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-        if (order) {
-          if (order._dbId) {
-            await window.SupabaseService.updateOrder(order._dbId, order);
-          } else {
-            const sup = await window.SupabaseService.createOrder(order);
-            order._dbId = sup._dbId;
-            order.id = sup.id;
-            localStorage.setItem(STORE, JSON.stringify(db));
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to sync setOrderType to Supabase:', err);
-      }
-    }, 100);
-  }
-};
-
-// Wrapper for saveRefund — syncs refund to Supabase
-const _origSaveRefund = window.saveRefund;
-window.saveRefund = function() {
-  // Call original first (updates local db)
-  _origSaveRefund();
-
-  // Sync refund payment to Supabase
-  if (window.SupabaseService.isConfigured()) {
-    setTimeout(async () => {
-      try {
-        const latestPayment = db.tt && db.tt[0];
-        if (latestPayment && !latestPayment._dbId) {
-          const supPayment = await window.SupabaseService.createPayment(latestPayment);
-          latestPayment._dbId = supPayment._dbId;
-          latestPayment.id = supPayment.id;
-          localStorage.setItem(STORE, JSON.stringify(db));
-        }
-      } catch (err) {
-        console.warn('Failed to sync refund to Supabase:', err);
-      }
-    }, 100);
-  }
-};
-
-// Wrapper for deleteOrder — syncs to Supabase so other devices get updated
 const _origDeleteOrder = window.deleteOrder;
 window.deleteOrder = function(id) {
-  // Get order before deletion for Supabase sync
   const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-
-  // Call original (deletes from local)
   _origDeleteOrder(id);
-
-  // Sync to Supabase (soft delete)
   if (order && order._dbId && window.SupabaseService.isConfigured()) {
-    setTimeout(async () => {
-      try {
-        await window.SupabaseService.deleteOrder(order._dbId);
-      } catch (err) {
-        console.warn('Failed to delete order from Supabase:', err);
-      }
-    }, 100);
-  }
-};
-
-// Wrapper for deleteItem
-const _origDeleteItem = window.deleteItem;
-window.deleteItem = function(kind, id) {
-  // Get item before deletion for Supabase sync
-  const table = kind === 'vay' ? 'vay' : 'pk';
-  const item = db[table].find(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) === id);
-
-  // Call original
-  _origDeleteItem(kind, id);
-
-  // Sync to Supabase
-  if (item && item._dbId && window.SupabaseService.isConfigured()) {
-    setTimeout(async () => {
-      try {
-        if (kind === 'vay') {
-          await window.SupabaseService.deleteDress(item._dbId);
-        } else {
-          await window.SupabaseService.deleteAccessory(item._dbId);
-        }
-      } catch (err) {
-        console.warn('Failed to delete item from Supabase:', err);
-      }
-    }, 100);
+    window.SupabaseService.deleteOrder(order._dbId).catch(err =>
+      console.warn('Failed to delete order from Supabase:', err)
+    );
   }
 };
 

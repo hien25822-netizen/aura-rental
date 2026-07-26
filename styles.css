@@ -2,6 +2,7 @@
    AURA RENTAL — Silk & Gold Design
    Elegant Vietnamese Fashion Rental
    ===================================================== */
+html, body { overscroll-behavior: contain; }
 
 /* =====================================================
    CSS VARIABLES — Crystal Blue Theme (#daf0fe)
@@ -2324,6 +2325,30 @@ body.auth-locked .app {
 .toast {
   background: var(--text-primary);
   color: var(--text-inverse);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  max-width: 360px;
+}
+
+.toast.in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast.out {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.toast .t-msg {
+  display: block;
 }
 
 .toast.success {
@@ -2336,6 +2361,14 @@ body.auth-locked .app {
 
 .toast.warn {
   background: var(--warning);
+}
+
+.toast.warning {
+  background: #f59e0b;
+}
+
+.toast.info {
+  background: #3b82f6;
 }
 
 /* =====================================================
@@ -2526,10 +2559,53 @@ textarea:focus {
   animation: shimmer 1s infinite;
 }
 
+.skeleton-row {
+  height: 64px;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* Stagger / card-in animation */
+.stagger {
+  animation: cardIn 0.32s cubic-bezier(0.32, 0.72, 0, 1) backwards;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Button loading spinner */
+.btn.loading {
+  pointer-events: none;
+  opacity: 0.85;
+}
+.btn.loading::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: btnSpin 0.7s linear infinite;
+}
+@keyframes btnSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Empty state with CTA */
+.empty-cta { padding: 40px 20px; text-align: center; }
+.empty-cta .icon { font-size: 48px; opacity: 0.5; margin-bottom: 12px; }
+.empty-cta .title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+.empty-cta .btn { min-width: 200px; }
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
@@ -4442,4 +4518,205 @@ h1, h2, h3, h4 {
 
 #m-edit-order .sheet-foot {
   flex-shrink: 0;
+}
+
+/* ===== BULK IMPORT MODAL ===== */
+.bulk-import-modal {
+  width: min(540px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bulk-import-modal .modal-body,
+.bulk-import-modal #bulk-import-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bulk-drop-zone {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f9fafb;
+}
+
+.bulk-drop-zone:hover,
+.bulk-drop-zone.drag-over {
+  border-color: #d4af37;
+  background: #fefce8;
+}
+
+.bulk-drop-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.bulk-drop-text {
+  font-size: 15px;
+  color: #374151;
+}
+
+.bulk-drop-text small {
+  color: #9ca3af;
+}
+
+.bulk-format-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1e40af;
+  text-align: center;
+}
+
+.bulk-preview-info {
+  padding: 10px 12px;
+  background: #f0fdf4;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #166534;
+  margin-bottom: 10px;
+}
+
+.bulk-preview-table-wrapper {
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.bulk-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.bulk-preview-table th {
+  background: #f3f4f6;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bulk-preview-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #f3f4f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.bulk-preview-table tr:last-child td {
+  border-bottom: none;
+}
+
+.bulk-preview-table tr.error td {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.bulk-preview-table tr.ok td {
+  background: #f0fdf4;
+}
+
+.bulk-errors {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fef2f2;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #dc2626;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.bulk-progress-text {
+  text-align: center;
+  font-size: 14px;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.bulk-progress-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bulk-progress-bar div {
+  height: 100%;
+  background: linear-gradient(90deg, #d4af37, #f59e0b);
+  border-radius: 4px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+#bulk-progress-count {
+  text-align: center;
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 8px;
+}
+
+.bulk-done-icon {
+  text-align: center;
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+#bulk-done-text {
+  text-align: center;
+  font-size: 15px;
+  color: #166534;
+  line-height: 1.6;
+}
+
+.view-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.view-toolbar .search {
+  flex: 1;
+  margin-bottom: 0 !important;
+}
+
+/* ===== PENDING SYNC BADGE ===== */
+.pending-sync-badge {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+  animation: pulse-warn 2s infinite;
+  transition: all 0.2s;
+}
+
+.pending-sync-badge:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+@keyframes pulse-warn {
+  0%, 100% { box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3); }
+  50% { box-shadow: 0 2px 12px rgba(245, 158, 11, 0.6); }
 }

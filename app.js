@@ -34,6 +34,8 @@ const isoOf = d => {
 };
 
 var db = JSON.parse(localStorage.getItem(STORE) || '{}');
+// Debounce utility — prevents search re-render on every keystroke
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 // Migration: convert old lowercase format → PascalCase
 if (db.don && db.don.length && !db.don[0].Ma_Don) {
   db.don = db.don.map(r => migrateRecord(r, 'order'));
@@ -51,6 +53,159 @@ if (!db.form) db.form = [];
 if (!db.don.length) seed();
 
 function save(){ localStorage.setItem(STORE, JSON.stringify(db)); }
+
+// Phase 1 — Performance: O(1) lookup by id
+const vayById = new Map();
+const pkById = new Map();
+const donByMaDon = new Map();
+const donByDbId = new Map();
+
+function rebuildIndexes() {
+  vayById.clear();
+  pkById.clear();
+  donByMaDon.clear();
+  donByDbId.clear();
+  (db.vay || []).forEach(v => { const id = v.Ma_Vay || v.ma; if (id) vayById.set(id, v); });
+  (db.pk || []).forEach(p => { const id = p.Ma_PK || p.ma; if (id) pkById.set(id, p); });
+  (db.don || []).forEach(o => {
+    const ma = o.Ma_Don || o.id;
+    if (ma) donByMaDon.set(ma, o);
+    if (o._dbId) donByDbId.set(o._dbId, o);
+  });
+}
+
+// Auto-rebuild indexes on every save (db mutation)
+const _origSave = save;
+save = function() { _origSave(); rebuildIndexes(); };
+rebuildIndexes();
+
+/* ============================================================
+ *  PHASE 3 — UX polish helpers
+ * ============================================================ */
+function showSkeleton(container, rows = 6) {
+  if (!container) return;
+  let html = '';
+  for (let i = 0; i < rows; i++) {
+    html += '<div class="skeleton skeleton-row"></div>';
+  }
+  container.innerHTML = html;
+}
+
+// Pending creates: orders created locally but not yet confirmed by Supabase.
+// Prevents full-refetch from deleting them while awaiting _dbId.
+function markPendingCreate(maDon) {
+  db._pendingCreate = db._pendingCreate || {};
+  db._pendingCreate[maDon] = Date.now();
+  save();
+}
+function clearPendingCreate(maDon) {
+  if (db._pendingCreate) {
+    delete db._pendingCreate[maDon];
+    if (!Object.keys(db._pendingCreate).length) delete db._pendingCreate;
+    save();
+  }
+}
+function isPendingCreate(maDon) {
+  if (!db._pendingCreate) return false;
+  const ts = db._pendingCreate[maDon];
+  if (!ts) return false;
+  // Expire after 60s — if Supabase still hasn't responded, treat as failure
+  if (Date.now() - ts > 60000) {
+    delete db._pendingCreate[maDon];
+    return false;
+  }
+  return true;
+}
+window.isPendingCreate = isPendingCreate;
+
+// Honest toasts — differentiate "saved + synced" vs "saved locally, will sync later"
+function toastSave(message, isPending) {
+  if (isPending) {
+    toast(message + ' — sẽ đồng bộ sau', 'warning');
+  } else {
+    toast(message, 'success');
+  }
+}
+
+// Mark order as pending sync (failed Supabase update)
+function markOrderPendingSync(order) {
+  if (!order) return;
+  order._pendingSync = true;
+  order._pendingSyncAt = Date.now();
+  save();
+  updatePendingSyncBadge();
+}
+
+// Retry all pending orders (called from polling & realtime)
+async function retryPendingOrders() {
+  if (!db || !db.don || !window.SupabaseService?.isConfigured()) return;
+  const pending = (db.don || []).filter(o => o._pendingSync);
+  if (!pending.length) return;
+
+  let synced = 0;
+  for (const o of pending) {
+    try {
+      if (o._dbId) {
+        await window.SupabaseService.updateOrder(o._dbId, o);
+      } else {
+        const existing = await window.SupabaseService.findOrderByMaDon(o.Ma_Don);
+        if (existing) {
+          o._dbId = existing._dbId;
+          await window.SupabaseService.updateOrder(existing._dbId, o);
+        } else {
+          const created = await window.SupabaseService.createOrder(o);
+          if (created?._dbId) o._dbId = created._dbId;
+        }
+      }
+      delete o._pendingSync;
+      delete o._pendingSyncAt;
+      synced++;
+    } catch (err) {
+      console.warn('Retry pending failed for', o.Ma_Don, err);
+    }
+  }
+  if (synced > 0) {
+    save();
+    console.log(`[PendingSync] Synced ${synced} pending orders`);
+  }
+  updatePendingSyncBadge();
+}
+
+// Retry pending soft-deletes against Supabase — keeps retrying until deleted_at is confirmed
+async function retryPendingDeletes() {
+  if (!db || !db._deletedOrderIds || !window.SupabaseService?.isConfigured()) return;
+  const ids = Object.keys(db._deletedOrderIds || {});
+  if (!ids.length) return;
+  for (const dbId of ids) {
+    try {
+      await window.SupabaseService.deleteOrder(dbId);
+      delete db._deletedOrderIds[dbId];
+      console.log('[Delete] Supabase confirmed on retry for', dbId);
+    } catch (err) {
+      console.warn('Retry delete failed for', dbId, err);
+    }
+  }
+  localStorage.setItem(STORE, JSON.stringify(db));
+}
+
+// UI badge for pending count
+function updatePendingSyncBadge() {
+  const count = (db.don || []).filter(o => o._pendingSync).length;
+  const badge = document.getElementById('pending-sync-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.style.display = 'inline-flex';
+    badge.textContent = `🔄 ${count} chưa đồng bộ`;
+    badge.onclick = async () => {
+      badge.style.opacity = '0.5';
+      await retryPendingOrders();
+      badge.style.opacity = '1';
+      toast(count > 0 ? `Vẫn còn ${count} đơn chưa đồng bộ` : 'Đã đồng bộ tất cả', count > 0 ? 'warn' : 'success');
+    };
+  } else {
+    badge.style.display = 'none';
+  }
+}
 
 // Simple unique ID generator
 function uid(prefix = '') {
@@ -246,7 +401,7 @@ function donTenVay(don) {
     if (x.Ten_Vay) return x.Ten_Vay;
     // Fall back to local dress lookup
     const key = x.Ma_Vay || x.vay;
-    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
+    const v = key ? vayById.get(key) : null;
     return v ? (v.Ten_Vay || v.ten) : '';
   }).filter(Boolean);
 }
@@ -255,7 +410,7 @@ function donTienThueVay(don) {
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
   return (don.dhvs || []).reduce((s, x) => {
     const key = x.Ma_Vay || x.vay;
-    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
+    const v = key ? vayById.get(key) : null;
     return s + (v ? Number(v[g] || 0) : 0);
   }, 0);
 }
@@ -264,7 +419,7 @@ function donTienThuePK(don) {
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
   return (don.Ma_PK || don.pks || []).reduce((s, id) => {
     const key = typeof id === 'object' ? (id.Ma_PK || '') : id;
-    const p = db.pk.find(d => (d.Ma_PK || d.ma) === key);
+    const p = key ? pkById.get(key) : null;
     return s + (p ? Number(p[g] || 0) : 0);
   }, 0);
 }
@@ -272,7 +427,7 @@ function donCocGoiY(don) {
   if (!don) return 0;
   const tong = (don.dhvs || []).reduce((s, x) => {
     const key = x.Ma_Vay || x.vay;
-    const v = db.vay.find(d => (d.Ma_Vay || d.ma) === key);
+    const v = key ? vayById.get(key) : null;
     return s + (v ? Number(v.Gia_Vay_Goc || 0) : 0);
   }, 0);
   return don.Hinh_Thuc_Coc === 'Cọc 100%' ? tong : tong * 0.5;
@@ -353,11 +508,69 @@ const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;'
 /* ============================================================
  *  TOAST — simple notifications
  * ============================================================ */
+const _toastDur = { success: 2000, warning: 4000, error: 5000, info: 3000 };
+const _lastToastAt = {};
+const _lastToastMsg = {};
 function toast(msg, type = '') {
-  const t = el('div', { class: 'toast ' + type, text: msg });
-  $('#toast-wrap').appendChild(t);
-  setTimeout(() => t.remove(), 2800);
+  const now = Date.now();
+  const wrap = $('#toast-wrap');
+  if (!wrap) return;
+  // Stacking: same-type toast within 800ms — append to existing
+  if (_lastToastAt[type] && now - _lastToastAt[type] < 800 && _lastToastMsg[type]) {
+    const prev = wrap.querySelector('[data-tmsg="' + type + '"] .t-msg');
+    if (prev) {
+      prev.textContent = _lastToastMsg[type] + ' + ' + msg;
+      _lastToastAt[type] = now;
+      return;
+    }
+  }
+  const dur = _toastDur[type] || 2500;
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || '');
+  t.setAttribute('data-tmsg', type);
+  t.innerHTML = '<span class="t-msg">' + escapeHtml(msg) + '</span>';
+  wrap.appendChild(t);
+  _lastToastAt[type] = now;
+  _lastToastMsg[type] = msg;
+  requestAnimationFrame(() => t.classList.add('in'));
+  setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => {
+      t.remove();
+      if (_lastToastAt[type] === now) {
+        delete _lastToastAt[type];
+        delete _lastToastMsg[type];
+      }
+    }, 300);
+  }, dur);
 }
+
+/* ============================================================
+ *  PULL-TO-REFRESH — mobile gesture
+ * ============================================================ */
+let _ptrStartY = 0;
+let _ptrActive = false;
+let _ptrTriggered = false;
+document.addEventListener('touchstart', e => {
+  if (window.scrollY === 0 && e.touches[0]) {
+    _ptrStartY = e.touches[0].clientY;
+    _ptrActive = true;
+    _ptrTriggered = false;
+  }
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!_ptrActive || window.scrollY > 0) return;
+  const dy = e.touches[0].clientY - _ptrStartY;
+  if (dy > 80 && !_ptrTriggered) {
+    _ptrTriggered = true;
+    _ptrActive = false;
+    if (typeof forceResync === 'function') {
+      forceResync();
+      toast('Đang cập nhật dữ liệu...', 'info');
+    }
+  }
+}, { passive: true });
+document.addEventListener('touchend', () => { _ptrActive = false; }, { passive: true });
 
 /* ============================================================
  *  MODAL helpers
@@ -476,39 +689,57 @@ function renderMonth() {
 
   for (let i = 0; i < startDow; i++) html += '<div class="d dim"></div>';
 
+  // Build byDate index in O(N) once
+  const byDate = new Map();
+  const monthPrefix = `${y}-${String(m + 1).padStart(2, '0')}`;
+  for (const o of (db.don || [])) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : null;
+
+    if (!byDate.has(layIso)) byDate.set(layIso, { lay: 0, tra: 0, thue: 0 });
+    byDate.get(layIso).lay++;
+
+    if (traIso && traIso !== layIso) {
+      if (!byDate.has(traIso)) byDate.set(traIso, { lay: 0, tra: 0, thue: 0 });
+      byDate.get(traIso).tra++;
+
+      // Thue = between lay and tra (exclusive of both endpoints)
+      if (traIso > layIso) {
+        const [ly, lm, ld] = layIso.split('-').map(Number);
+        const [ty, tm, td] = traIso.split('-').map(Number);
+        const cur = new Date(ly, lm - 1, ld + 1);
+        const end = new Date(ty, tm - 1, td);
+        let safety = 400;
+        while (cur < end && safety-- > 0) {
+          const cIso = isoOf(cur);
+          if (cIso.startsWith(monthPrefix)) {
+            if (!byDate.has(cIso)) byDate.set(cIso, { lay: 0, tra: 0, thue: 0 });
+            byDate.get(cIso).thue++;
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    }
+  }
+
   for (let d = 1; d <= daysInMonth; d++) {
     const cellDate = new Date(y, m, d);
     const isToday = cellDate.toDateString() === today.toDateString();
     const cellDateStr = isoOf(cellDate);
 
-    // Count orders by type for this day
-    const layOrders = db.don.filter(o => !isHoanOrder(o) && (o.Ngay_Lay || o.lay) === cellDateStr);
-    const traOrders = db.don.filter(o => {
-      if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-      const goi = o.Goi_Thue || o.goi;
-      const tra = ngayTraThuc(goi, o.Ngay_Lay || o.lay);
-      return tra && isoOf(tra) === cellDateStr;
-    });
-    const thueOrders = db.don.filter(o => {
-      if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-      const goi = o.Goi_Thue || o.goi;
-      const lay = o.Ngay_Lay || o.lay;
-      const tra = ngayTraThuc(goi, lay);
-      if (!tra) return false;
-      return lay !== cellDateStr && isoOf(tra) !== cellDateStr &&
-             statusForDate(o, cellDateStr) !== null;
-    });
-
-    const hasLay = layOrders.length > 0;
-    const hasTra = traOrders.length > 0;
-    const hasThue = thueOrders.length > 0;
+    // O(1) lookup from pre-built byDate index
+    const dayData = byDate.get(cellDateStr) || { lay: 0, tra: 0, thue: 0 };
 
     let indicatorsHtml = '';
-    if (hasLay || hasTra || hasThue) {
+    if (dayData.lay || dayData.tra || dayData.thue) {
       indicatorsHtml = '<div class="day-indicators">';
-      if (layOrders.length > 0) indicatorsHtml += `<span class="day-dot green">${layOrders.length}</span>`;
-      if (traOrders.length > 0) indicatorsHtml += `<span class="day-dot red">${traOrders.length}</span>`;
-      if (thueOrders.length > 0) indicatorsHtml += `<span class="day-dot yellow">${thueOrders.length}</span>`;
+      if (dayData.lay) indicatorsHtml += `<span class="day-dot green">${dayData.lay}</span>`;
+      if (dayData.tra) indicatorsHtml += `<span class="day-dot red">${dayData.tra}</span>`;
+      if (dayData.thue) indicatorsHtml += `<span class="day-dot yellow">${dayData.thue}</span>`;
       indicatorsHtml += '</div>';
     }
 
@@ -535,15 +766,18 @@ window.goToTodayLay = function(y, m) {
   const y2 = today.getFullYear();
   const m2 = today.getMonth();
   if (parseInt(y) === y2 && parseInt(m) === m2) {
-    // Find first lay day in this month
+    // Build layIso set once for this month
+    const monthPrefix = `${y2}-${String(m2 + 1).padStart(2, '0')}`;
+    const laySet = new Set();
+    for (const o of (db.don || [])) {
+      if (o.hoan || o.Trang_Thai_Hoan_Coc) continue;
+      const lay = o.Ngay_Lay || o.lay;
+      if (lay && lay.startsWith(monthPrefix)) laySet.add(lay);
+    }
     for (let d = 1; d <= new Date(y2, m2 + 1, 0).getDate(); d++) {
       const cellDate = new Date(y2, m2, d);
-      const hasLay = db.don.some(o => {
-        if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-        const lay = new Date(o.Ngay_Lay || o.lay);
-        return lay.toDateString() === cellDate.toDateString();
-      });
-      if (hasLay) {
+      const cellIso = isoOf(cellDate);
+      if (laySet.has(cellIso)) {
         calAnchor = cellDate;
         break;
       }
@@ -566,6 +800,7 @@ window.goToTodayTra = function(y, m) {
 };
 
 let dayViewSearch = '';
+const setDayViewSearch = debounce(v => { dayViewSearch = v; renderDayFiltered(); }, 300);
 
 function renderDay() {
   const d = calAnchor;
@@ -578,7 +813,7 @@ function renderDay() {
   let html = `
     <div class="day-view-search">
       <input type="text" id="day-search" placeholder="Tìm tên, SĐT, mã đơn..." value="${escapeHtml(dayViewSearch)}"
-        oninput="dayViewSearch = this.value; renderDayFiltered();" />
+        oninput="setDayViewSearch(this.value);" />
     </div>
     <div id="day-view-content"></div>
   `;
@@ -683,7 +918,7 @@ function DayOrderCard(o, group) {
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
   const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
     const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === key);
+    const p = key ? pkById.get(key) : null;
     return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
   }).filter(Boolean).join(', ') || '';
   const sdt = o.SDT || o.sdt || '';
@@ -701,7 +936,7 @@ function DayOrderCard(o, group) {
 
   // Dress image
   const firstDressId = (o.dhvs || [])[0]?.vay;
-  const firstDress = firstDressId && db.vay.find(v => (v.Ma_Vay || v.ma) === firstDressId);
+  const firstDress = firstDressId && vayById.get(firstDressId);
   const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
 
   return `
@@ -747,7 +982,7 @@ const OrderCard = {
     const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
     const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
     const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-      const p = db.pk.find(x => (x.Ma_PK || x.ma) === pk);
+      const p = pkById.get(pk);
       return p ? (p.Ten_PK || p.ten) : '?';
     }).filter(Boolean).join(', ') || '—';
     const ngayLay = o.Ngay_Lay || o.lay;
@@ -792,7 +1027,7 @@ const OrderCard = {
 
     // Dress image
     const firstDressId = (o.dhvs || [])[0]?.vay;
-    const firstDress = firstDressId && db.vay.find(v => (v.Ma_Vay || v.ma) === firstDressId);
+    const firstDress = firstDressId && vayById.get(firstDressId);
     const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
 
     const card = el('div', { class: 'order-card', style: dimmed });
@@ -912,20 +1147,23 @@ window.setOrderType = async (id, type) => {
   // Sync to Supabase BEFORE close modal (blocking)
   if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     try {
+      // Build payload with correct key names: Ma_PK → pks
+      const payload = { ...o, pks: o.Ma_PK };
       if (o._dbId) {
-        await window.SupabaseService.updateOrder(o._dbId, o);
+        await window.SupabaseService.updateOrder(o._dbId, payload);
       } else {
         const existing = await window.SupabaseService.findOrderByMaDon(o.Ma_Don);
         if (existing) {
           o._dbId = existing._dbId;
-          await window.SupabaseService.updateOrder(existing._dbId, o);
+          await window.SupabaseService.updateOrder(existing._dbId, payload);
         } else {
-          const created = await window.SupabaseService.createOrder(o);
+          const created = await window.SupabaseService.createOrder(payload);
           if (created?._dbId) o._dbId = created._dbId;
         }
       }
     } catch (err) {
       console.warn('Supabase sync failed:', err);
+      markOrderPendingSync(o);
     }
   }
 
@@ -989,7 +1227,7 @@ function renderOrders() {
       const ins = o.Insta_Khach || o.insta || '';
       const sdt = o.SDT || o.sdt || '';
       const vays = (o.dhvs || []).map(x => {
-        const v = db.vay.find(v => (v.Ma_Vay || v.ma) === x.vay);
+        const v = vayById.get(x.vay || x.Ma_Vay);
         return v ? (v.Ten_Vay || v.ten) : '';
       }).join(' ');
       return id.toLowerCase().includes(q) || ins.toLowerCase().includes(q) || sdt.includes(q) || vays.toLowerCase().includes(q);
@@ -1005,7 +1243,23 @@ function renderOrders() {
   });
 
   if (!arr.length) {
-    list.appendChild(el('div', { class: 'empty', html: '<div class="icon">📭</div><div class="title">Chưa có đơn nào</div><div>Bấm + để tạo đơn mới</div>' }));
+    // Skeleton: first-load only — db.don empty AND filter is 'all'
+    if (!db.don || db.don.length === 0) {
+      if (curOrderFilter === 'all') {
+        showSkeleton(list, 8);
+        return;
+      }
+    }
+    const q = curOrderSearch.toLowerCase().trim();
+    const msg = q
+      ? 'Không tìm thấy đơn nào'
+      : curOrderFilter === 'refunded'
+        ? 'Chưa có đơn hoàn cọc'
+        : 'Chưa có đơn nào';
+    const cta = !q && curOrderFilter === 'all'
+      ? '<button class="btn primary" onclick="openNewOrder()">＋ Tạo đơn đầu tiên</button>'
+      : '';
+    list.innerHTML = `<div class="empty empty-cta"><div class="icon">📭</div><div class="title">${msg}</div>${cta}</div>`;
     return;
   }
 
@@ -1046,7 +1300,7 @@ function renderOrders() {
     dateOrders.forEach((o, i) => {
       const card = OrderCardListCard(o, today);
       card.classList.add('stagger-item');
-      card.style.animationDelay = `${i * 50}ms`;
+      card.style.animationDelay = `${Math.min(i, 20) * 30}ms`;
       list.appendChild(card);
     });
   });
@@ -1060,7 +1314,7 @@ function OrderCardListCard(o, refDate = new Date()) {
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
   const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
     const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === key);
+    const p = key ? pkById.get(key) : null;
     return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
   }).filter(Boolean).join(', ') || '';
   const ngayLay = o.Ngay_Lay || o.lay || '';
@@ -1082,7 +1336,7 @@ function OrderCardListCard(o, refDate = new Date()) {
 
   // Dress image
   const firstDressId = (o.dhvs || [])[0]?.vay;
-  const firstDress = firstDressId && db.vay.find(v => (v.Ma_Vay || v.ma) === firstDressId);
+  const firstDress = firstDressId && vayById.get(firstDressId);
   const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
 
   const type = o.Trang_Thai_Don || o.type || 'Chốt thuê';
@@ -1135,7 +1389,7 @@ function OrderCardListCard(o, refDate = new Date()) {
   return card;
 }
 
-$('#search').oninput = e => { curOrderSearch = e.target.value; renderOrders(); };
+$('#search').oninput = debounce(e => { curOrderSearch = e.target.value; renderOrders(); }, 300);
 $$('#order-chips button').forEach(b => b.onclick = () => {
   $$('#order-chips button').forEach(x => x.classList.toggle('on', x === b));
   curOrderFilter = b.dataset.f;
@@ -1165,18 +1419,47 @@ function renderKho() {
   list.className = 'gallery';
 
   if (!arr.length) {
+    if (!db.vay || db.vay.length === 0) {
+      list.className = '';
+      showSkeleton(list, 6);
+      return;
+    }
     list.className = '';
-    list.appendChild(el('div', { class: 'empty', html: '<div class="icon">👗</div><div class="title">Kho trống</div><div>Bấm + để thêm váy đầu tiên</div>' }));
+    list.innerHTML = '<div class="empty empty-cta"><div class="icon">👗</div><div class="title">Kho trống</div><button class="btn primary" onclick="openEditItem(\'vay\', null)">＋ Thêm váy đầu tiên</button></div>';
     return;
   }
 
-  arr.forEach(v => {
+  // Build busyVaySet once for today — dress is busy if any non-hoan order covers today
+  const todayIso = isoOf(today);
+  const todayD = parseD(todayIso);
+  const busyVaySet = new Set();
+  for (const o of (db.don || [])) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : layIso;
+    const layD = parseD(layIso);
+    const traD = parseD(traIso);
+    let busy = false;
+    if (goi === '12h') busy = +todayD === +layD;
+    else busy = todayD >= layD && todayD <= traD;
+    if (!busy) continue;
+    for (const dh of (o.dhvs || [])) {
+      const id = dh.vay || dh.Ma_Vay;
+      if (id) busyVaySet.add(id);
+    }
+  }
+
+  arr.forEach((v, idx) => {
     const tenVay = v.Ten_Vay || v.ten || '';
     const size = v.Size || v.size || '';
     const goc = v.Gia_Vay_Goc || v.goc || 0;
     const sl = v.So_Lan_Thue || v.sl || 0;
-    const busy = isVayBusy(v.Ma_Vay || v.ma, isoOf(today), '1 ngày');
-    const item = el('div', { class: 'gallery-item' });
+    const busy = busyVaySet.has(v.Ma_Vay || v.ma);
+    const item = el('div', { class: 'gallery-item stagger-item' });
+    item.style.animationDelay = `${Math.min(idx, 20) * 30}ms`;
     const thumb = el('div', { class: 'gallery-thumb' });
     if (v.Anh_Vay || v.anh) thumb.appendChild(el('img', { src: v.Anh_Vay || v.anh, alt: '' }));
     else thumb.appendChild(el('div', { text: tenVay[0] || 'V' }));
@@ -1191,7 +1474,7 @@ function renderKho() {
     list.appendChild(item);
   });
 }
-$('#search-kho').oninput = renderKho;
+$('#search-kho').oninput = debounce(() => { renderKho(); }, 300);
 $$('#kho-chips button').forEach(b => b.onclick = () => {
   $$('#kho-chips button').forEach(x => x.classList.toggle('on', x === b));
   curSizeFilter = b.dataset.loai;
@@ -1214,16 +1497,22 @@ function renderPk() {
   list.className = 'gallery';
 
   if (!arr.length) {
+    if (!db.pk || db.pk.length === 0) {
+      list.className = '';
+      showSkeleton(list, 6);
+      return;
+    }
     list.className = '';
-    list.appendChild(el('div', { class: 'empty', html: '<div class="icon">💍</div><div class="title">Chưa có phụ kiện</div><div>Bấm + để thêm</div>' }));
+    list.innerHTML = '<div class="empty empty-cta"><div class="icon">💍</div><div class="title">Chưa có phụ kiện</div><button class="btn primary" onclick="openEditItem(\'pk\', null)">＋ Thêm phụ kiện đầu tiên</button></div>';
     return;
   }
 
-  arr.forEach(p => {
+  arr.forEach((p, idx) => {
     const ten = p.Ten_PK || p.ten || '';
     const loai = p.Loai || p.loai || '';
     const sl = p.So_Luong_Tong || p.sl || 1;
-    const item = el('div', { class: 'gallery-item' });
+    const item = el('div', { class: 'gallery-item stagger-item' });
+    item.style.animationDelay = `${Math.min(idx, 20) * 30}ms`;
     const thumb = el('div', { class: 'gallery-thumb' });
     if (p.Anh_PK || p.anh) thumb.appendChild(el('img', { src: p.Anh_PK || p.anh, alt: '' }));
     else thumb.appendChild(el('div', { text: ten[0] || 'P' }));
@@ -1237,7 +1526,7 @@ function renderPk() {
     list.appendChild(item);
   });
 }
-$('#search-pk').oninput = renderPk;
+$('#search-pk').oninput = debounce(() => { renderPk(); }, 300);
 $$('#pk-chips button').forEach(b => b.onclick = () => {
   $$('#pk-chips button').forEach(x => x.classList.toggle('on', x === b));
   curPkFilter = b.dataset.loai;
@@ -1385,6 +1674,8 @@ window.submitItem = async function(kind, id) {
   const fd = new FormData(f);
   const isVay = kind === 'vay';
   const table = isVay ? 'vay' : 'pk';
+  const saveBtn = f.querySelector('button[type=submit]');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.classList.add('loading'); }
 
   // Get image
   let imgData = null;
@@ -1413,14 +1704,17 @@ window.submitItem = async function(kind, id) {
     if (o._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
       const updateFn = isVay ? window.SupabaseService.updateDress : window.SupabaseService.updateAccessory;
       updateFn(o._dbId, o).catch(err => console.warn('Supabase update failed:', err));
+      toastSave('Đã cập nhật', true);
+    } else {
+      toastSave('Đã cập nhật', false);
     }
-    toast('Đã cập nhật', 'success');
   } else {
     if (isVay) {
       const dress = { Ma_Vay: uid('V'), Ten_Vay: data.Ten_Vay, Size: data.Size, Gia_Vay_Goc: data.Gia_Vay_Goc, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_Vay: data.Anh_Vay || '', Ghi_Chu: data.Ghi_Chu, So_Lan_Thue: 0 };
       db.vay.push(dress);
       // Sync to Supabase
       if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        toastSave('Đã thêm', true);
         window.SupabaseService.createDress(dress).then(created => {
           if (created?._dbId) {
             dress._dbId = created._dbId;
@@ -1428,12 +1722,15 @@ window.submitItem = async function(kind, id) {
             save();
           }
         }).catch(err => console.warn('Supabase createDress failed:', err));
+      } else {
+        toastSave('Đã thêm', false);
       }
     } else {
       const pk = { Ma_PK: uid('P'), Ten_PK: data.Ten_PK, Loai: data.Loai, So_Luong_Tong: data.So_Luong_Tong, Gia_Thue_12h: data.Gia_Thue_12h, Gia_Thue_1_Ngay: data.Gia_Thue_1_Ngay, Gia_Thue_3_Ngay: data.Gia_Thue_3_Ngay, Anh_PK: data.Anh_PK || '', Ghi_Chu: data.Ghi_Chu };
       db.pk.push(pk);
       // Sync to Supabase
       if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        toastSave('Đã thêm', true);
         window.SupabaseService.createAccessory(pk).then(created => {
           if (created?._dbId) {
             pk._dbId = created._dbId;
@@ -1441,12 +1738,14 @@ window.submitItem = async function(kind, id) {
             save();
           }
         }).catch(err => console.warn('Supabase createAccessory failed:', err));
+      } else {
+        toastSave('Đã thêm', false);
       }
     }
-    toast('Đã thêm', 'success');
   }
   save();
   closeModal('m-edit-item');
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.classList.remove('loading'); }
   if (curView === 'v-kho') renderKho();
   else if (curView === 'v-pk') renderPk();
 };
@@ -1464,12 +1763,29 @@ window.deleteItem = function(kind, id) {
   let msg = `Xóa ${name} "${item.Ten_Vay || item.Ten_PK || item.ten}"?`;
   if (inUse) msg += '\n\n⚠️ Vẫn còn đơn đang dùng món này. Hành động này có thể làm hỏng dữ liệu đơn.';
   if (!confirm(msg)) return;
+  const delBtn = document.querySelector('#m-edit-item .btn-delete') || document.querySelector('#m-edit-item .btn-danger');
+  if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
+  // Track tombstone BEFORE removing — prevents realtime/polling from resurrecting the item
+  const dbId = item?._dbId;
+  if (dbId && window.SupabaseService?.isConfigured?.()) {
+    db._deletedItemIds = db._deletedItemIds || {};
+    db._deletedItemIds[dbId] = Date.now();
+  }
   db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
   save();
   // Sync delete to Supabase
   if (item?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     const deleteFn = kind === 'vay' ? window.SupabaseService.deleteDress : window.SupabaseService.deleteAccessory;
-    deleteFn(item._dbId).catch(err => console.warn('Supabase delete failed:', err));
+    deleteFn(item._dbId).then(() => {
+      // Supabase confirmed — clear tombstone so merge stops filtering it
+      if (db._deletedItemIds) delete db._deletedItemIds[dbId];
+      localStorage.setItem(STORE, JSON.stringify(db));
+      if (typeof rebuildIndexes === 'function') rebuildIndexes();
+      console.log('[Delete] Item Supabase confirmed for', dbId);
+    }).catch(err => {
+      console.warn('Supabase delete failed:', err);
+      // Will retry on next polling cycle via retryPendingDeletes (TODO: extend for items)
+    });
   }
   closeModal('m-edit-item');
   toast(`Đã xóa ${name}`, 'success');
@@ -1570,11 +1886,36 @@ function renderCalMini() {
 
   for (let i = 0; i < startDow; i++) html += '<div></div>';
 
+  // Build busyDates set in O(N) — matches statusForDate semantics for "in rental window"
+  const busyDates = new Set();
+  for (const o of (db.don || [])) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : layIso;
+    // Mark every day in [lay, tra] as busy (inclusive both ends, mirrors statusForDate)
+    if (goi === '12h') {
+      busyDates.add(layIso);
+    } else if (traIso >= layIso) {
+      const [ly, lm, ld] = layIso.split('-').map(Number);
+      const [ty, tm, td] = traIso.split('-').map(Number);
+      const cur = new Date(ly, lm - 1, ld);
+      const end = new Date(ty, tm - 1, td);
+      let safety = 400;
+      while (cur <= end && safety-- > 0) {
+        busyDates.add(isoOf(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+  }
+
   for (let day = 1; day <= daysInMonth; day++) {
     const cellDate = new Date(y, m, day);
     const isToday = cellDate.toDateString() === today.toDateString();
     const isSelected = cellDate.toDateString() === d.toDateString();
-    const hasOrders = db.don.some(o => !isHoanOrder(o) && statusForDate(o, isoOf(cellDate)));
+    const hasOrders = busyDates.has(isoOf(cellDate));
 
     html += `<div class="cal-mini-day ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${hasOrders ? 'has-events' : ''}"
       onclick="selectCalMiniDate(${y}, ${m}, ${day})">${day}</div>`;
@@ -1649,34 +1990,60 @@ function renderAvail() {
   }
 
   // Calculate availability with search filter
+  // Build busyByVay / busyByPk once: id -> [{layDate, traDate, order}]
+  const isVayType = isVay;
+  const busyById = new Map();
+  for (const o of (db.don || [])) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : layIso;
+    const layD = parseD(layIso);
+    const traD = parseD(traIso);
+    const ids = isVayType
+      ? (o.dhvs || []).map(d => d.vay || d.Ma_Vay).filter(Boolean)
+      : (o.Ma_PK || o.pks || []).map(id => typeof id === 'object' ? id.Ma_PK : id).filter(Boolean);
+    for (const id of ids) {
+      if (!busyById.has(id)) busyById.set(id, []);
+      busyById.get(id).push({ layD, traD, goi, layIso, traIso, order: o });
+    }
+  }
+
+  function checkBusy(id, checkIso) {
+    const dd = parseD(checkIso);
+    const ranges = busyById.get(id) || [];
+    for (const r of ranges) {
+      if (r.goi === '12h') {
+        if (+dd === +r.layD) return r;
+      } else if (dd >= r.layD && dd <= r.traD) {
+        return r;
+      }
+    }
+    return null;
+  }
+
   const items = arr.map(x => {
     const id = x.Ma_Vay || x.Ma_PK || x.ma;
-    const busy = isVay ? isVayBusy(id, date, goi) : isPkBusy(id, date, goi);
+    const busyRange = id ? checkBusy(id, date) : null;
+    const busy = !!busyRange;
     const ten = x.Ten_Vay || x.Ten_PK || x.ten;
     const size = x.Size || x.Loai || x.size || '';
     const anh = x.Anh_Vay || x.Anh_PK || x.anh || '';
     const gia = x.Gia_Thue_1_Ngay || x.Gia_Thue_3_Ngay || x.t1 || x.t3 || 0;
 
-    // Find current renter info
+    // Renter info from pre-built busy data
     let renterInfo = null;
-    if (busy) {
-      const order = db.don.find(o => {
-        if (o.hoan || o.Trang_Thai_Hoan_Coc) return false;
-        if (isVay) {
-          return (o.dhvs || []).some(d => (d.vay || d.Ma_Vay) === id);
-        } else {
-          return (o.Ma_PK || o.pks || []).includes(id);
-        }
-      });
-      if (order) {
-        renterInfo = {
-          insta: order.Insta_Khach || order.insta || '?',
-          sdt: order.SDT || order.sdt || '',
-          ngayLay: order.Ngay_Lay || order.lay || '',
-          ngayTra: isoToVN(ngayTraThuc(order.Goi_Thue || order.goi, order.Ngay_Lay || order.lay)),
-          goi: order.Goi_Thue || order.goi || ''
-        };
-      }
+    if (busyRange && busyRange.order) {
+      const o = busyRange.order;
+      renterInfo = {
+        insta: o.Insta_Khach || o.insta || '?',
+        sdt: o.SDT || o.sdt || '',
+        ngayLay: o.Ngay_Lay || o.lay || '',
+        ngayTra: isoToVN(ngayTraThuc(o.Goi_Thue || o.goi, o.Ngay_Lay || o.lay)),
+        goi: o.Goi_Thue || o.goi || ''
+      };
     }
 
     return { ...x, id, ten, size, anh, gia, busy, renterInfo };
@@ -1760,7 +2127,7 @@ function openOrderDetail(id) {
   const tenVay = donTenVay(o);
   const tenVayStr = tenVay.join(', ') || '—';
   const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === pk);
+    const p = pkById.get(pk);
     return p ? (p.Ten_PK || p.ten) : '?';
   }).join(', ') || '—';
   const ngayLay = o.Ngay_Lay || o.lay;
@@ -1771,7 +2138,7 @@ function openOrderDetail(id) {
   const cocGoiY = donCocGoiY(o);
   const status = statusForDate(o, isoOf(new Date()));
   const dressImgs = (o.dhvs || []).map(x => {
-    const v = db.vay.find(v => (v.Ma_Vay || v.ma) === x.vay);
+    const v = vayById.get(x.vay || x.Ma_Vay);
     return v?.Anh_Vay || v?.anh || '';
   }).filter(Boolean);
 
@@ -1782,7 +2149,7 @@ function openOrderDetail(id) {
 
   // Pick first dress for avatar
   const firstDressId = (o.dhvs || [])[0]?.vay;
-  const firstDress = firstDressId && db.vay.find(v => (v.Ma_Vay || v.ma) === firstDressId);
+  const firstDress = firstDressId && vayById.get(firstDressId);
   const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
   const customerName = o.Insta_Khach || o.insta || 'Khách';
 
@@ -1852,7 +2219,7 @@ function openOrderDetail(id) {
         <div class="od-section-title"><span class="ico">👗</span> Váy & Phụ kiện</div>
         <div class="od-dress-list">
           ${tenVay.map((v, i) => {
-            const vay = db.vay.find(x => (x.Ma_Vay || x.ma) === ((o.dhvs || [])[i]?.vay || (o.dhvs || [])[i]?.Ma_Vay));
+            const vay = vayById.get((o.dhvs || [])[i]?.vay || (o.dhvs || [])[i]?.Ma_Vay);
             const img = vay?.Anh_Vay || vay?.anh || '';
             const size = vay ? (vay.Size || vay.size || '') : '';
             const initial = (v[0] || 'V').toUpperCase();
@@ -2121,7 +2488,7 @@ window.saveEditOrder = async function(id) {
   // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới được đóng modal
   if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     const btn = document.getElementById('eo-save-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Đang lưu...'; }
+    if (btn) { btn.disabled = true; btn.classList.add('loading'); }
     try {
       if (o._dbId) {
         // Has _dbId — update existing
@@ -2139,26 +2506,46 @@ window.saveEditOrder = async function(id) {
       }
     } catch (err) {
       console.warn('Supabase sync failed:', err);
+      markOrderPendingSync(o);
+      // Silent — retry trong polling/realtime. Chỉ show toast khi thực sự stuck.
     }
-    if (btn) { btn.disabled = false; btn.textContent = 'Lưu thay đổi'; }
+    if (btn) { btn.disabled = false; btn.classList.remove('loading'); }
   }
 
   // Sau khi Supabase xong → lưu localStorage → đóng modal
   save();
   closeModal('m-edit-order');
-  toast('Đã lưu đơn', 'success');
+  const isPending = o._pendingSync === true;
+  toastSave('Đã lưu đơn', isPending);
   refreshCurView();
 };
 
 window.deleteOrder = function(id) {
   if (!confirm('Xóa đơn này? Hành động không thể hoàn tác.')) return;
   const order = db.don.find(x => (x.Ma_Don || x.id) === id);
+  const dbId = order?._dbId;
+  const delBtn = document.querySelector('#m-detail .btn-danger');
+  if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
+  // Track _dbId in db._deletedOrderIds so realtime/polling merge filters it out
+  // until Supabase confirms the soft delete (avoids reappearance on next fetch)
+  if (dbId && window.SupabaseService?.isConfigured?.()) {
+    db._deletedOrderIds = db._deletedOrderIds || {};
+    db._deletedOrderIds[dbId] = Date.now();
+  }
   db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
   db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
   save();
   // Sync deletion to Supabase
-  if (order?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
-    window.SupabaseService.deleteOrder(order._dbId).catch(err => console.warn('Supabase deleteOrder failed:', err));
+  if (dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+    window.SupabaseService.deleteOrder(dbId).then(() => {
+      // Supabase confirmed — clear from deleted tracker so merge stops filtering it
+      if (db._deletedOrderIds) delete db._deletedOrderIds[dbId];
+      localStorage.setItem(STORE, JSON.stringify(db));
+      console.log('[Delete] Supabase confirmed for', order.Ma_Don);
+    }).catch(err => {
+      console.warn('Supabase deleteOrder failed:', err);
+      // Will retry on next polling cycle via retryPendingDeletes()
+    });
   }
   closeModal('m-detail');
   toast('Đã xóa đơn', 'success');
@@ -2166,10 +2553,20 @@ window.deleteOrder = function(id) {
 };
 
 function refreshCurView() {
+  // Preserve scroll position across re-render — otherwise list jumps to top after edit/save/delete
+  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
   if (curView === 'v-cal') renderCal();
   else if (curView === 'v-orders') renderOrders();
   else if (curView === 'v-kho') renderKho();
   else if (curView === 'v-pk') renderPk();
+  if (scrollY > 0) {
+    // Restore after DOM paints — double rAF handles image/font reflow cases too
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
+      });
+    });
+  }
 }
 
 /* ============================================================
@@ -2317,6 +2714,17 @@ window.saveRefund = function() {
   if (refundDon._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
     window.SupabaseService.updateOrder(refundDon._dbId, refundDon).catch(err => console.warn('Supabase refund sync failed:', err));
   }
+  // Sync refund payment record to Supabase
+  const newPayment = db.tt && db.tt[0];
+  if (newPayment && !newPayment._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+    window.SupabaseService.createPayment(newPayment).then(created => {
+      if (created?._dbId) {
+        newPayment._dbId = created._dbId;
+        newPayment.id = created._dbId;
+        save();
+      }
+    }).catch(err => console.warn('Supabase createPayment failed:', err));
+  }
   closeModal('m-refund');
   toast('Đã hoàn cọc', 'success');
   refreshCurView();
@@ -2343,7 +2751,7 @@ function showRefundScreenshot(o, coc, tong, cp, hoan) {
 
   if (o.dhvs && o.dhvs.length > 0) {
     o.dhvs.forEach((dhv) => {
-      const v = db.vay.find(x => (x.Ma_Vay || x.ma) === (dhv.vay || dhv.Ma_Vay));
+      const v = vayById.get(dhv.vay || dhv.Ma_Vay);
       if (v) {
         const ten = v.Ten_Vay || v.ten || '';
         const gia = v[g] || 0;
@@ -2354,7 +2762,7 @@ function showRefundScreenshot(o, coc, tong, cp, hoan) {
 
   const pkIds = o.Ma_PK || o.pks || [];
   pkIds.forEach(pkId => {
-    const p = db.pk.find(x => (x.Ma_PK || x.ma) === pkId);
+    const p = pkById.get(pkId);
     if (p) {
       const ten = p.Ten_PK || p.ten || '';
       const gia = p[g] || 0;
@@ -2796,16 +3204,22 @@ window.saveNewOrder = async function() {
     Trang_Thai_Hoan_Coc: false,
     _ts: Date.now(),
   };
+  // Mark pending create FIRST — so realtime/polling won't lose this order before _dbId arrives
+  if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.() && !order._fromBooking) {
+    markPendingCreate(id);
+  }
   db.don.unshift(order);
   // Increment So_Lan_Thue
   vayIds.forEach(v => {
-    const dress = db.vay.find(x => (x.Ma_Vay || x.ma) === v);
+    const dress = vayById.get(v);
     if (dress) (dress.So_Lan_Thue = (dress.So_Lan_Thue || 0) + 1);
   });
 
   // HÀN VÀO SUPABASE TRƯỚC — bắt buộc chờ xong mới đóng modal
   if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.() && !order._fromBooking) {
     save();
+    const saveBtn = f.querySelector('button[type=submit]');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.classList.add('loading'); }
     try {
       const created = await window.SupabaseService.createOrder({
         ...order,
@@ -2814,17 +3228,24 @@ window.saveNewOrder = async function() {
       });
       if (created?._dbId) {
         order._dbId = created._dbId;
+        clearPendingCreate(id);
         save();
       }
     } catch (err) {
       console.warn('Supabase createOrder failed:', err);
+      markOrderPendingSync(order);
+      // Do NOT clearPendingCreate — polling/realtime will retry
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.classList.remove('loading'); }
     }
   } else {
+    clearPendingCreate(id);
     save();
   }
 
   closeModal('m-new');
-  toast(`Đã tạo đơn ${id}`, 'success');
+  const isPending = order._pendingSync === true;
+  toastSave(`Đã tạo đơn ${id}`, isPending);
   if (curView !== 'v-orders') go('v-orders');
   else renderOrders();
 };
@@ -3108,7 +3529,8 @@ function showSyncIndicator(state) {
   el._t = setTimeout(() => { el.style.opacity = '0'; }, 1800);
 }
 
-setTimeout(() => Sync.start(), 1500);
+// Disabled 2026-07-26 — Supabase is the only sync target
+// setTimeout(() => Sync.start(), 1500);
 
 /* ============================================================
  *  EXPORT TO GOOGLE SHEETS (Manual export)
@@ -3413,26 +3835,6 @@ window.openBookingForm = function() {
 };
 
 /* ============================================================
- *  CHECK FOR PENDING BOOKINGS
- * ============================================================ */
-function checkPendingBookings() {
-  const pending = localStorage.getItem('aura_pending_bookings');
-  if (pending === 'true') {
-    localStorage.removeItem('aura_pending_bookings');
-    const bookings = JSON.parse(localStorage.getItem('aura_bookings') || '[]');
-    if (bookings.length > 0) {
-      toast(`📋 Có ${bookings.length} đơn đặt thuê mới!`, 'success');
-    }
-  }
-}
-
-// Check on app load
-checkPendingBookings();
-
-// Check periodically (every 30 seconds)
-setInterval(checkPendingBookings, 30000);
-
-/* ============================================================
  *  RECALCULATE RETURN DATE
  * ============================================================ */
 window.recalcNewTra = function() {
@@ -3456,7 +3858,6 @@ window.go = function(view) {
   if (view === 'v-avail') {
     setTimeout(initAvail, 100);
   }
-  checkPendingBookings();
 };
 
 // Load html2canvas for refund receipt images
@@ -3468,6 +3869,296 @@ function loadHtml2Canvas(callback) {
   s.onerror = () => { console.warn('Failed to load html2canvas'); callback(false); };
   document.head.appendChild(s);
 }
+
+// ============================
+// BULK IMPORT
+// ============================
+
+let _bulkParsedDresses = [];
+let _bulkStep = 'upload'; // upload | preview | progress | done
+
+function openBulkImportModal() {
+  _bulkParsedDresses = [];
+  _bulkStep = 'upload';
+  document.getElementById('bulk-import-overlay').style.display = 'flex';
+  showBulkStep('upload');
+  document.getElementById('bulk-btn-action').disabled = true;
+  document.getElementById('bulk-btn-action').textContent = 'Chọn file trước';
+
+  // Setup file input & drop zone
+  const dropZone = document.getElementById('bulk-drop-zone');
+  const fileInput = document.getElementById('bulk-file-input');
+
+  dropZone.onclick = () => fileInput.click();
+  dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+  dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleBulkFile(f);
+  };
+  fileInput.onchange = () => {
+    if (fileInput.files[0]) handleBulkFile(fileInput.files[0]);
+  };
+}
+
+function closeBulkImportModal() {
+  document.getElementById('bulk-import-overlay').style.display = 'none';
+}
+
+function showBulkStep(step) {
+  _bulkStep = step;
+  ['upload', 'preview', 'progress', 'done'].forEach(s => {
+    const el = document.getElementById('bulk-step-' + s);
+    if (el) el.style.display = s === step ? 'block' : 'none';
+  });
+}
+
+function handleBulkFile(file) {
+  if (typeof XLSX === 'undefined') {
+    toast('Thư viện SheetJS chưa tải xong. Thử lại sau vài giây.', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const dresses = parseExcelDresses(wb);
+      if (dresses.length === 0) {
+        toast('Không tìm thấy dữ liệu váy trong file. Kiểm tra lại format cột.', 'error');
+        return;
+      }
+      _bulkParsedDresses = dresses;
+      previewBulkDresses(dresses);
+      showBulkStep('preview');
+      const btn = document.getElementById('bulk-btn-action');
+      btn.disabled = false;
+      btn.textContent = `Nhập ${dresses.length} váy`;
+    } catch (err) {
+      console.error('Excel parse error:', err);
+      toast('Lỗi đọc file: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseExcelDresses(workbook) {
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  if (rows.length < 2) return [];
+
+  const headers = (rows[0] || []).map(h => String(h).trim().toLowerCase());
+
+  // Find column indices with fuzzy matching
+  const ci = {
+    ten: _findCol(headers, ['ten_vay', 'tên váy', 'tên', 'ten']),
+    size: _findCol(headers, ['size', 'số đo']),
+    goc: _findCol(headers, ['giá gốc', 'gia_goc', 'gia goc', 'goc', 'giá']),
+    t12: _findCol(headers, ['12h', '12 giờ', '12h', 'thue 12h', 'gia_12h', 't12', 'giá 12h']),
+    t1: _findCol(headers, ['1 ngày', '1ngay', '1 ngày', 't1', 'gia_1_ngay', '1day', 'giá 1 ngày', 'thue 1 ngay']),
+    t3: _findCol(headers, ['3 ngày', '3ngay', '3 ngày', 't3', 'gia_3_ngay', '3day', 'giá 3 ngày', 'thue 3 ngay']),
+    gc: _findCol(headers, ['ghi chú', 'ghichu', 'notes', 'ghi chú', 'ghế chú']),
+  };
+
+  if (ci.ten === -1 || ci.size === -1) {
+    throw new Error('Thiếu cột bắt buộc: "Tên váy" hoặc "Size"');
+  }
+
+  const VALID_SIZES = ['S', 'M', 'L', 'XL', 'Free size'];
+  const dresses = [];
+  const errors = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const ten = String(row[ci.ten] || '').trim();
+    if (!ten) continue; // skip empty rows
+
+    const rawSize = String(row[ci.size] || '').trim();
+    const size = _normalizeSize(rawSize, VALID_SIZES);
+    const goc = _parseNum(row[ci.goc]);
+    const t12 = _parseNum(row[ci.t12]);
+    const t1 = _parseNum(row[ci.t1]);
+    const t3 = _parseNum(row[ci.t3]);
+    const gc = String(row[ci.gc] || '').trim();
+
+    if (!size) errors.push(`Dòng ${i + 1}: Size "${rawSize}" không hợp lệ (cần: S/M/L/XL/Free size)`);
+
+    dresses.push({
+      Ma_Vay: uid('V'),
+      Ten_Vay: ten,
+      Size: size || 'M',
+      Gia_Vay_Goc: goc || 0,
+      Gia_Thue_12h: t12 || 0,
+      Gia_Thue_1_Ngay: t1 || 0,
+      Gia_Thue_3_Ngay: t3 || 0,
+      Ghi_Chu: gc,
+      Anh_Vay: '',
+      So_Lan_Thue: 0,
+      _ts: Date.now(),
+      _row: i + 1,
+      _sizeErr: !size,
+    });
+  }
+
+  return dresses;
+}
+
+function _findCol(headers, aliases) {
+  for (const alias of aliases) {
+    const idx = headers.indexOf(alias.toLowerCase());
+    if (idx !== -1) return idx;
+  }
+  // Partial match
+  for (let i = 0; i < headers.length; i++) {
+    for (const alias of aliases) {
+      if (headers[i].includes(alias.toLowerCase())) return i;
+    }
+  }
+  return -1;
+}
+
+function _normalizeSize(raw, VALID_SIZES) {
+  const s = String(raw).trim();
+  for (const v of VALID_SIZES) {
+    if (s.toLowerCase() === v.toLowerCase()) return v;
+  }
+  // Fuzzy: "free", "freesize", "fs" → "Free size"
+  if (/^fs|free|freesize/i.test(s)) return 'Free size';
+  if (VALID_SIZES.includes(s)) return s;
+  return null;
+}
+
+function _parseNum(val) {
+  if (val == null) return 0;
+  if (typeof val === 'number') return Math.round(val);
+  const s = String(val).replace(/[^\d]/g, '');
+  return s ? parseInt(s, 10) : 0;
+}
+
+function previewBulkDresses(dresses) {
+  const info = document.getElementById('bulk-preview-info');
+  const table = document.getElementById('bulk-preview-table');
+  const errorsEl = document.getElementById('bulk-errors');
+
+  const errors = dresses.filter(d => d._sizeErr);
+  info.textContent = `Tìm thấy ${dresses.length} váy${errors.length ? ` (${errors.length} có lỗi size)` : ''}`;
+
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = `<tr>
+    <th>#</th><th>Tên váy</th><th>Size</th>
+    <th>Giá gốc</th><th>12h</th><th>1 ngày</th><th>3 ngày</th>
+    <th>Ghi chú</th>
+  </tr>`;
+
+  tbody.innerHTML = dresses.map((d, i) => `
+    <tr class="${d._sizeErr ? 'error' : 'ok'}">
+      <td>${i + 1}</td>
+      <td title="${escHtml(d.Ten_Vay)}">${escHtml(d.Ten_Vay)}</td>
+      <td>${escHtml(d.Size)}</td>
+      <td>${fmt(d.Gia_Vay_Goc)}</td>
+      <td>${fmt(d.Gia_Thue_12h)}</td>
+      <td>${fmt(d.Gia_Thue_1_Ngay)}</td>
+      <td>${fmt(d.Gia_Thue_3_Ngay)}</td>
+      <td title="${escHtml(d.Ghi_Chu)}">${escHtml(d.Ghi_Chu || '')}</td>
+    </tr>`).join('');
+
+  if (errors.length) {
+    errorsEl.style.display = 'block';
+    errorsEl.innerHTML = errors.slice(0, 5).map(e => `• ${e._row}: Size "${e.Size}" → đặt thành M`).join('<br>');
+    if (errors.length > 5) errorsEl.innerHTML += `<br>...và ${errors.length - 5} lỗi khác`;
+  } else {
+    errorsEl.style.display = 'none';
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function fmt(n) {
+  return n ? n.toLocaleString('vi-VN') : '0';
+}
+
+function bulkImportNextStep() {
+  if (_bulkStep === 'upload') {
+    document.getElementById('bulk-file-input').click();
+    return;
+  }
+  if (_bulkStep === 'preview') {
+    submitBulkDresses();
+    return;
+  }
+}
+
+async function submitBulkDresses() {
+  const dresses = _bulkParsedDresses;
+  if (!dresses.length) return;
+
+  showBulkStep('progress');
+  const btn = document.getElementById('bulk-btn-action');
+  btn.disabled = true;
+
+  const total = dresses.length;
+  let imported = 0;
+  let synced = 0;
+  const progressFill = document.getElementById('bulk-progress-fill');
+  const progressCount = document.getElementById('bulk-progress-count');
+  const progressText = document.getElementById('bulk-progress-text');
+
+  progressText.textContent = `Đang nhập vào localStorage...`;
+
+  // Save to localStorage
+  if (!db.vay) db.vay = [];
+  dresses.forEach(d => {
+    const { _row, _sizeErr, ...dressData } = d; // strip temp fields
+    db.vay.push(dressData);
+  });
+  saveToStorage();
+  imported = total;
+  progressFill.style.width = '50%';
+  progressCount.textContent = `${imported}/${total} đã lưu localStorage`;
+
+  // Sync to Supabase
+  if (window.SupabaseService && window.SupabaseService.isConfigured()) {
+    const clean = dresses.map(({ _row, _sizeErr, ...d }) => d);
+    const result = await window.SupabaseService.createDressBatch(clean);
+    synced = result ? clean.length : 0;
+
+    // Update _dbId on local records
+    if (result && result.ids) {
+      result.ids.forEach((id, i) => {
+        if (db.vay[db.vay.length - clean.length + i]) {
+          db.vay[db.vay.length - clean.length + i]._dbId = id;
+        }
+      });
+      saveToStorage();
+    }
+  }
+
+  progressFill.style.width = '100%';
+  progressCount.textContent = `${synced}/${total} đã sync Supabase`;
+
+  setTimeout(() => {
+    showBulkStep('done');
+    btn.disabled = false;
+    btn.textContent = 'Đóng';
+    btn.onclick = closeBulkImportModal;
+    document.getElementById('bulk-done-text').innerHTML =
+      `✅ Đã nhập <b>${imported} váy</b>!<br>` +
+      (synced ? `🔄 Đã sync <b>${synced}</b> váy lên Supabase.<br>` : '') +
+      `Kho váy sẽ được cập nhật tự động.`;
+
+    // Refresh Kho Váy if visible
+    if (currentView === 'v-kho') renderKhoVay();
+  }, 300);
+}
+
+// ============================
+// END BULK IMPORT
+// ============================
 
 // Khởi tạo app — gọi view mặc định
 go('v-cal');
