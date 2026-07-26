@@ -652,7 +652,18 @@ function go(view) {
   else if (view === 'v-orders') renderOrders();
   else if (view === 'v-kho') renderKho();
   else if (view === 'v-pk') renderPk();
-  else if (view === 'v-avail') renderAvail();
+  else if (view === 'v-avail') { ensureAvailDefaultDate(); renderAvail(); }
+}
+
+function ensureAvailDefaultDate() {
+  // Auto-select "Hôm nay" on first entry to tab Check if no date picked yet
+  if (!availState.date) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    availState.date = today;
+    availState.dateStr = isoOf(today);
+    document.querySelectorAll('.quick-date-btn').forEach(x => x.classList.toggle('on', x.dataset.date === 'today'));
+  }
 }
 $$('nav.bottom button[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 
