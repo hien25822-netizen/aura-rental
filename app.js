@@ -1168,9 +1168,11 @@ window.setOrderType = async (id, type) => {
   }
 
   save();
+  // Re-render BEFORE closeModal — closeModal sets body.position=fixed which
+  // resets window.scrollY, so capturing scrollY after closeModal gives 0
+  refreshCurView();
   closeModal('m-confirm');
   toast('Đã đổi loại đơn → ' + type, 'success');
-  refreshCurView();
 };
 
 /* ============================================================
