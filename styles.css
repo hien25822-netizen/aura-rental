@@ -3584,15 +3584,15 @@ h1, h2, h3, h4 {
 .type-pill:active, .type-pill-inline:active { transform: scale(0.96); }
 
 .type-pill.ChotThue, .type-pill-inline.ChotThue {
-  background: #8b5cf6;
+  background: #10b981;
   color: #fff;
 }
 .type-pill.Fitting, .type-pill-inline.Fitting {
-  background: #60a5fa;
+  background: #f59e0b;
   color: #fff;
 }
 .type-pill.FittingXa, .type-pill-inline.FittingXa {
-  background: #059669;
+  background: #ea580c;
   color: #fff;
 }
 .type-pill.DatShip, .type-pill-inline.DatShip {
@@ -3600,7 +3600,7 @@ h1, h2, h3, h4 {
   color: #fff;
 }
 .type-pill.ChoXacNhan, .type-pill-inline.ChoXacNhan {
-  background: #d4af37;
+  background: #38bdf8;
   color: #fff;
 }
 
