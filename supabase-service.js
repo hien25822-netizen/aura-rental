@@ -234,6 +234,41 @@ async function createDress(dress) {
 }
 
 /**
+ * Batch create dresses (bulk import)
+ * @param {Object[]} dresses - Array of dress data
+ * @returns {{ids: string[], count: number}} - Created dress IDs
+ */
+async function createDressBatch(dresses) {
+  if (!supabase) return { ids: [], count: 0 };
+
+  const rows = dresses.map(d => ({
+    ma_vay: d.Ma_Vay,
+    ten_vay: d.Ten_Vay,
+    size: d.Size,
+    gia_vay_goc: d.Gia_Vay_Goc || 0,
+    gia_thue_12h: d.Gia_Thue_12h || 0,
+    gia_thue_1_ngay: d.Gia_Thue_1_Ngay || 0,
+    gia_thue_3_ngay: d.Gia_Thue_3_Ngay || 0,
+    anh_vay: d.Anh_Vay || '',
+    ghi_chu: d.Ghi_Chu || '',
+    so_lan_thue: d.So_Lan_Thue || 0,
+    created_by: currentUser?.id
+  }));
+
+  const { data, error } = await supabase
+    .from('dresses')
+    .insert(rows)
+    .select('id');
+
+  if (error) {
+    console.error('createDressBatch error:', error);
+    return { ids: [], count: 0 };
+  }
+
+  return { ids: (data || []).map(r => r.id), count: data?.length || 0 };
+}
+
+/**
  * Update dress
  * @param {string} id - Dress UUID
  * @param {Object} updates - Fields to update in app.js format
@@ -523,7 +558,7 @@ async function updateOrder(id, updates) {
 
   const { dhvs, pks, ...orderData } = updates;
 
-  // Update order fields — include all fields that can change
+  // Update order fields — _ts is client-side only (not in schema), updated_at auto-set by trigger
   const { error: orderErr } = await supabase
     .from('orders')
     .update({
@@ -542,7 +577,6 @@ async function updateOrder(id, updates) {
       chi_phi_khac: orderData.Chi_Phi_Khac,
       trang_thai_hoan_coc: orderData.Trang_Thai_Hoan_Coc,
       thoi_gian_hoan_coc: orderData.Thoi_Gian_Hoan_Coc,
-      hoan: orderData.hoan,
     })
     .eq('id', id);
 
@@ -625,8 +659,6 @@ async function findOrderByMaDon(maDon) {
   if (error || !data) return null;
   return { _dbId: data.id };
 }
-  if (error) throw error;
-}
 
 // ============================================================
 // PAYMENT OPERATIONS
@@ -687,7 +719,13 @@ async function fetchBookings() {
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  const bookings = data || [];
+  // Filter out converted/cancelled bookings — they shouldn't reappear as orders
+  const bookings = (data || []).filter(b => {
+    const status = b.trang_thai || 'pending';
+    if (status === 'converted' || status === 'cancelled') return false;
+    if (b.converted_order_id) return false; // already linked to an order
+    return true;
+  });
 
   if (bookings.length === 0) return bookings;
 
