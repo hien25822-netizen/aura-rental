@@ -2587,6 +2587,8 @@ window.deleteOrder = function(id) {
   closeModal('m-detail');
   toast('Đã xóa đơn', 'success');
   refreshCurView();
+  // Scroll to top AFTER refreshCurView's preserve-scroll completes (2 rAF ≈ 32ms)
+  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
 };
 
 function refreshCurView() {
