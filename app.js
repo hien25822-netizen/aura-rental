@@ -1846,54 +1846,18 @@ function initAvail() {
   availState.dateStr = isoOf(availState.date);
   renderCalMini();
   renderAvail();
-  bindQuickDates();
+  rebuildVaySuggestions();
 }
 
-// Open date picker for custom date selection
-window.openDatePicker = function() {
-  const input = document.createElement('input');
-  input.type = 'date';
-  input.value = availState.dateStr || isoOf(new Date());
-  input.style.position = 'absolute';
-  input.style.opacity = '0';
-  document.body.appendChild(input);
-  input.showPicker ? input.showPicker() : input.focus();
-  input.onchange = () => {
-    if (input.value) {
-      availState.date = new Date(input.value + 'T00:00:00');
-      availState.dateStr = input.value;
-      renderCalMini();
-      renderAvail();
-    }
-    document.body.removeChild(input);
-  };
-  input.onblur = () => {
-    if (document.body.contains(input)) document.body.removeChild(input);
-  };
-};
-
-function bindQuickDates() {
-  document.querySelectorAll('.quick-date-btn').forEach(btn => {
-    btn.onclick = () => {
-      const type = btn.dataset.date;
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      let target;
-      if (type === 'today') target = today;
-      else if (type === 'tomorrow') { target = new Date(today); target.setDate(target.getDate() + 1); }
-      else if (type === 'weekend') {
-        // Find next Saturday
-        target = new Date(today);
-        const day = target.getDay();
-        const diff = day === 6 ? 0 : (day === 0 ? -1 : 6 - day);
-        target.setDate(target.getDate() + diff);
-      }
-      availState.date = target;
-      availState.dateStr = isoOf(target);
-      renderCalMini();
-      renderAvail();
-    };
-  });
+function rebuildVaySuggestions() {
+  const dl = document.getElementById('vay-suggest');
+  if (!dl) return;
+  const names = (db.vay || [])
+    .map(v => v.Ten_Vay || v.ten)
+    .filter(Boolean);
+  // De-dupe + sort
+  const unique = [...new Set(names)].sort((a, b) => a.localeCompare(b, 'vi'));
+  dl.innerHTML = unique.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
 }
 
 function renderCalMini() {
@@ -1911,9 +1875,7 @@ function renderCalMini() {
   const daysInMonth = new Date(y, m + 1, 0).getDate();
 
   let html = `<div class="cal-mini-header">
-    <button class="cal-mini-nav" onclick="calMiniPrev()">‹</button>
     <span class="cal-mini-month">Tháng ${m+1}/${y}</span>
-    <button class="cal-mini-nav" onclick="calMiniNext()">›</button>
   </div>`;
 
   html += '<div class="cal-mini-grid">';
@@ -1962,18 +1924,6 @@ function renderCalMini() {
   cal.innerHTML = html;
 }
 
-window.calMiniPrev = () => {
-  availState.date = new Date(availState.date.getFullYear(), availState.date.getMonth() - 1, 1);
-  availState.dateStr = isoOf(availState.date);
-  renderCalMini();
-};
-
-window.calMiniNext = () => {
-  availState.date = new Date(availState.date.getFullYear(), availState.date.getMonth() + 1, 1);
-  availState.dateStr = isoOf(availState.date);
-  renderCalMini();
-};
-
 window.selectCalMiniDate = (y, m, d) => {
   availState.date = new Date(y, m, d);
   availState.dateStr = isoOf(availState.date);
@@ -1988,14 +1938,7 @@ window.switchAvailType = (type) => {
     btn.classList.toggle('active', btn.dataset.type === type);
   });
   renderAvail();
-};
-
-window.switchAvailGoi = (goi) => {
-  availState.goi = goi;
-  document.querySelectorAll('.toggle-group .toggle-btn[data-goi]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.goi === goi);
-  });
-  renderAvail();
+  rebuildVaySuggestions();
 };
 
 window.switchAvailShow = (what) => {

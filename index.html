@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=31" />
+<link rel="stylesheet" href="styles.css?v=32" />
 </head>
 <body>
 <div class="app">
@@ -114,28 +114,14 @@
 <section class="view" id="v-avail">
   <div class="check-header">
     <h3>✨ Check Váy Trống</h3>
-    <p class="muted">Chọn ngày & gói thuê để xem váy/phụ kiện còn trống</p>
+    <p class="muted">Calendar bên dưới để xem ngày bận/trống của từng item</p>
     <div class="avail-show-toggle toggle-group">
       <button class="toggle-btn active" data-show="busy" onclick="switchAvailShow('busy')">BẬN</button>
       <button class="toggle-btn" data-show="all" onclick="switchAvailShow('all')">Tất cả</button>
     </div>
   </div>
 
-  <!-- Date & Package selection -->
-  <div class="check-date-section">
-    <div class="selected-date" id="selected-date-display">
-      <span class="date-label">📅 Ngày:</span>
-      <span class="date-value" id="av-date-display">—</span>
-    </div>
-    <div class="quick-dates" id="quick-dates">
-      <button class="quick-date-btn" data-date="today">Hôm nay</button>
-      <button class="quick-date-btn" data-date="tomorrow">Ngày mai</button>
-      <button class="quick-date-btn" data-date="weekend">Cuối tuần</button>
-      <button class="quick-date-btn" data-date="pick" onclick="openDatePicker()">📅 Chọn</button>
-    </div>
-  </div>
-
-  <!-- Filter options -->
+  <!-- Filter: type only (date + goi removed) -->
   <div class="avail-filters">
     <div class="avail-filter-group">
       <label>Loại</label>
@@ -144,22 +130,15 @@
         <button class="toggle-btn" data-type="pk" onclick="switchAvailType('pk')">💍 Phụ kiện</button>
       </div>
     </div>
-    <div class="avail-filter-group">
-      <label>Gói thuê</label>
-      <div class="toggle-group">
-        <button class="toggle-btn" data-goi="12h" onclick="switchAvailGoi('12h')">12h</button>
-        <button class="toggle-btn active" data-goi="1 ngày" onclick="switchAvailGoi('1 ngày')">1 ngày</button>
-        <button class="toggle-btn" data-goi="3 ngày" onclick="switchAvailGoi('3 ngày')">3 ngày</button>
-      </div>
-    </div>
   </div>
 
-  <!-- Search -->
+  <!-- Search with autocomplete -->
   <div class="check-search">
-    <input type="text" id="check-search" placeholder="🔍 Tìm váy..." oninput="filterCheckItems(this.value)" />
+    <input type="text" id="check-search" placeholder="🔍 Tìm váy..." list="vay-suggest" oninput="filterCheckItems(this.value)" />
+    <datalist id="vay-suggest"></datalist>
   </div>
 
-  <!-- Calendar mini -->
+  <!-- Calendar mini (uses today as default anchor) -->
   <div class="cal-mini" id="cal-mini"></div>
 
   <!-- Results -->
@@ -269,7 +248,7 @@
     document.head.appendChild(s);
   }
   loadScript('supabase-service.js?v=18', function() {
-    loadScript('app.js?v=31', function() {
+    loadScript('app.js?v=32', function() {
       loadScript('supabase-app.js?v=30', function() {
         console.log('All scripts loaded dynamically');
       });
