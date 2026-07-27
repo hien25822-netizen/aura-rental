@@ -11,7 +11,8 @@
       "mcp__Anthropic_WebSearch__web_search",
       "Bash(curl -s -I \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F51dc787fe3980df200e3db857c2a56ca6b9b88b176d50cfbf45ca4609d3ac018..webp?Expires=1783510980&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=AT4dnX1MkPoYuTdOFZFCUNljHqI%3D\")",
       "Bash(curl -sL \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F4aa87156419ecdccda1ca2c9eeb3113bf98c57d1de1ee18b9db9fc93e5dcfc8d..webp?Expires=1783520272&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=As5icRhAYvaFOWVbpt3T5rtB5WQ%3D\" -o /tmp/aura_check.webp)",
-      "WebFetch(domain:minimax-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com)"
+      "WebFetch(domain:minimax-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com)",
+      "WebFetch(domain:aura-rental-mu.vercel.app)"
     ]
   }
 }

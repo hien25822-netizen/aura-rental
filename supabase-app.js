@@ -63,6 +63,19 @@ const SyncBanner = {
     setTimeout(() => this.hide(), 3000);
   },
 
+  error(message) {
+    if (!this.container) this.init();
+    document.getElementById('sync-banner-icon').textContent = '❌';
+    document.getElementById('sync-banner-text').textContent = message;
+    this.container.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+    this.container.style.transform = 'translateY(0)';
+    setTimeout(() => {
+      this.hide();
+      // reset background after hide so next success/info shows green
+      this.container.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+    }, 4000);
+  },
+
   info(message) {
     this.show(message, '📋');
     setTimeout(() => this.hide(), 3000);
@@ -186,24 +199,80 @@ window.handleSupabaseLogout = async function() {
 // Force resync — fetch latest data from Supabase (no cache clear, preserves edits)
 window.forceResync = async function() {
   const btn = document.getElementById('btn-resync');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳';
-  }
+  if (!btn) return;
+  if (btn.disabled) return; // already in progress — ignore double-click
+
+  // Snapshot before so we can detect whether anything actually changed
+  const prevSnapshot = JSON.stringify({
+    don: db.don || [],
+    vay: db.vay || [],
+    pk: db.pk || [],
+    tt: db.tt || [],
+    bookings: db.form || []
+  });
+
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  const origText = btn.textContent;
+  btn.textContent = '⏳';
 
   if (typeof SyncBanner !== 'undefined') {
     SyncBanner.show('Đang tải dữ liệu mới nhất...', '🔄');
   }
 
+  // 12s hard timeout — if Supabase hangs, fall back to localStorage so user still gets feedback
+  const RESYNC_TIMEOUT_MS = 12000;
+  let timedOut = false;
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => {
+      timedOut = true;
+      reject(new Error('Supabase không phản hồi sau 12s — dùng dữ liệu offline'));
+    }, RESYNC_TIMEOUT_MS);
+  });
+
   try {
     if (window.SupabaseService.isConfigured()) {
-      await loadFromSupabase(true); // force = bypass mutex
-      await syncBookingsToLocal();
+      try {
+        await Promise.race([loadFromSupabase(true), timeoutPromise]);
+        await syncBookingsToLocal();
+      } catch (supErr) {
+        // Supabase hung/failed — fall back to localStorage so app still usable
+        console.warn('[forceResync] Supabase failed, falling back to localStorage:', supErr);
+        if (typeof loadFromLocalStorage === 'function') loadFromLocalStorage();
+        if (typeof toast === 'function') {
+          toast(timedOut ? 'Mạng chậm — dùng dữ liệu offline' : 'Lỗi mạng — dùng dữ liệu offline', 'warn');
+        }
+        if (typeof SyncBanner !== 'undefined') {
+          SyncBanner.error(timedOut ? '⚠️ Mạng chậm — dùng dữ liệu offline' : '❌ Lỗi mạng — dùng dữ liệu offline');
+        }
+        // Re-render so user sees fresh localStorage, then bail out
+        if (typeof refreshCurView === 'function') refreshCurView();
+        return;
+      }
     }
+
+    // Check whether anything actually changed — if not, user may think button is broken
+    const newSnapshot = JSON.stringify({
+      don: db.don || [],
+      vay: db.vay || [],
+      pk: db.pk || [],
+      tt: db.tt || [],
+      bookings: db.form || []
+    });
+    const changed = prevSnapshot !== newSnapshot;
+
     if (typeof refreshCurView === 'function') refreshCurView();
-    if (typeof toast === 'function') toast('Đã cập nhật dữ liệu mới nhất', 'success');
-    if (typeof SyncBanner !== 'undefined') {
-      SyncBanner.success('✅ Cập nhật thành công');
+
+    if (changed) {
+      if (typeof toast === 'function') toast('Đã cập nhật dữ liệu mới nhất', 'success');
+      if (typeof SyncBanner !== 'undefined') {
+        SyncBanner.success('✅ Cập nhật thành công');
+      }
+    } else {
+      if (typeof toast === 'function') toast('Dữ liệu đã mới nhất', 'info');
+      if (typeof SyncBanner !== 'undefined') {
+        SyncBanner.info('📋 Dữ liệu đã mới nhất');
+      }
     }
   } catch (err) {
     console.error('Force resync error:', err);
@@ -212,10 +281,9 @@ window.forceResync = async function() {
       SyncBanner.error('❌ Lỗi cập nhật');
     }
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = '🔄';
-    }
+    btn.disabled = false;
+    btn.classList.remove('is-loading');
+    btn.textContent = origText || '🔄';
   }
 };
 
