@@ -1,10 +1,10 @@
-/* Aura Rental — Service Worker v2
+/* Aura Rental — Service Worker v3
    Cho phép:
    - Cache app để dùng offline (khi mất wifi, vẫn mở được)
    - Sync queue sẽ tự gửi khi có mạng lại
 */
 
-const CACHE = 'aura-v11';
+const CACHE = 'aura-v12';
 const ASSETS = [
   './',
   './index.html',
