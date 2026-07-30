@@ -1535,6 +1535,9 @@ function renderKho() {
     const tenVay = v.Ten_Vay || v.ten || '';
     const size = v.Size || v.size || '';
     const goc = v.Gia_Vay_Goc || v.goc || 0;
+    const t12 = v.Gia_Thue_12h || v.t12 || 0;
+    const t1 = v.Gia_Thue_1_Ngay || v.t1 || 0;
+    const t3 = v.Gia_Thue_3_Ngay || v.t3 || 0;
     const sl = v.So_Lan_Thue || v.sl || 0;
     const busy = busyVaySet.has(v.Ma_Vay || v.ma);
     const item = el('div', { class: 'gallery-item stagger-item' });
@@ -1550,7 +1553,12 @@ function renderKho() {
     const info = el('div', { class: 'gallery-info' });
     info.appendChild(el('div', { class: 'gallery-name', text: tenVay || '—' }));
     info.appendChild(el('div', { class: 'gallery-sub', text: 'Size ' + size + ' · ' + sl + ' lượt' }));
-    info.appendChild(el('div', { class: 'gallery-price', text: fmtVND(goc) }));
+    const prices = el('div', { class: 'gallery-prices' });
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">Gốc</span><span class="val">${fmtVND(goc)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">12h</span><span class="val">${fmtVND(t12)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">1 ngày</span><span class="val">${fmtVND(t1)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">3 ngày</span><span class="val">${fmtVND(t3)}</span>` }));
+    info.appendChild(prices);
     item.appendChild(info);
     item.onclick = () => openEditItem('vay', v.Ma_Vay || v.ma);
     list.appendChild(item);

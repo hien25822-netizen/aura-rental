@@ -1093,6 +1093,30 @@ input.search::placeholder {
   margin-top: var(--space-1);
 }
 
+.gallery-prices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.gallery-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--text-xs);
+  gap: var(--space-1);
+}
+
+.gallery-price-row .lbl {
+  color: var(--text-muted);
+}
+
+.gallery-price-row .val {
+  font-weight: 700;
+  color: var(--gold-700);
+}
+
 /* =====================================================
    CHECK AVAILABILITY
    ===================================================== */
