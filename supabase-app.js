@@ -188,6 +188,9 @@ function showLogoutConfirm() {
 window.handleSupabaseLogout = async function() {
   try {
     await window.SupabaseService.signOut();
+    // Cleanup: unsubscribe realtime channels + stop all polling
+    window.SupabaseService.unsubscribeAll();
+    stopAllPolling();
     closeModal('m-confirm');
     toast('Đã đăng xuất', 'success');
     showLoginModal();
@@ -485,6 +488,21 @@ let _realtimeStatus = 'connecting';
 let _realtimeRetryCount = 0;
 const MAX_REALTIME_RETRIES = 3;
 
+// Track _dbId vừa tới từ realtime (khác local create) — highlight row slide-in
+// Cleared sau 5s vì row đã animate xong.
+const _recentRemoteIds = new Set();
+function markRemoteInsert(table, dbId) {
+  if (!dbId) return;
+  _recentRemoteIds.add(`${table}:${dbId}`);
+  setTimeout(() => _recentRemoteIds.delete(`${table}:${dbId}`), 5000);
+}
+function isRecentRemote(table, dbId) {
+  return _recentRemoteIds.has(`${table}:${dbId}`);
+}
+// Expose cho app.js (load order: app.js trước, supabase-app.js sau)
+window.markRemoteInsert = markRemoteInsert;
+window.isRecentRemote = isRecentRemote;
+
 function setupRealtime() {
   if (!window.SupabaseService.isConfigured()) return;
 
@@ -527,9 +545,8 @@ function setupRealtime() {
   }, 8000);
 
   // Single polling interval — avoids overlapping loadFromSupabase() calls
-  // 15s is enough for cross-device sync; bookings poll handles faster updates
-  startFullSyncPolling(15000);
-  startBookingPolling(10000); // bookings need faster sync, 10s is fine
+  // 1 loop duy nhất, mỗi 5s check sub-threshold (booking 10s, full 15s)
+  startPollingLoop({ fastMode: false });
 
   // Cross-tab sync: listen to storage events from other tabs on same device
   setupCrossTabSync();
@@ -568,22 +585,21 @@ async function handleRealtimeChange(table, payload) {
 }
 
 // Fast polling fallback when realtime is not connected
+// → bật fastMode trên polling loop đã có (không tạo timer mới)
 let fastPollingInterval = null;
 function startFastPolling() {
-  if (fastPollingInterval) return;
-  console.log('⚡ Fast polling active (every 5s)');
-  fastPollingInterval = setInterval(async () => {
-    if (!db || !window.SupabaseService.isConfigured()) return;
-    try {
-      await loadFromSupabase();
-      _realtimeStatus = 'polling';
-      // Silent — no banner during normal polling
-      // Always refresh current view for cross-device sync
-      refreshCurView();
-    } catch (err) {
-      console.warn('Fast polling error:', err);
-    }
-  }, 5000);
+  if (fastPollingInterval) return; // đã ở fast mode
+  fastPollingInterval = 'fast-mode-marker'; // dummy — chỉ để check đã bật
+  console.log('⚡ Fast polling active — sync mỗi 5s (realtime fail)');
+  _realtimeStatus = 'polling';
+  // Bật fast mode trên loop đã có (startPollingLoop đã chạy từ startRealtimeSync)
+  if (_pollingLoop) {
+    _pollingLoopFastMode = true;
+    _lastFullSync = 0; // force full sync ngay tick kế tiếp
+  } else {
+    // Fallback: nếu loop chưa chạy → start mới với fastMode
+    startPollingLoop({ fastMode: true });
+  }
 }
 
 async function handleRealtimeDressChange(payload) {
@@ -615,7 +631,10 @@ async function handleRealtimeDressChange(payload) {
       const local = idx !== -1 ? db.vay[idx] : null;
       const merged = local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
       if (idx !== -1) db.vay[idx] = merged;
-      else db.vay.push(merged);
+      else {
+        db.vay.push(merged);
+        if (payload.eventType === 'INSERT') markRemoteInsert('vay', sup._dbId);
+      }
       localStorage.setItem(STORE, JSON.stringify(db));
       if (typeof rebuildIndexes === 'function') rebuildIndexes();
       syncStateAndRender();
@@ -672,7 +691,10 @@ async function handleRealtimeAccessoryChange(payload) {
       const local = idx !== -1 ? db.pk[idx] : null;
       const merged = local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
       if (idx !== -1) db.pk[idx] = merged;
-      else db.pk.push(merged);
+      else {
+        db.pk.push(merged);
+        if (payload.eventType === 'INSERT') markRemoteInsert('pk', sup._dbId);
+      }
       localStorage.setItem(STORE, JSON.stringify(db));
       if (typeof rebuildIndexes === 'function') rebuildIndexes();
       syncStateAndRender();
@@ -748,7 +770,10 @@ async function handleRealtimeOrderChange(payload) {
         ? local
         : (local ? { ...supOrder, _fromBooking: local._fromBooking } : supOrder);
       if (idx !== -1) db.don[idx] = merged;
-      else db.don.push(merged);
+      else {
+        db.don.push(merged);
+        if (payload.eventType === 'INSERT') markRemoteInsert('don', supOrder._dbId);
+      }
       localStorage.setItem(STORE, JSON.stringify(db));
       if (typeof rebuildIndexes === 'function') rebuildIndexes();
       syncStateAndRender();
@@ -1070,35 +1095,97 @@ async function syncBookingsToLocal(preDresses, preAccessories) {
   }
 }
 
-let bookingPollInterval = null;
-function startBookingPolling(interval = 5000) {
-  if (bookingPollInterval) clearInterval(bookingPollInterval);
-  bookingPollInterval = setInterval(() => {
-    if (db) syncBookingsToLocal().catch(console.warn);
-  }, interval);
+// ============================================================
+// CONSOLIDATED POLLING LOOP — replaces 3 separate setInterval calls
+// ============================================================
+//
+// Trước đây có 3 polling loop chạy song song:
+//   - startFullSyncPolling (15s) — full Supabase → localStorage
+//   - startBookingPolling (10s)   — booking → localStorage
+//   - startFastPolling (5s)       — fallback khi realtime fail
+//
+// → Khi 5 thiết bị: 3 timer × 5 thiết bị × 12 lần/phút = ~180 refetch/phút
+//   Overlap ngẫu nhiên → có thể 2-3 lần loadFromSupabase() chạy đồng thời.
+//
+// GIỜ: 1 loop duy nhất, mỗi tick check sub-threshold rồi chạy tác vụ tương ứng.
+//   - Tick mỗi 5s (lowest interval)
+//   - Nếu đủ 10s từ lần booking sync cuối → syncBookingsToLocal()
+//   - Nếu đủ 15s từ lần full sync cuối    → loadFromSupabase() + retry pending
+//
+// Lợi ích:
+//   - Không overlap giữa các polling
+//   - Khi realtime OK → chỉ 1 loop idle, chỉ booking poll chạy
+//   - Khi realtime fail → loop này thay thế startFastPolling
+
+let _pollingLoop = null;
+let _lastBookingSync = 0;
+let _lastFullSync = 0;
+let _pollingLoopFastMode = false; // true khi realtime fail
+
+function startPollingLoop({ fastMode = false } = {}) {
+  if (_pollingLoop) {
+    // Mode change: nếu chuyển từ normal → fast, giữ nguyên loop
+    _pollingLoopFastMode = fastMode;
+    return;
+  }
+  _pollingLoopFastMode = fastMode;
+
+  _pollingLoop = setInterval(async () => {
+    if (!db) return;
+
+    // Chế độ fast (realtime fail): full sync mỗi 5s thay vì 15s
+    const fullInterval = _pollingLoopFastMode ? 5000 : 15000;
+    const now = Date.now();
+
+    // Booking poll
+    if (now - _lastBookingSync > 10000) {
+      try {
+        await syncBookingsToLocal();
+        _lastBookingSync = now;
+      } catch (err) {
+        console.warn('Booking poll error:', err);
+      }
+    }
+
+    // Full sync
+    if (now - _lastFullSync > fullInterval) {
+      try {
+        await loadFromSupabase();
+        refreshCurView();
+        _lastFullSync = now;
+      } catch (err) {
+        console.warn('Full sync poll error:', err);
+      }
+      // Retry pending
+      if (typeof retryPendingOrders === 'function') {
+        try { await retryPendingOrders(); } catch (err) { console.warn('Retry orders:', err); }
+      }
+      if (typeof retryPendingDeletes === 'function') {
+        try { await retryPendingDeletes(); } catch (err) { console.warn('Retry deletes:', err); }
+      }
+    }
+  }, 5000);
+
+  console.log('🔁 Polling loop started (fastMode:', fastMode, ')');
 }
 
-let fullSyncInterval = null;
-function startFullSyncPolling(interval = 15000) {
-  if (fullSyncInterval) clearInterval(fullSyncInterval);
-  fullSyncInterval = setInterval(async () => {
-    if (!db) return;
-    try {
-      await loadFromSupabase();
-      // Always refresh — cross-device sync depends on seeing updates in any view
-      refreshCurView();
-    } catch (err) {
-      console.warn('Full sync polling error:', err);
-    }
-    // Retry any orders that previously failed to sync
-    if (typeof retryPendingOrders === 'function') {
-      await retryPendingOrders();
-    }
-    // Retry pending soft-deletes that failed earlier
-    if (typeof retryPendingDeletes === 'function') {
-      await retryPendingDeletes();
-    }
-  }, interval);
+function stopPollingLoop() {
+  if (_pollingLoop) {
+    clearInterval(_pollingLoop);
+    _pollingLoop = null;
+    _lastBookingSync = 0;
+    _lastFullSync = 0;
+    _pollingLoopFastMode = false;
+    console.log('⏹ Polling loop stopped');
+  }
+}
+
+// Stop tất cả polling. Dùng khi logout.
+function stopAllPolling() {
+  // fastPollingInterval là marker (không phải timer thật), chỉ reset
+  fastPollingInterval = null;
+  // Loop mới
+  stopPollingLoop();
 }
 
 // ============================================================
@@ -1410,9 +1497,9 @@ if (typeof Sync !== 'undefined') {
     _origSyncStart.call(Sync);
   };
 
-  const _origSave = window.save;
+  const _origSave2 = window.save;
   window.save = function() {
-    _origSave.apply(this, arguments);
+    _origSave2.apply(this, arguments);
     if (window.SupabaseService.isConfigured()) {
       clearTimeout(window._syncTimer);
     }
