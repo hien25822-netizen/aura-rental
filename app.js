@@ -4188,7 +4188,7 @@ async function submitBulkDresses() {
     const { _row, _sizeErr, ...dressData } = d; // strip temp fields
     db.vay.push(dressData);
   });
-  saveToStorage();
+  save();
   imported = total;
   progressFill.style.width = '50%';
   progressCount.textContent = `${imported}/${total} đã lưu localStorage`;
@@ -4206,7 +4206,7 @@ async function submitBulkDresses() {
         const localDress = db.vay.find(d => d.Ma_Vay === ma);
         if (localDress) localDress._dbId = id;
       });
-      saveToStorage();
+      save();
     }
   }
 
@@ -4224,7 +4224,7 @@ async function submitBulkDresses() {
       `Kho váy sẽ được cập nhật tự động.`;
 
     // Refresh Kho Váy if visible
-    if (currentView === 'v-kho') renderKhoVay();
+    if (currentView === 'v-kho') renderKho();
   }, 300);
 }
 
