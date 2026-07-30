@@ -1,6 +1,21 @@
 -- ============================================================
--- AURA RENTAL — RLS Setup (Development Mode)
--- Run this in: Supabase Dashboard > SQL Editor > New Query
+-- AURA RENTAL — RLS Setup (Development Mode)  [DEPRECATED]
+-- ============================================================
+--
+-- ⚠️  FILE NÀY ĐÃ ĐƯỢC THAY BẰNG MIGRATION 003 — RBAC POLICIES
+--
+-- Policies trong file này cho phép authenticated full CRUD mọi bảng
+-- (kể cả DELETE cứng). Không phân biệt owner/staff.
+--
+-- Đã superseded bởi: supabase-migrations/003_rbac_policies.sql
+--   - Helper functions: public.is_owner(), public.current_user_role()
+--   - Staff full CRUD trừ DELETE cứng
+--   - Chỉ owner mới xoá cứng được
+--   - Anon vẫn INSERT được bookings (customer form public)
+--
+-- Nếu đã chạy file này trước đó, KHÔNG CẦN chạy lại — chỉ cần chạy 003.
+--
+-- Hướng dẫn chi tiết: PHASE_2_GUIDE.md
 -- ============================================================
 
 -- Enable RLS on all tables

@@ -257,15 +257,19 @@ async function createDressBatch(dresses) {
 
   const { data, error } = await supabase
     .from('dresses')
-    .insert(rows)
-    .select('id');
+    .upsert(rows, { onConflict: 'ma_vay' })
+    .select('id, ma_vay');
 
   if (error) {
     console.error('createDressBatch error:', error);
     return { ids: [], count: 0 };
   }
 
-  return { ids: (data || []).map(r => r.id), count: data?.length || 0 };
+  return {
+    ids: (data || []).map(r => r.id),
+    ma_vays: (data || []).map(r => r.ma_vay),
+    count: data?.length || 0
+  };
 }
 
 /**
@@ -1018,6 +1022,7 @@ window.SupabaseService = {
   // Dresses
   fetchDresses,
   createDress,
+  createDressBatch,
   updateDress,
   deleteDress,
   incrementDressRentalCount,

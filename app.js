@@ -300,9 +300,9 @@ function migrateRecord(rec, kind) {
   if (!rec || typeof rec !== 'object') return rec;
   // Already PascalCase?
   if (kind === 'order' && rec.Ma_Don) return rec;
-  if (kind === 'dress' && (rec.Ma_Vay || rec.Ten_Vay)) return rec;
-  if (kind === 'pk' && (rec.Ma_PK || rec.Ten_PK)) return rec;
-  if (kind === 'payment' && rec.Ma_TT !== undefined) return rec;
+  if (kind === 'dress' && (rec.Ma_Vay || rec.Ten_Vay || rec.ma_vay || rec.ten_vay)) return rec;
+  if (kind === 'pk' && (rec.Ma_PK || rec.Ten_PK || rec.ma_pk || rec.ten_pk)) return rec;
+  if (kind === 'payment' && (rec.Ma_TT !== undefined || rec.ma_tt !== undefined)) return rec;
 
   if (kind === 'order') {
     return {
@@ -329,42 +329,43 @@ function migrateRecord(rec, kind) {
     };
   }
   if (kind === 'dress') {
+    // rec can be old lowercase format (ma/ten/size/...), old snake_case (ma_vay/ten_vay/...), or already PascalCase
     return {
-      Ma_Vay: rec.ma,
-      Ten_Vay: rec.ten,
-      Size: rec.size,
-      Gia_Vay_Goc: rec.goc,
-      Gia_Thue_12h: rec.t12,
-      Gia_Thue_1_Ngay: rec.t1,
-      Gia_Thue_3_Ngay: rec.t3,
-      Anh_Vay: rec.anh || '',
-      Ghi_Chu: rec.gchu,
-      So_Lan_Thue: rec.sl || 0,
+      Ma_Vay: rec.Ma_Vay || rec.ma_vay || rec.ma,
+      Ten_Vay: rec.Ten_Vay || rec.ten_vay || rec.ten,
+      Size: rec.Size || rec.size,
+      Gia_Vay_Goc: rec.Gia_Vay_Goc ?? rec.gia_vay_goc ?? rec.goc ?? 0,
+      Gia_Thue_12h: rec.Gia_Thue_12h ?? rec.gia_thue_12h ?? rec.t12 ?? 0,
+      Gia_Thue_1_Ngay: rec.Gia_Thue_1_Ngay ?? rec.gia_thue_1_ngay ?? rec.t1 ?? 0,
+      Gia_Thue_3_Ngay: rec.Gia_Thue_3_Ngay ?? rec.gia_thue_3_ngay ?? rec.t3 ?? 0,
+      Anh_Vay: rec.Anh_Vay || rec.anh_vay || rec.anh || '',
+      Ghi_Chu: rec.Ghi_Chu || rec.ghi_chu || rec.gchu || '',
+      So_Lan_Thue: rec.So_Lan_Thue ?? rec.so_lan_thue ?? rec.sl ?? 0,
       _ts: rec._ts || Date.now(),
     };
   }
   if (kind === 'pk') {
     return {
-      Ma_PK: rec.ma,
-      Ten_PK: rec.ten,
-      Loai: rec.loai,
-      So_Luong_Tong: rec.sl || 1,
-      Gia_Thue_12h: rec.t12,
-      Gia_Thue_1_Ngay: rec.t1,
-      Gia_Thue_3_Ngay: rec.t3,
-      Anh_PK: rec.anh || '',
-      Ghi_Chu: rec.gchu,
+      Ma_PK: rec.Ma_PK || rec.ma_pk || rec.ma,
+      Ten_PK: rec.Ten_PK || rec.ten_pk || rec.ten,
+      Loai: rec.Loai || rec.loai,
+      So_Luong_Tong: rec.So_Luong_Tong ?? rec.so_luong_tong ?? rec.sl ?? 1,
+      Gia_Thue_12h: rec.Gia_Thue_12h ?? rec.gia_thue_12h ?? rec.t12 ?? 0,
+      Gia_Thue_1_Ngay: rec.Gia_Thue_1_Ngay ?? rec.gia_thue_1_ngay ?? rec.t1 ?? 0,
+      Gia_Thue_3_Ngay: rec.Gia_Thue_3_Ngay ?? rec.gia_thue_3_ngay ?? rec.t3 ?? 0,
+      Anh_PK: rec.Anh_PK || rec.anh_pk || rec.anh || '',
+      Ghi_Chu: rec.Ghi_Chu || rec.ghi_chu || rec.gchu || '',
       _ts: rec._ts || Date.now(),
     };
   }
   if (kind === 'payment') {
     return {
       Ma_TT: rec.id || ('TT' + Date.now()),
-      Ngay_TT: rec.ngay?.slice(0, 10),
-      Ma_Don: rec.ma,
-      Tien_Coc: rec.tienCoc,
-      Chi_Phi_Khac: rec.chiphi,
-      Ghi_Chu: rec.ghichu,
+      Ngay_TT: rec.Ngay_TT || rec.ngay_tt || rec.ngay?.slice(0, 10),
+      Ma_Don: rec.Ma_Don || rec.ma_don || rec.ma,
+      Tien_Coc: rec.Tien_Coc ?? rec.tien_coc ?? rec.tienCoc ?? 0,
+      Chi_Phi_Khac: rec.Chi_Phi_Khac ?? rec.chi_phi_khac ?? rec.chiphi ?? 0,
+      Ghi_Chu: rec.Ghi_Chu || rec.ghi_chu || rec.ghichu || '',
       _ts: rec._ts || Date.now(),
     };
   }
@@ -596,6 +597,44 @@ function closeModal(id) {
     }
     _modalScrollY = 0;
   }
+}
+
+// Custom confirm modal — thay thế native confirm()
+// Usage:
+//   showConfirmModal({
+//     title: 'Xóa đơn?',
+//     message: 'Hành động không thể hoàn tác',
+//     confirmText: 'Xóa',
+//     danger: true,
+//     onConfirm: () => { ... }
+//   });
+function showConfirmModal({ title = 'Xác nhận', message = '', confirmText = 'Xác nhận', cancelText = 'Hủy', danger = false, onConfirm }) {
+  const html = `
+    <div class="sheet-head">
+      <h2 style="font-family:var(--font-display);font-style:italic">${title}</h2>
+      <button class="sheet-close" data-close>×</button>
+    </div>
+    <div class="sheet-body" style="padding:24px;text-align:center">
+      <p style="margin-bottom:20px;line-height:1.5">${message}</p>
+      <div style="display:flex;gap:12px">
+        <button class="btn ghost" style="flex:1" data-close>${cancelText}</button>
+        <button class="btn ${danger ? 'danger' : 'primary'}" style="flex:1" id="cf-confirm-btn">${confirmText}</button>
+      </div>
+    </div>
+  `;
+  $('#cf-body').innerHTML = html;
+  openModal('m-confirm');
+
+  // Wire up: backdrop click + close button đã có (m-confirm modal)
+  // Confirm button
+  $('#cf-confirm-btn').onclick = () => {
+    closeModal('m-confirm');
+    if (typeof onConfirm === 'function') onConfirm();
+  };
+  // Cancel/close buttons (any [data-close])
+  $$('#cf-body [data-close]').forEach(el => {
+    el.onclick = () => closeModal('m-confirm');
+  });
 }
 function closeAllModals() {
   $$('.modal').forEach(m => m.classList.remove('show'));
@@ -1359,6 +1398,9 @@ function OrderCardListCard(o, refDate = new Date()) {
 
   const card = document.createElement('div');
   card.className = `order-list-card status-${status === 'Chuan_Bi' ? 'lay' : status === 'Tra_Ve' ? 'tra' : status === 'Qua_Han' ? 'qua' : 'dang'}`;
+  if (o._dbId && typeof isRecentRemote === 'function' && isRecentRemote('don', o._dbId)) {
+    card.classList.add('is-new');
+  }
   card.onclick = () => openOrderDetail(id);
 
   card.innerHTML = `
@@ -1496,6 +1538,9 @@ function renderKho() {
     const sl = v.So_Lan_Thue || v.sl || 0;
     const busy = busyVaySet.has(v.Ma_Vay || v.ma);
     const item = el('div', { class: 'gallery-item stagger-item' });
+    if (v._dbId && typeof isRecentRemote === 'function' && isRecentRemote('vay', v._dbId)) {
+      item.classList.add('is-new');
+    }
     item.style.animationDelay = `${Math.min(idx, 20) * 30}ms`;
     const thumb = el('div', { class: 'gallery-thumb' });
     if (v.Anh_Vay || v.anh) thumb.appendChild(el('img', { src: v.Anh_Vay || v.anh, alt: '' }));
@@ -1549,6 +1594,9 @@ function renderPk() {
     const loai = p.Loai || p.loai || '';
     const sl = p.So_Luong_Tong || p.sl || 1;
     const item = el('div', { class: 'gallery-item stagger-item' });
+    if (p._dbId && typeof isRecentRemote === 'function' && isRecentRemote('pk', p._dbId)) {
+      item.classList.add('is-new');
+    }
     item.style.animationDelay = `${Math.min(idx, 20) * 30}ms`;
     const thumb = el('div', { class: 'gallery-thumb' });
     if (p.Anh_PK || p.anh) thumb.appendChild(el('img', { src: p.Anh_PK || p.anh, alt: '' }));
@@ -1799,35 +1847,42 @@ window.deleteItem = function(kind, id) {
   });
   let msg = `Xóa ${name} "${item.Ten_Vay || item.Ten_PK || item.ten}"?`;
   if (inUse) msg += '\n\n⚠️ Vẫn còn đơn đang dùng món này. Hành động này có thể làm hỏng dữ liệu đơn.';
-  if (!confirm(msg)) return;
-  const delBtn = document.querySelector('#m-edit-item .btn-delete') || document.querySelector('#m-edit-item .btn-danger');
-  if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
-  // Track tombstone BEFORE removing — prevents realtime/polling from resurrecting the item
-  const dbId = item?._dbId;
-  if (dbId && window.SupabaseService?.isConfigured?.()) {
-    db._deletedItemIds = db._deletedItemIds || {};
-    db._deletedItemIds[dbId] = Date.now();
-  }
-  db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
-  save();
-  // Sync delete to Supabase
-  if (item?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
-    const deleteFn = kind === 'vay' ? window.SupabaseService.deleteDress : window.SupabaseService.deleteAccessory;
-    deleteFn(item._dbId).then(() => {
-      // Supabase confirmed — clear tombstone so merge stops filtering it
-      if (db._deletedItemIds) delete db._deletedItemIds[dbId];
-      localStorage.setItem(STORE, JSON.stringify(db));
-      if (typeof rebuildIndexes === 'function') rebuildIndexes();
-      console.log('[Delete] Item Supabase confirmed for', dbId);
-    }).catch(err => {
-      console.warn('Supabase delete failed:', err);
-      // Will retry on next polling cycle via retryPendingDeletes (TODO: extend for items)
-    });
-  }
-  closeModal('m-edit-item');
-  toast(`Đã xóa ${name}`, 'success');
-  if (curView === 'v-kho') renderKho();
-  else if (curView === 'v-pk') renderPk();
+  showConfirmModal({
+    title: `Xóa ${name}?`,
+    message: msg.replace(/\n/g, '<br>'),
+    confirmText: 'Xóa',
+    danger: true,
+    onConfirm: () => {
+      const delBtn = document.querySelector('#m-edit-item .btn-delete') || document.querySelector('#m-edit-item .btn-danger');
+      if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
+      // Track tombstone BEFORE removing — prevents realtime/polling from resurrecting the item
+      const dbId = item?._dbId;
+      if (dbId && window.SupabaseService?.isConfigured?.()) {
+        db._deletedItemIds = db._deletedItemIds || {};
+        db._deletedItemIds[dbId] = Date.now();
+      }
+      db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
+      save();
+      // Sync delete to Supabase
+      if (item?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        const deleteFn = kind === 'vay' ? window.SupabaseService.deleteDress : window.SupabaseService.deleteAccessory;
+        deleteFn(item._dbId).then(() => {
+          // Supabase confirmed — clear tombstone so merge stops filtering it
+          if (db._deletedItemIds) delete db._deletedItemIds[dbId];
+          localStorage.setItem(STORE, JSON.stringify(db));
+          if (typeof rebuildIndexes === 'function') rebuildIndexes();
+          console.log('[Delete] Item Supabase confirmed for', dbId);
+        }).catch(err => {
+          console.warn('Supabase delete failed:', err);
+          // Will retry on next polling cycle via retryPendingDeletes (TODO: extend for items)
+        });
+      }
+      closeModal('m-edit-item');
+      toast(`Đã xóa ${name}`, 'success');
+      if (curView === 'v-kho') renderKho();
+      else if (curView === 'v-pk') renderPk();
+    }
+  });
 };
 
 /* ============================================================
@@ -2501,37 +2556,44 @@ window.saveEditOrder = async function(id) {
 };
 
 window.deleteOrder = function(id) {
-  if (!confirm('Xóa đơn này? Hành động không thể hoàn tác.')) return;
-  const order = db.don.find(x => (x.Ma_Don || x.id) === id);
-  const dbId = order?._dbId;
-  const delBtn = document.querySelector('#m-detail .btn-danger');
-  if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
-  // Track _dbId in db._deletedOrderIds so realtime/polling merge filters it out
-  // until Supabase confirms the soft delete (avoids reappearance on next fetch)
-  if (dbId && window.SupabaseService?.isConfigured?.()) {
-    db._deletedOrderIds = db._deletedOrderIds || {};
-    db._deletedOrderIds[dbId] = Date.now();
-  }
-  db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
-  db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
-  save();
-  // Sync deletion to Supabase
-  if (dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
-    window.SupabaseService.deleteOrder(dbId).then(() => {
-      // Supabase confirmed — clear from deleted tracker so merge stops filtering it
-      if (db._deletedOrderIds) delete db._deletedOrderIds[dbId];
-      localStorage.setItem(STORE, JSON.stringify(db));
-      console.log('[Delete] Supabase confirmed for', order.Ma_Don);
-    }).catch(err => {
-      console.warn('Supabase deleteOrder failed:', err);
-      // Will retry on next polling cycle via retryPendingDeletes()
-    });
-  }
-  closeModal('m-detail');
-  toast('Đã xóa đơn', 'success');
-  refreshCurView();
-  // Scroll to top AFTER refreshCurView's preserve-scroll completes (2 rAF ≈ 32ms)
-  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+  showConfirmModal({
+    title: 'Xóa đơn này?',
+    message: 'Hành động không thể hoàn tác.',
+    confirmText: 'Xóa',
+    danger: true,
+    onConfirm: () => {
+      const order = db.don.find(x => (x.Ma_Don || x.id) === id);
+      const dbId = order?._dbId;
+      const delBtn = document.querySelector('#m-detail .btn-danger');
+      if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
+      // Track _dbId in db._deletedOrderIds so realtime/polling merge filters it out
+      // until Supabase confirms the soft delete (avoids reappearance on next fetch)
+      if (dbId && window.SupabaseService?.isConfigured?.()) {
+        db._deletedOrderIds = db._deletedOrderIds || {};
+        db._deletedOrderIds[dbId] = Date.now();
+      }
+      db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
+      db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
+      save();
+      // Sync deletion to Supabase
+      if (dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
+        window.SupabaseService.deleteOrder(dbId).then(() => {
+          // Supabase confirmed — clear from deleted tracker so merge stops filtering it
+          if (db._deletedOrderIds) delete db._deletedOrderIds[dbId];
+          localStorage.setItem(STORE, JSON.stringify(db));
+          console.log('[Delete] Supabase confirmed for', order.Ma_Don);
+        }).catch(err => {
+          console.warn('Supabase deleteOrder failed:', err);
+          // Will retry on next polling cycle via retryPendingDeletes()
+        });
+      }
+      closeModal('m-detail');
+      toast('Đã xóa đơn', 'success');
+      refreshCurView();
+      // Scroll to top AFTER refreshCurView's preserve-scroll completes (2 rAF ≈ 32ms)
+      setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 50);
+    }
+  });
 };
 
 function refreshCurView() {
@@ -2670,8 +2732,21 @@ window.saveRefund = function() {
   const cp = +$('#r-cp').value || 0;
   const tong = donTienThueVay(refundDon) + donTienThuePK(refundDon);
   const hoan = coc - tong - cp;
-  if (hoan < 0 && !confirm(`Hoàn cọc ÂM (${fmtVND(hoan)}). Tiếp tục?`)) return;
+  if (hoan < 0) {
+    showConfirmModal({
+      title: 'Hoàn cọc âm?',
+      message: `Số tiền hoàn là <strong style="color:var(--danger)">${fmtVND(hoan)}</strong> (âm — khách nợ thêm). Tiếp tục?`,
+      confirmText: 'Tiếp tục',
+      danger: true,
+      onConfirm: () => doSaveRefund(coc, cp, tong, hoan)
+    });
+    return;
+  }
+  doSaveRefund(coc, cp, tong, hoan);
+};
 
+function doSaveRefund(coc, cp, tong, hoan) {
+  if (!refundDon) return;
   refundDon.hoan = true;
   refundDon.Trang_Thai_Hoan_Coc = true;
   refundDon.time_hoan = new Date().toISOString();
@@ -3716,7 +3791,18 @@ function renderRefundList(filter = '') {
   });
 
   if (refunds.length === 0) {
-    list.innerHTML = '<p style="text-align:center;color:var(--muted);padding:40px">Chưa có đơn hoàn cọc nào.</p>';
+    const msg = filter
+      ? `Không tìm thấy đơn hoàn cọc với từ khoá "${filter}"`
+      : 'Chưa có đơn hoàn cọc nào';
+    const hint = filter
+      ? '<p style="text-align:center;color:var(--muted);font-size:13px;margin-top:8px">Thử từ khoá khác hoặc xoá ô tìm kiếm</p>'
+      : '<p style="text-align:center;color:var(--muted);font-size:13px;margin-top:8px">Hoàn cọc đơn đầu tiên bằng cách mở đơn → "Hoàn cọc"</p>';
+    list.innerHTML = `
+      <div class="empty empty-cta">
+        <div class="icon">💸</div>
+        <div class="title">${msg}</div>
+        ${hint}
+      </div>`;
     return;
   }
 
@@ -4006,8 +4092,12 @@ function _normalizeSize(raw, VALID_SIZES) {
   for (const v of VALID_SIZES) {
     if (s.toLowerCase() === v.toLowerCase()) return v;
   }
-  // Fuzzy: "free", "freesize", "fs" → "Free size"
+  // Fuzzy aliases
   if (/^fs|free|freesize/i.test(s)) return 'Free size';
+  // Normalize common shorthand variants
+  const aliases = { 'f': 'Free size', 'xs': 'S', 'xxl': 'L', 'xxxl': 'XL' };
+  const lower = s.toLowerCase();
+  if (aliases[lower]) return aliases[lower];
   if (VALID_SIZES.includes(s)) return s;
   return null;
 }
@@ -4109,12 +4199,12 @@ async function submitBulkDresses() {
     const result = await window.SupabaseService.createDressBatch(clean);
     synced = result ? clean.length : 0;
 
-    // Update _dbId on local records
+    // Update _dbId on local records — match by Ma_Vay to handle upsert order correctly
     if (result && result.ids) {
       result.ids.forEach((id, i) => {
-        if (db.vay[db.vay.length - clean.length + i]) {
-          db.vay[db.vay.length - clean.length + i]._dbId = id;
-        }
+        const ma = result.ma_vays[i];
+        const localDress = db.vay.find(d => d.Ma_Vay === ma);
+        if (localDress) localDress._dbId = id;
       });
       saveToStorage();
     }

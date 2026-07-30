@@ -521,6 +521,12 @@ input[type="date"], input[type="time"] {
         <label>Số điện thoại liên hệ <span style="color: var(--red)">*</span></label>
         <input type="tel" name="sdt" placeholder="0901234567" required>
       </div>
+
+      <!-- Honeypot — bot chộp, người thường không thấy -->
+      <div style="position: absolute; left: -9999px; top: -9999px;" aria-hidden="true">
+        <label>Nếu bạn là con người, bỏ qua field này</label>
+        <input type="text" name="website" tabindex="-1" autocomplete="off">
+      </div>
     </div>
 
     <!-- Section 2: Chọn váy -->
@@ -786,6 +792,7 @@ var CONFIG = {
 // State
 var dresses = [];
 var accessories = [];
+var _cachedOrders = [];      // orders from Supabase for availability checks
 var selectedVays = [];       // dress codes (Ma_Vay strings)
 var selectedVayUUIDs = [];   // UUIDs for Supabase junction tables
 var selectedPKs = [];        // accessory codes (Ma_PK strings)
@@ -813,16 +820,23 @@ function ngayTraThuc(goi, lay){
 }
 function isVayBusy(ma, dateIso, goi) {
   try {
+    // Check localStorage orders
     var stored = localStorage.getItem(CONFIG.STORE_KEY);
-    if (!stored) return false;
-    var data = JSON.parse(stored);
-    var don = data.don || [];
-    return don.some(function(o) {
+    var localDon = [];
+    if (stored) {
+      var data = JSON.parse(stored);
+      localDon = data.don || [];
+    }
+    // Also check cached Supabase orders
+    var allDon = [...localDon, ..._cachedOrders];
+    return allDon.some(function(o) {
       if (o.hoan) return false;
-      var has = (o.dhvs || []).some(function(x) { return (x.vay || x.Ma_Vay) === ma; });
+      var has = (o.dhvs || []).some(function(x) {
+        return (x.vay || x.Ma_Vay || x) === ma;
+      });
       if (!has) return false;
       var lay = o.Ngay_Lay || o.lay;
-      var goiO = o.Goi_Thue || o.goi;
+      var goiO = o.Goi_Thue || o.goi_thue || o.goi;
       if (!lay || !goiO) return false;
       var layDate = parseD(lay);
       var traDate = ngayTraThuc(goiO, lay);
@@ -834,15 +848,21 @@ function isVayBusy(ma, dateIso, goi) {
 }
 function isPKBusy(ma, dateIso, goi) {
   try {
+    // Check localStorage orders
     var stored = localStorage.getItem(CONFIG.STORE_KEY);
-    if (!stored) return false;
-    var data = JSON.parse(stored);
-    var don = data.don || [];
-    return don.some(function(o) {
+    var localDon = [];
+    if (stored) {
+      var data = JSON.parse(stored);
+      localDon = data.don || [];
+    }
+    // Also check cached Supabase orders
+    var allDon = [...localDon, ..._cachedOrders];
+    return allDon.some(function(o) {
       if (o.hoan) return false;
-      if (!(o.Ma_PK || o.pks || []).includes(ma)) return false;
+      var pks = o.Ma_PK || o.ma_pk || o.pks || [];
+      if (!pks.includes(ma)) return false;
       var lay = o.Ngay_Lay || o.lay;
-      var goiO = o.Goi_Thue || o.goi;
+      var goiO = o.Goi_Thue || o.goi_thue || o.goi;
       if (!lay || !goiO) return false;
       var layDate = parseD(lay);
       var traDate = ngayTraThuc(goiO, lay);
@@ -861,6 +881,7 @@ window.addEventListener('storage', (e) => {
   if (e.key === CONFIG.STORE_KEY && e.newValue) {
     loadInventory(true);
     renderItems();
+    fetchCachedOrders();
   }
 });
 
@@ -876,6 +897,7 @@ setInterval(() => {
       renderItems();
     }
   }
+  fetchCachedOrders();
 }, 5000);
 
 async function init() {
@@ -891,6 +913,9 @@ async function init() {
 
   // Load inventory
   await loadInventory();
+
+  // Load orders for availability checks
+  fetchCachedOrders();
 
   // Render items
   renderItems();
@@ -1018,6 +1043,57 @@ function normalizePK(p) {
     _dbId: p._dbId || p.id,
     id: p._dbId || p.id,
   };
+}
+
+function normalizeOrder(o) {
+  return {
+    Ma_Don: o.Ma_Don || o.ma_don || o.id,
+    Ngay_Lay: o.Ngay_Lay || o.ngay_lay || o.lay,
+    Ngay_Tra: o.Ngay_Tra || o.ngay_tra || o.tra,
+    goi_thue: o.Goi_Thue || o.goi_thue || o.goi,
+    hoan: o.Trang_Thai_Hoan_Coc || o.hoan || false,
+    dhvs: o.dhvs || [],
+    Ma_PK: o.Ma_PK || o.ma_pk || o.pks || [],
+  };
+}
+
+async function fetchCachedOrders() {
+  if (!window.supabaseClient) return;
+  try {
+    // Fetch orders + join order_dresses + dresses to get Ma_Vay strings
+    const { data: orders, error: ordersErr } = await window.supabaseClient
+      .from('orders')
+      .select('id, ma_don, ngay_lay, ngay_tra, goi_thue, trang_thai_hoan_coc')
+      .eq('trang_thai_hoan_coc', false);
+    if (ordersErr || !orders) return;
+
+    if (orders.length === 0) { _cachedOrders = []; return; }
+
+    const orderIds = orders.map(o => o.id);
+    const { data: junctions, error: jErr } = await window.supabaseClient
+      .from('order_dresses')
+      .select('order_id, dresses(ma_vay)')
+      .in('order_id', orderIds);
+
+    // Build order -> ma_vay[] map
+    const dressMap = {};
+    (junctions || []).forEach(j => {
+      if (!dressMap[j.order_id]) dressMap[j.order_id] = [];
+      if (j.dresses?.ma_vay) dressMap[j.order_id].push(j.dresses.ma_vay);
+    });
+
+    _cachedOrders = orders.map(o => ({
+      Ma_Don: o.ma_don || o.id,
+      Ngay_Lay: o.ngay_lay,
+      Ngay_Tra: o.ngay_tra,
+      goi_thue: o.goi_thue,
+      hoan: o.trang_thai_hoan_coc || false,
+      dhvs: (dressMap[o.id] || []).map(ma_vay => ({ vay: ma_vay })),
+      Ma_PK: [],
+    }));
+  } catch (e) {
+    console.warn('fetchCachedOrders failed:', e);
+  }
 }
 
 function getSelectedDate() {
@@ -1237,6 +1313,16 @@ async function handleSubmit(e) {
   const btn = document.getElementById('submit-btn');
 
   // Validate
+  // Honeypot: nếu field "website" có giá trị → bot. Silent reject (giả vờ OK)
+  if (form.website && form.website.value.trim() !== '') {
+    console.warn('🤖 Honeypot triggered — bot detected, silently rejected');
+    document.getElementById('booking-form').classList.add('hidden');
+    document.getElementById('submit-section').classList.add('hidden');
+    document.getElementById('success-view').classList.remove('hidden');
+    document.getElementById('booking-code').textContent = 'B' + Date.now();
+    return;
+  }
+
   if (!form.insta.value.trim()) {
     showToast('Vui lòng nhập tên Instagram!');
     form.insta.focus();
