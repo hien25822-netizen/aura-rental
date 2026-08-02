@@ -12,7 +12,9 @@
       "Bash(curl -s -I \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F51dc787fe3980df200e3db857c2a56ca6b9b88b176d50cfbf45ca4609d3ac018..webp?Expires=1783510980&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=AT4dnX1MkPoYuTdOFZFCUNljHqI%3D\")",
       "Bash(curl -sL \"https://anthropic-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com/ccv2%2F2026-07-07%2FClaude.7%2F2073739461820158196%2F4aa87156419ecdccda1ca2c9eeb3113bf98c57d1de1ee18b9db9fc93e5dcfc8d..webp?Expires=1783520272&OSSAccessKeyId=LTAI5tCpJNKCf5EkQHSuL9xg&Signature=As5icRhAYvaFOWVbpt3T5rtB5WQ%3D\" -o /tmp/aura_check.webp)",
       "WebFetch(domain:minimax-algeng-chat-tts-us.oss-us-east-1.aliyuncs.com)",
-      "WebFetch(domain:aura-rental-mu.vercel.app)"
+      "WebFetch(domain:aura-rental-mu.vercel.app)",
+      "Bash(curl -s 'https://mmiygzcljqayrfomxkkk.supabase.co/rest/v1/dresses?select=ma_vay,ten_vay,gia_vay_goc,gia_thue_12h,gia_thue_1_ngay,gia_thue_3_ngay&limit=5' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw')",
+      "Bash(curl -s 'https://mmiygzcljqayrfomxkkk.supabase.co/rest/v1/dresses?select=ma_vay,ten_vay,gia_vay_goc,gia_thue_12h,gia_thue_1_ngay,gia_thue_3_ngay&limit=5' -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5NTY4OTcyfQ.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5NTY4OTcyfQ.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw')"
     ]
   }
 }

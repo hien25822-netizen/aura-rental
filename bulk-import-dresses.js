@@ -209,8 +209,8 @@ function parsePrice(str) {
 
 function rowToDress(rowObj) {
   const cells = rowObj.cells;
-  // Map columns from Excel screenshot:
-  // A = (empty/merged), B=Tên, C=Size, D=Ghi chú, E=Giá gốc, F=OGS(skip), G=12h, H=1 ngày, I=3 ngày
+  // Map columns from actual XLSX structure:
+  // A=image, B=Tên, C=Size, D=Ghi chú, E=Giá gốc, F=12h, G=1 ngày, H=3 ngày
   const get = (col) => (cells.find(c => c.col === col) || { val: '' }).val.trim();
 
   const rawSize = get('C');
@@ -240,9 +240,9 @@ function rowToDress(rowObj) {
   const ten_vay = capitalize(get('B'));
   const ghi_chu = get('D');
   const gia_vay_goc = parsePrice(get('E'));
-  const gia_thue_12h = parsePrice(get('G'));
-  const gia_thue_1_ngay = parsePrice(get('H'));
-  const gia_thue_3_ngay = parsePrice(get('I'));
+  const gia_thue_12h = parsePrice(get('F'));
+  const gia_thue_1_ngay = parsePrice(get('G'));
+  const gia_thue_3_ngay = parsePrice(get('H'));
 
   return { ten_vay, size, ghi_chu, gia_vay_goc, gia_thue_12h, gia_thue_1_ngay, gia_thue_3_ngay };
 }
@@ -303,7 +303,7 @@ function rowToDress(rowObj) {
   }
   console.log(`\n🔢 Next ma_vay starts at V${String(nextNum).padStart(3, '0')}`);
 
-  // Assign ma_vay and insert
+  // Build insert rows with V001-V141 IDs
   const insertRows = dresses.map((d, i) => ({
     ma_vay: `V${String(nextNum + i).padStart(3, '0')}`,
     ten_vay: d.ten_vay,
@@ -316,7 +316,7 @@ function rowToDress(rowObj) {
     anh_vay: null,
   }));
 
-  console.log(`\n📥 Inserting ${insertRows.length} dresses...`);
+  console.log(`\n📥 Upserting ${insertRows.length} dresses with correct prices...`);
   const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/dresses`, {
     method: 'POST',
     headers,
@@ -329,7 +329,7 @@ function rowToDress(rowObj) {
     process.exit(1);
   }
 
-  console.log(`✅ Inserted ${insertRows.length} dresses (V${String(nextNum).padStart(3, '0')} → V${String(nextNum + insertRows.length - 1).padStart(3, '0')})`);
+  console.log(`✅ Upserted ${insertRows.length} dresses with correct prices (V${String(nextNum).padStart(3, '0')} → V${String(nextNum + insertRows.length - 1).padStart(3, '0')})`);
   console.log('\n📋 Bước tiếp:');
   console.log('   - Mở web app → hard refresh → tab Váy để verify');
 })();

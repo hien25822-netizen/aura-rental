@@ -82,8 +82,16 @@
 
 <!-- ===== DRESSES (KHO VÁY) ===== -->
 <section class="view" id="v-kho">
-  <div class="view-toolbar">
-    <input class="search" id="search-kho" placeholder="Tìm váy..." />
+  <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
+    <input class="search" id="search-kho" placeholder="Tìm váy..." style="flex:1;min-width:0" />
+    <select id="sort-kho" onchange="renderKho()" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);font-size:var(--text-xs);background:var(--bg);color:var(--text);cursor:pointer">
+      <option value="popular">🔥 Phổ biến</option>
+      <option value="price-asc">💰 Giá ↑</option>
+      <option value="price-desc">💰 Giá ↓</option>
+      <option value="name">📛 Tên A→Z</option>
+      <option value="goc-asc">🏷️ Gốc ↑</option>
+      <option value="goc-desc">🏷️ Gốc ↓</option>
+    </select>
     <button class="header-btn" onclick="openBulkImportModal()" title="Nhập Excel" style="flex-shrink:0">📥</button>
   </div>
   <div class="chips" id="kho-chips">
@@ -247,9 +255,9 @@
     s.onload = onload;
     document.head.appendChild(s);
   }
-  loadScript('supabase-service.js?v=18', function() {
-    loadScript('app.js?v=35', function() {
-      loadScript('supabase-app.js?v=35', function() {
+  loadScript('supabase-service.js?v=19', function() {
+    loadScript('app.js?v=36', function() {
+      loadScript('supabase-app.js?v=36', function() {
         console.log('All scripts loaded dynamically');
       });
     });

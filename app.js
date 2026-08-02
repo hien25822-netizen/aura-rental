@@ -1491,7 +1491,17 @@ function renderKho() {
   let arr = db.vay.slice();
   if (curSizeFilter) arr = arr.filter(v => (v.Size || v.size) === curSizeFilter);
   if (search) arr = arr.filter(v => (v.Ten_Vay || v.ten || '').toLowerCase().includes(search));
-  arr.sort((a, b) => (b.So_Lan_Thue || b.sl || 0) - (a.So_Lan_Thue || a.sl || 0));
+
+  const sortVal = (document.getElementById('sort-kho') || {}).value || 'popular';
+  arr.sort((a, b) => {
+    if (sortVal === 'popular') return (b.So_Lan_Thue || b.sl || 0) - (a.So_Lan_Thue || a.sl || 0);
+    if (sortVal === 'price-asc') return (a.Gia_Thue_1_Ngay || a.t1 || 0) - (b.Gia_Thue_1_Ngay || b.t1 || 0);
+    if (sortVal === 'price-desc') return (b.Gia_Thue_1_Ngay || b.t1 || 0) - (a.Gia_Thue_1_Ngay || a.t1 || 0);
+    if (sortVal === 'name') return (a.Ten_Vay || a.ten || '').localeCompare(b.Ten_Vay || b.ten || '');
+    if (sortVal === 'goc-asc') return (a.Gia_Vay_Goc || a.goc || 0) - (b.Gia_Vay_Goc || b.goc || 0);
+    if (sortVal === 'goc-desc') return (b.Gia_Vay_Goc || b.goc || 0) - (a.Gia_Vay_Goc || a.goc || 0);
+    return 0;
+  });
 
   const list = $('#kho-list');
   list.innerHTML = '';
