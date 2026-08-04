@@ -281,87 +281,43 @@ function rowToDress(rowObj) {
   const existing = allExisting;
   console.log(`   Tìm thấy ${existing.length} váy trong Supabase.`);
 
-  // Find max ma_vay number
-  let maxNum = 0;
-  existing.forEach(ex => {
-    const m = parseInt((ex.ma_vay || 'V000').replace(/\D/g, ''), 10);
-    if (m > maxNum) maxNum = m;
-  });
-  console.log(`   Max ma_vay hiện tại: V${String(maxNum).padStart(3, '0')}`);
-
-  // Build map: ten_vay (lowercase) -> new dress data from XLSX
-  const dressByName = {};
-  dresses.forEach((d) => {
-    dressByName[d.ten_vay.toLowerCase().trim()] = d;
-  });
-
-  // Separate: updates vs inserts
-  const updates = [];
-  const inserts = [];
-  const usedKeys = new Set();
-  existing.forEach(ex => {
-    const key = (ex.ten_vay || '').toLowerCase().trim();
-    const matched = dressByName[key];
-    if (matched) {
-      updates.push({ id: ex.id, ma_vay: ex.ma_vay, ...matched });
-      usedKeys.add(key);
-    }
-  });
-  // XLSX rows not matched = new inserts
-  dresses.forEach((d) => {
-    const key = d.ten_vay.toLowerCase().trim();
-    if (!usedKeys.has(key)) inserts.push(d);
-  });
-
-  console.log(`   Tìm thấy ${updates.length} váy cần update, ${inserts.length} váy mới.`);
-
-  // UPDATE existing in batches of 50
-  for (let i = 0; i < updates.length; i += 50) {
-    const batch = updates.slice(i, i + 50);
-    for (const u of batch) {
-      await fetch(`${SUPABASE_URL}/rest/v1/dresses?id=eq.${u.id}`, {
-        method: 'PATCH',
-        headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ten_vay: u.ten_vay,
-          size: u.size,
-          gia_vay_goc: u.gia_vay_goc,
-          gia_thue_12h: u.gia_thue_12h,
-          gia_thue_1_ngay: u.gia_thue_1_ngay,
-          gia_thue_3_ngay: u.gia_thue_3_ngay,
-          ghi_chu: u.ghi_chu || '',
-        }),
-      });
-    }
-    console.log(`   ✅ Updated ${Math.min(i + 50, updates.length)}/${updates.length} váy.`);
-  }
-
-  // INSERT new dresses
-  if (inserts.length > 0) {
-    const insertRows = inserts.map((d, i) => ({
-      ma_vay: `V${String(maxNum + i + 1).padStart(3, '0')}`,
-      ten_vay: d.ten_vay,
-      size: d.size,
-      gia_vay_goc: d.gia_vay_goc,
-      gia_thue_12h: d.gia_thue_12h,
-      gia_thue_1_ngay: d.gia_thue_1_ngay,
-      gia_thue_3_ngay: d.gia_thue_3_ngay,
-      ghi_chu: d.ghi_chu || '',
-      anh_vay: null,
-    }));
-    console.log(`   📥 Inserting ${insertRows.length} váy mới...`);
-    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/dresses`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(insertRows),
+  // Xoá hết váy cũ trước khi insert mới (đảm bảo chỉ còn data từ file Excel này)
+  console.log(`\n🗑️  Xoá ${existing.length} váy cũ...`);
+  for (const ex of existing) {
+    await fetch(`${SUPABASE_URL}/rest/v1/dresses?id=eq.${ex.id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` },
     });
-    if (!insertRes.ok) {
-      const err = await insertRes.text();
-      console.error(`   ❌ Insert failed (${insertRes.status}):`, err);
-    }
+  }
+  console.log(`   ✅ Đã xoá ${existing.length} váy cũ.`);
+
+  // Tất cả váy từ XLSX đều là insert mới (vì đã xoá hết cũ rồi)
+  const insertRows = dresses.map((d, i) => ({
+    ma_vay: `V${String(i + 1).padStart(3, '0')}`,
+    ten_vay: d.ten_vay,
+    size: d.size,
+    gia_vay_goc: d.gia_vay_goc,
+    gia_thue_12h: d.gia_thue_12h,
+    gia_thue_1_ngay: d.gia_thue_1_ngay,
+    gia_thue_3_ngay: d.gia_thue_3_ngay,
+    ghi_chu: d.ghi_chu || '',
+    anh_vay: null,
+  }));
+
+  console.log(`   📥 Inserting ${insertRows.length} váy mới...`);
+  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/dresses`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(insertRows),
+  });
+  if (!insertRes.ok) {
+    const err = await insertRes.text();
+    console.error(`   ❌ Insert failed (${insertRes.status}):`, err);
+  } else {
+    console.log(`   ✅ Inserted ${insertRows.length} váy.`);
   }
 
-  console.log(`\n✅ Xong! Đã cập nhật ${updates.length} váy, thêm ${inserts.length} váy mới.`);
+  console.log(`\n✅ Xong! Đã xoá ${existing.length} váy cũ, thêm ${insertRows.length} váy mới.`);
   console.log('\n📋 Bước tiếp:');
   console.log('   - Mở web app → hard refresh (Cmd+Shift+R) → tab Váy để verify');
   return;
