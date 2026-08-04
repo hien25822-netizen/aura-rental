@@ -158,21 +158,30 @@ for i, d in enumerate(dresses):
 
 status, body = sb_req('dresses', method='POST', body=insert_rows)
 if status not in (200, 201):
-    print(f'   ❌ Insert failed ({status}): {body}')
-    # Try one by one to find which row fails
-    print(f'   🔍 Debug: thử insert từng dòng...')
+    print(f'   ⚠️  Batch insert failed ({status}), thử insert từng dòng một...')
+    success = 0
+    skipped = 0
+    failed = 0
     for j, row in enumerate(insert_rows):
         st, bd = sb_req('dresses', method='POST', body=[row])
-        if st not in (200, 201):
-            print(f'      ❌ Row {j+1}: {row["ma_vay"]} - {row["ten_vay"]} -> {st}: {bd}')
-            if j >= 4:
-                print(f'      ... (dừng debug sau 5 lỗi)')
-                break
+        if st in (200, 201):
+            success += 1
+            if success <= 5 or j >= len(insert_rows) - 3:
+                print(f'      ✅ {row["ma_vay"]} - {row["ten_vay"]}')
+        elif st == 409:
+            skipped += 1
+            if skipped <= 3:
+                print(f'      ⏭️  {row["ma_vay"]} - {row["ten_vay"]} (đã tồn tại, bỏ qua)')
         else:
-            print(f'      ✅ Row {j+1}: {row["ma_vay"]} - {row["ten_vay"]}')
-    sys.exit(1)
+            failed += 1
+            print(f'      ❌ {row["ma_vay"]} - {row["ten_vay"]} -> {st}: {bd}')
+    print(f'\n   📊 Kết quả: {success} inserted, {skipped} trùng (bỏ qua), {failed} lỗi')
+    if success > 0 or skipped > 0:
+        print(f'   ✅ Hoàn tất!')
+    else:
+        sys.exit(1)
 else:
-    print(f'   ✅ Inserted {len(insert_rows)} váy.')
+    print(f'   ✅ Batch inserted {len(insert_rows)} váy.')
 
 print(f'\n✅ Xong! Đã xoá {len(all_existing)} váy cũ, thêm {len(insert_rows)} váy mới.')
 print(f'\n📋 Bước tiếp:')
