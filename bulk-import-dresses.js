@@ -241,8 +241,15 @@ function rowToDress(rowObj) {
   let rawRows;
   try {
     rawRows = await parseXlsx(XLSX_PATH);
+    console.log(`   ✅ parseXlsx done, rawRows =`, rawRows ? rawRows.length : 'NULL/UNDEFINED');
   } catch (e) {
     console.error('❌ Parse error:', e.message);
+    console.error(e.stack);
+    process.exit(1);
+  }
+
+  if (!rawRows || !rawRows.length) {
+    console.error('❌ No rows parsed from XLSX — check file format');
     process.exit(1);
   }
 
