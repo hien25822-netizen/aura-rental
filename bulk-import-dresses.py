@@ -154,7 +154,6 @@ for i, d in enumerate(dresses):
         'gia_thue_1_ngay': d['gia_thue_1_ngay'],
         'gia_thue_3_ngay': d['gia_thue_3_ngay'],
         'ghi_chu': d['ghi_chu'],
-        'anh_vay': None,
     })
 
 status, body = sb_req('dresses', method='POST', body=insert_rows)
