@@ -239,8 +239,8 @@ function rowToDress(rowObj) {
 
   console.log(`   Total rows: ${rawRows.length}`);
 
-  // Skip header rows 1-4, keep row 5+
-  const dataRows = rawRows.filter(r => r.rowNum >= 5 && r.cells.length > 0 && r.cells.some(c => c.val.trim()));
+  // Skip header row 1, keep row 2+
+  const dataRows = rawRows.filter(r => r.rowNum >= 2 && r.cells.length > 0 && r.cells.some(c => c.val.trim()));
   const dresses = dataRows.map(rowToDress).filter(d => d.ten_vay && d.ten_vay.length > 0);
 
   const noName = dresses.filter(d => !d.ten_vay);
