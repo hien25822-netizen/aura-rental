@@ -1544,10 +1544,10 @@ function renderKho() {
   arr.forEach((v, idx) => {
     const tenVay = v.Ten_Vay || v.ten || '';
     const size = v.Size || v.size || '';
-    const goc = v.Gia_Vay_Goc || v.goc || 0;
-    const t12 = v.Gia_Thue_12h || v.t12 || 0;
-    const t1 = v.Gia_Thue_1_Ngay || v.t1 || 0;
-    const t3 = v.Gia_Thue_3_Ngay || v.t3 || 0;
+    const goc = v.Gia_Vay_Goc || v.gia_vay_goc || v.goc || 0;
+    const t12 = v.Gia_Thue_12h || v.gia_thue_12h || v.t12 || 0;
+    const t1 = v.Gia_Thue_1_Ngay || v.gia_thue_1_ngay || v.t1 || 0;
+    const t3 = v.Gia_Thue_3_Ngay || v.gia_thue_3_ngay || v.t3 || 0;
     const sl = v.So_Lan_Thue || v.sl || 0;
     const busy = busyVaySet.has(v.Ma_Vay || v.ma);
     const item = el('div', { class: 'gallery-item stagger-item' });
@@ -1563,14 +1563,14 @@ function renderKho() {
     const info = el('div', { class: 'gallery-info' });
     info.appendChild(el('div', { class: 'gallery-name', text: tenVay || '—' }));
     info.appendChild(el('div', { class: 'gallery-sub', text: 'Size ' + size + ' · ' + sl + ' lượt' }));
+    info.appendChild(el('div', { class: 'gallery-goc-price', html: fmtVND(goc) }));
     const prices = el('div', { class: 'gallery-prices' });
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">Gốc</span><span class="val">${fmtVND(goc)}</span>` }));
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">12h</span><span class="val">${fmtVND(t12)}</span>` }));
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">1 ngày</span><span class="val">${fmtVND(t1)}</span>` }));
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">3 ngày</span><span class="val">${fmtVND(t3)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">12h</span><span>${fmtVND(t12)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">1 ngày</span><span>${fmtVND(t1)}</span>` }));
+    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">3 ngày</span><span>${fmtVND(t3)}</span>` }));
     info.appendChild(prices);
     item.appendChild(info);
-    item.onclick = () => openEditItem('vay', v.Ma_Vay || v.ma);
+    item.onclick = () => showDressDetail(v);
     list.appendChild(item);
   });
 }
@@ -1642,6 +1642,37 @@ $$('#pk-chips button').forEach(b => b.onclick = () => {
 function openAddContext() {
   if (curView === 'v-kho') openEditItem('vay', null);
   else if (curView === 'v-pk') openEditItem('pk', null);
+}
+
+/* ============================================================
+ *  DRESS DETAIL MODAL (read-only)
+ * ============================================================ */
+function showDressDetail(v) {
+  const img = v.Anh_Vay ?
+    `<img src="${v.Anh_Vay}" alt="${v.Ten_Vay}">` :
+    `<div style="font-size:64px">${(v.Ten_Vay || 'V')[0]}</div>`;
+  const gc = v.Ghi_Chu ? `<div class="item-detail-desc">${escHtml(v.Ghi_Chu)}</div>` : '';
+  const ma = v.Ma_Vay || v.ma || '';
+  $('#d-body').innerHTML = `
+    <div class="item-detail-img">${img}</div>
+    <div class="item-detail-info">
+      <div class="item-detail-name">${escHtml(v.Ten_Vay || '—')}</div>
+      <div class="item-detail-meta">
+        <span class="item-detail-tag">Size ${v.Size || '—'}</span>
+      </div>
+      <div class="item-detail-prices">
+        <div class="detail-price-row"><span class="detail-lbl">Giá gốc</span><span class="detail-val">${fmtVND(v.Gia_Vay_Goc)}</span></div>
+        <div class="detail-price-row"><span class="detail-lbl">12h</span><span class="detail-val">${fmtVND(v.Gia_Thue_12h)}</span></div>
+        <div class="detail-price-row"><span class="detail-lbl">1 ngày</span><span class="detail-val">${fmtVND(v.Gia_Thue_1_Ngay)}</span></div>
+        <div class="detail-price-row"><span class="detail-lbl">3 ngày</span><span class="detail-val">${fmtVND(v.Gia_Thue_3_Ngay)}</span></div>
+      </div>
+      ${gc}
+    </div>
+    <div class="item-detail-actions">
+      <button class="btn primary" onclick="closeModal('m-detail');openEditItem('vay','${ma}')">Sửa váy</button>
+      <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
+    </div>`;
+  openModal('m-detail');
 }
 
 /* ============================================================
@@ -4009,7 +4040,7 @@ function handleBulkFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
       const dresses = parseExcelDresses(wb);
       if (dresses.length === 0) {
         toast('Không tìm thấy dữ liệu váy trong file. Kiểm tra lại format cột.', 'error');
@@ -4029,52 +4060,68 @@ function handleBulkFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
+function _findHeaderRow(rows) {
+  // Tìm row đầu tiên chứa "Tên váy" hoặc "Tên" — coi đó là header row
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const cells = (rows[i] || []).map(c => String(c || '').trim().toLowerCase());
+    if (cells.some(c => c.includes('tên váy') || c === 'ten_vay' || c === 'tên')) {
+      return i;
+    }
+  }
+  return 0;
+}
+
 function parseExcelDresses(workbook) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
 
   if (rows.length < 2) return [];
 
-  const headers = (rows[0] || []).map(h => String(h).trim().toLowerCase());
+  // Auto-detect header row (skip blank/info rows)
+  const headerIdx = _findHeaderRow(rows);
+  const headers = (rows[headerIdx] || []).map(h => String(h).trim().toLowerCase());
 
   // Find column indices with fuzzy matching
   const ci = {
-    ten: _findCol(headers, ['ten_vay', 'tên váy', 'tên', 'ten']),
-    size: _findCol(headers, ['size', 'số đo']),
+    ten: _findCol(headers, ['tên váy', 'ten_vay', 'tên', 'ten', 'name']),
+    size: _findCol(headers, ['size', 'kích cỡ', 'số đo']),
     goc: _findCol(headers, ['giá gốc', 'gia_goc', 'gia goc', 'goc', 'giá']),
-    t12: _findCol(headers, ['12h', '12 giờ', '12h', 'thue 12h', 'gia_12h', 't12', 'giá 12h']),
-    t1: _findCol(headers, ['1 ngày', '1ngay', '1 ngày', 't1', 'gia_1_ngay', '1day', 'giá 1 ngày', 'thue 1 ngay']),
-    t3: _findCol(headers, ['3 ngày', '3ngay', '3 ngày', 't3', 'gia_3_ngay', '3day', 'giá 3 ngày', 'thue 3 ngay']),
-    gc: _findCol(headers, ['ghi chú', 'ghichu', 'notes', 'ghi chú', 'ghế chú']),
+    t12: _findCol(headers, ['12h', '12 giờ', 'thue 12h', 'gia_12h', 't12', 'giá 12h']),
+    t1: _findCol(headers, ['1 ngày', '1ngay', 't1', 'gia_1_ngay', '1day', 'giá 1 ngày', 'thue 1 ngay']),
+    t3: _findCol(headers, ['3 ngày', '3ngay', 't3', 'gia_3_ngay', '3day', 'giá 3 ngày', 'thue 3 ngay']),
+    gc: _findCol(headers, ['ghi chú', 'ghichu', 'notes']),
   };
 
-  if (ci.ten === -1 || ci.size === -1) {
-    throw new Error('Thiếu cột bắt buộc: "Tên váy" hoặc "Size"');
+  if (ci.ten === -1) {
+    throw new Error('Không tìm thấy cột "Tên váy" trong file. Kiểm tra lại header.');
+  }
+  if (ci.size === -1) {
+    throw new Error('Không tìm thấy cột "Size" trong file. Kiểm tra lại header.');
   }
 
   const VALID_SIZES = ['S', 'M', 'L', 'XL', 'Free size'];
   const dresses = [];
   const errors = [];
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = headerIdx + 1; i < rows.length; i++) {
     const row = rows[i];
     const ten = String(row[ci.ten] || '').trim();
     if (!ten) continue; // skip empty rows
 
     const rawSize = String(row[ci.size] || '').trim();
     const size = _normalizeSize(rawSize, VALID_SIZES);
-    const goc = _parseNum(row[ci.goc]);
-    const t12 = _parseNum(row[ci.t12]);
-    const t1 = _parseNum(row[ci.t1]);
-    const t3 = _parseNum(row[ci.t3]);
-    const gc = String(row[ci.gc] || '').trim();
+    const goc = ci.goc !== -1 ? _parseNum(row[ci.goc]) : 0;
+    const t12 = ci.t12 !== -1 ? _parseNum(row[ci.t12]) : 0;
+    const t1 = ci.t1 !== -1 ? _parseNum(row[ci.t1]) : 0;
+    const t3 = ci.t3 !== -1 ? _parseNum(row[ci.t3]) : 0;
+    const gc = ci.gc !== -1 ? String(row[ci.gc] || '').trim() : '';
 
     if (!size) errors.push(`Dòng ${i + 1}: Size "${rawSize}" không hợp lệ (cần: S/M/L/XL/Free size)`);
 
     dresses.push({
       Ma_Vay: uid('V'),
       Ten_Vay: ten,
-      Size: size || 'M',
+      Size: size || 'Free size',
       Gia_Vay_Goc: goc || 0,
       Gia_Thue_12h: t12 || 0,
       Gia_Thue_1_Ngay: t1 || 0,
@@ -4088,21 +4135,33 @@ function parseExcelDresses(workbook) {
     });
   }
 
+  if (errors.length) {
+    console.warn(`Size errors (${errors.length}):`, errors);
+  }
+
   return dresses;
 }
 
 function _findCol(headers, aliases) {
-  for (const alias of aliases) {
-    const idx = headers.indexOf(alias.toLowerCase());
+  const normalizedHeaders = headers.map(h => _normalizeHeader(h));
+  const normalizedAliases = aliases.map(a => _normalizeHeader(a));
+
+  // Exact match (normalized)
+  for (const alias of normalizedAliases) {
+    const idx = normalizedHeaders.indexOf(alias);
     if (idx !== -1) return idx;
   }
-  // Partial match
-  for (let i = 0; i < headers.length; i++) {
-    for (const alias of aliases) {
-      if (headers[i].includes(alias.toLowerCase())) return i;
+  // Partial match (substring)
+  for (let i = 0; i < normalizedHeaders.length; i++) {
+    for (const alias of normalizedAliases) {
+      if (normalizedHeaders[i].includes(alias)) return i;
     }
   }
   return -1;
+}
+
+function _normalizeHeader(s) {
+  return String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
 function _normalizeSize(raw, VALID_SIZES) {
@@ -4200,11 +4259,18 @@ async function submitBulkDresses() {
 
   progressText.textContent = `Đang nhập vào localStorage...`;
 
-  // Save to localStorage
+  // Save to localStorage — upsert by Ma_Vay (replace existing, append new)
   if (!db.vay) db.vay = [];
+  const existingMap = {};
+  db.vay.forEach((d, i) => { if (d.Ma_Vay) existingMap[d.Ma_Vay] = i; });
   dresses.forEach(d => {
     const { _row, _sizeErr, ...dressData } = d; // strip temp fields
-    db.vay.push(dressData);
+    const existingIdx = existingMap[dressData.Ma_Vay];
+    if (existingIdx !== undefined) {
+      db.vay[existingIdx] = dressData;
+    } else {
+      db.vay.push(dressData);
+    }
   });
   save();
   imported = total;
@@ -4242,7 +4308,7 @@ async function submitBulkDresses() {
       `Kho váy sẽ được cập nhật tự động.`;
 
     // Refresh Kho Váy if visible
-    if (currentView === 'v-kho') renderKho();
+    if (curView === 'v-kho') renderKho();
   }, 300);
 }
 
