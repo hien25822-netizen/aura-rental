@@ -4,7 +4,7 @@
    - Sync queue sẽ tự gửi khi có mạng lại
 */
 
-const CACHE = 'aura-v12';
+const CACHE = 'aura-v13';
 const ASSETS = [
   './',
   './index.html',

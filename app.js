@@ -1,4 +1,20 @@
-const STORE = 'aura_v7';
+const STORE = 'aura_v8';
+
+// Bump STORAGE_VERSION mỗi khi schema localStorage thay đổi —
+// khi user mở web, nếu thấy version cũ sẽ tự động xóa cache cũ
+// trước khi Supabase sync dữ liệu mới nhất về.
+const STORAGE_VERSION = 8;
+const STORAGE_VERSION_KEY = 'aura_storage_version';
+const _storedVersion = parseInt(localStorage.getItem(STORAGE_VERSION_KEY) || '0', 10);
+if (_storedVersion < STORAGE_VERSION) {
+  Object.keys(localStorage).forEach(k => {
+    if (k.startsWith('aura_') && k !== STORAGE_VERSION_KEY) localStorage.removeItem(k);
+  });
+  localStorage.setItem(STORAGE_VERSION_KEY, String(STORAGE_VERSION));
+  // Reload để RAM cũng được refresh (tránh hiện data cũ trong bộ nhớ tạm)
+  console.log(`🧹 Wiped old cache (storage v${_storedVersion} → v${STORAGE_VERSION}) — reloading...`);
+  location.reload();
+}
 
 /* ============================================================
  *  SYNC CONFIG — multi-device real-time
@@ -1554,9 +1570,6 @@ function renderKho() {
     const tenVay = v.Ten_Vay || v.ten || '';
     const size = v.Size || v.size || '';
     const goc = v.Gia_Vay_Goc || v.gia_vay_goc || v.goc || 0;
-    const t12 = v.Gia_Thue_12h || v.gia_thue_12h || v.t12 || 0;
-    const t1 = v.Gia_Thue_1_Ngay || v.gia_thue_1_ngay || v.t1 || 0;
-    const t3 = v.Gia_Thue_3_Ngay || v.gia_thue_3_ngay || v.t3 || 0;
     const sl = v.So_Lan_Thue || v.sl || 0;
     const busy = busyVaySet.has(v.Ma_Vay || v.ma);
     const item = el('div', { class: 'gallery-item stagger-item' });
@@ -1573,11 +1586,6 @@ function renderKho() {
     info.appendChild(el('div', { class: 'gallery-name', text: tenVay || '—' }));
     info.appendChild(el('div', { class: 'gallery-sub', text: 'Size ' + size + ' · ' + sl + ' lượt' }));
     info.appendChild(el('div', { class: 'gallery-goc-price', html: fmtVND(goc) }));
-    const prices = el('div', { class: 'gallery-prices' });
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">12h</span><span>${fmtVND(t12)}</span>` }));
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">1 ngày</span><span>${fmtVND(t1)}</span>` }));
-    prices.appendChild(el('div', { class: 'gallery-price-row', html: `<span class="lbl">3 ngày</span><span>${fmtVND(t3)}</span>` }));
-    info.appendChild(prices);
     item.appendChild(info);
     item.onclick = () => showDressDetail(v);
     list.appendChild(item);
@@ -1678,6 +1686,7 @@ function showDressDetail(v) {
       ${gc}
     </div>
     <div class="item-detail-actions">
+      <button class="btn danger" onclick="closeModal('m-detail');deleteItem('vay','${ma}')">Xóa váy</button>
       <button class="btn primary" onclick="closeModal('m-detail');openEditItem('vay','${ma}')">Sửa váy</button>
       <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
     </div>`;
