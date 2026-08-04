@@ -3,12 +3,9 @@
  * bulk-import-dresses.js — Parse inventory.xlsx + upsert vào Supabase dresses table.
  *
  * Usage:
- *   node --env-file=.env bulk-import-dresses.js [--dry-run]
+ *   node bulk-import-dresses.js
  *
- * Đọc inventory.xlsx bằng built-in zlib + DOMParser (không cần npm package).
- * Map cột: Tên → ten_vay, Size → size, Giá gốc → gia_vay_goc,
- *          12h → gia_thue_12h, 1 ngày → gia_thue_1_ngay,
- *          3 ngày → gia_thue_3_ngay, ategory → ghi_chu.
+ * Luôn xoá toàn bộ váy cũ rồi insert lại từ V001.
  */
 
 'use strict';
@@ -52,10 +49,7 @@ const headers = {
 async function parseXlsx(path) {
   const buf = fs.readFileSync(path);
 
-  // Parse ZIP via central directory (more reliable than local headers)
   const entries = {};
-
-  // Find End of Central Directory record
   let eocdOffset = -1;
   for (let i = buf.length - 22; i >= 0; i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) {
@@ -69,13 +63,11 @@ async function parseXlsx(path) {
   const cdSize = buf.readUInt32LE(eocdOffset + 12);
   const cdOffset = buf.readUInt32LE(eocdOffset + 16);
 
-  // Walk central directory
   let ci = cdOffset;
   for (let e = 0; e < numEntries; e++) {
     if (buf.readUInt32LE(ci) !== 0x02014b50) throw new Error('Invalid CD entry at ' + ci);
     const compression = buf.readUInt16LE(ci + 10);
     const compressedSize = buf.readUInt32LE(ci + 20);
-    const uncompressedSize = buf.readUInt32LE(ci + 24);
     const nameLen = buf.readUInt16LE(ci + 28);
     const extraLen = buf.readUInt16LE(ci + 30);
     const commentLen = buf.readUInt16LE(ci + 32);
@@ -83,7 +75,6 @@ async function parseXlsx(path) {
     const name = buf.toString('utf8', ci + 46, ci + 46 + nameLen);
     ci += 46 + nameLen + extraLen + commentLen;
 
-    // Read local file header to get actual data offset + data descriptor flag
     const lfhSig = buf.readUInt32LE(localOffset);
     if (lfhSig !== 0x04034b50) continue;
     const lfhNameLen = buf.readUInt16LE(localOffset + 26);
@@ -98,7 +89,6 @@ async function parseXlsx(path) {
       try {
         data = zlib.inflateSync(compressed);
       } catch {
-        // Try raw deflate (no header)
         data = zlib.inflateRawSync(compressed);
       }
     } else {
@@ -107,14 +97,12 @@ async function parseXlsx(path) {
     entries[name] = data;
   }
 
-  // Get shared strings
   let sharedStrings = [];
   if (entries['xl/sharedStrings.xml']) {
     const xml = entries['xl/sharedStrings.xml'].toString('utf8');
     sharedStrings = parseSharedStrings(xml);
   }
 
-  // Get worksheet (first sheet)
   const sheetKeys = Object.keys(entries).filter(k => k.match(/xl\/worksheets\/sheet1\.xml/));
   if (!sheetKeys.length) throw new Error('Không tìm thấy sheet1');
   const sheetXml = entries[sheetKeys[0]].toString('utf8');
@@ -125,11 +113,9 @@ async function parseXlsx(path) {
 
 function parseSharedStrings(xml) {
   const strings = [];
-  // Match each <si> element containing <t>...</t>
   const siRegex = /<si>([\s\S]*?)<\/si>/g;
   let m;
   while ((m = siRegex.exec(xml)) !== null) {
-    // Extract all <t> values within this <si>
     const tValues = [];
     const tRegex = /<t[^>]*>([\s\S]*?)<\/t>/g;
     let t;
@@ -142,9 +128,6 @@ function parseSharedStrings(xml) {
 }
 
 function parseSheet(xml, sharedStrings) {
-  // Split by </c> — each segment ends with the content before </c>
-  // The opening <c...> tag is somewhere in the segment.
-  // Use lastIndexOf to find the LAST <c ...> in the segment (handles nested cells).
   const segments = xml.split('</c>');
   const allCells = [];
 
@@ -154,7 +137,6 @@ function parseSheet(xml, sharedStrings) {
     if (actualStart === -1) continue;
 
     const tagStr = seg.slice(actualStart);
-    // Match: <c r="COL ROW" ATTRS>
     const tagMatch = /^<c\s+r="([A-Z]+)(\d+)"([^>]*)>/.exec(tagStr);
     if (!tagMatch) continue;
 
@@ -171,7 +153,6 @@ function parseSheet(xml, sharedStrings) {
     }
   }
 
-  // Group by row number
   const byRow = {};
   for (const cell of allCells) {
     if (!byRow[cell.rowNum]) byRow[cell.rowNum] = [];
@@ -193,14 +174,10 @@ function capitalize(str) {
 
 function parsePrice(str) {
   if (!str) return 0;
-  // Handle decimal numbers like "1800000.0" → 1800000
   const s = str.toString().trim();
   const dotIdx = s.indexOf('.');
   if (dotIdx !== -1) {
-    // Remove dots/commas/spaces, then handle decimal
     const intPart = s.slice(0, dotIdx).replace(/[^\d]/g, '');
-    const decPart = s.slice(dotIdx + 1).replace(/[^\d]/g, '');
-    // Only use integer part (e.g. "1800000.0" → 1800000, not 18000000)
     return parseInt(intPart, 10) || 0;
   }
   const cleaned = s.replace(/[^\d]/g, '');
@@ -209,12 +186,10 @@ function parsePrice(str) {
 
 function rowToDress(rowObj) {
   const cells = rowObj.cells;
-  // Map columns from actual XLSX structure:
-  // A=image, B=Tên, C=Size, D=Ghi chú, E=Giá gốc, F=12h, G=1 ngày, H=3 ngày
+  // Columns: A=Tên váy, B=Size, C=Giá gốc, D=12h, E=1 ngày, F=3 ngày, G=Ghi chú
   const get = (col) => (cells.find(c => c.col === col) || { val: '' }).val.trim();
 
-  const rawSize = get('C');
-  // Normalize size to match CHECK constraint: S, M, L, XL, Free size
+  const rawSize = get('B');
   const sizeMap = {
     'S': 'S', 's': 'S',
     'M': 'M', 'm': 'M',
@@ -229,20 +204,22 @@ function rowToDress(rowObj) {
   };
   let size = sizeMap[rawSize.trim()] || sizeMap[rawSize.trim().toUpperCase()];
   if (!size) {
-    // Fallback: check if it contains a known size
     const up = rawSize.toUpperCase();
-    if (up.includes('S') && up.includes('M') && !up.includes('L')) size = 'Free size';
-    else if (up.includes('M') && up.includes('L')) size = 'Free size';
-    else if (up.includes('S') && up.includes('L')) size = 'Free size';
-    else size = 'Free size'; // default fallback
+    if ((up.includes('S') && up.includes('M') && !up.includes('L')) ||
+        (up.includes('M') && up.includes('L')) ||
+        (up.includes('S') && up.includes('L'))) {
+      size = 'Free size';
+    } else {
+      size = 'Free size';
+    }
   }
 
-  const ten_vay = capitalize(get('B'));
-  const ghi_chu = get('D');
-  const gia_vay_goc = parsePrice(get('E'));
-  const gia_thue_12h = parsePrice(get('F'));
-  const gia_thue_1_ngay = parsePrice(get('G'));
-  const gia_thue_3_ngay = parsePrice(get('H'));
+  const ten_vay = capitalize(get('A'));
+  const ghi_chu = get('G');
+  const gia_vay_goc = parsePrice(get('C'));
+  const gia_thue_12h = parsePrice(get('D'));
+  const gia_thue_1_ngay = parsePrice(get('E'));
+  const gia_thue_3_ngay = parsePrice(get('F'));
 
   return { ten_vay, size, ghi_chu, gia_vay_goc, gia_thue_12h, gia_thue_1_ngay, gia_thue_3_ngay };
 }
@@ -260,21 +237,17 @@ function rowToDress(rowObj) {
     process.exit(1);
   }
 
-  console.log(`   Total rows (incl. header): ${rawRows.length}`);
+  console.log(`   Total rows: ${rawRows.length}`);
 
-  // Filter to data rows (skip rows 1-4 = header/totals/empty, keep row 5+)
+  // Skip header rows 1-4, keep row 5+
   const dataRows = rawRows.filter(r => r.rowNum >= 5 && r.cells.length > 0 && r.cells.some(c => c.val.trim()));
-
-  // Parse to dresses
   const dresses = dataRows.map(rowToDress).filter(d => d.ten_vay && d.ten_vay.length > 0);
 
-  // Validate
   const noName = dresses.filter(d => !d.ten_vay);
   if (noName.length) console.log(`⚠️  ${noName.length} rows without ten_vay — skipped`);
 
   console.log(`   Data rows: ${dresses.length}`);
 
-  // Show first 10
   console.log('\n📋 Preview (first 10):');
   dresses.slice(0, 10).forEach((d, i) => {
     console.log(`   ${i + 1}. ${d.ten_vay} | ${d.size} | gốc:${d.gia_vay_goc} | 12h:${d.gia_thue_12h} | 1d:${d.gia_thue_1_ngay} | 3d:${d.gia_thue_3_ngay}`);
@@ -287,49 +260,109 @@ function rowToDress(rowObj) {
 
   if (DRY) {
     console.log(`\nℹ️  Dry-run: ${dresses.length} dresses would be inserted.`);
-    console.log('   Run without --dry-run to insert.');
     return;
   }
 
-  // Get next ma_vay id
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/dresses?select=ma_vay&order=ma_vay.desc&limit=1`, {
-    headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
-  });
-  const existing = await res.json();
-  let nextNum = 1;
-  if (existing && existing.length > 0) {
-    const last = existing[0].ma_vay;
-    nextNum = parseInt(last.replace(/\D/g, ''), 10) + 1;
+  // Step 1: Fetch existing dresses + find max ma_vay
+  console.log(`\n🔄 Cập nhật giá váy trong Supabase...`);
+  console.log(`   (Nếu fetch thất bại do network, dùng trình duyệt: open debug-sync.html)`);
+
+  const allExisting = [];
+  for (let offset = 0; ; offset += 100) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/dresses?select=id,ma_vay,ten_vay&limit=100&offset=${offset}`, {
+      headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}` }
+    });
+    const data = await res.json();
+    if (!data || !data.length) break;
+    allExisting.push(...data);
+    console.log(`   Trang ${Math.floor(offset/100)+1}: +${data.length} = ${allExisting.length} tổng`);
+    if (data.length < 100) break;
   }
-  console.log(`\n🔢 Next ma_vay starts at V${String(nextNum).padStart(3, '0')}`);
+  const existing = allExisting;
+  console.log(`   Tìm thấy ${existing.length} váy trong Supabase.`);
 
-  // Build insert rows with V001-V141 IDs
-  const insertRows = dresses.map((d, i) => ({
-    ma_vay: `V${String(nextNum + i).padStart(3, '0')}`,
-    ten_vay: d.ten_vay,
-    size: d.size,
-    gia_vay_goc: d.gia_vay_goc,
-    gia_thue_12h: d.gia_thue_12h,
-    gia_thue_1_ngay: d.gia_thue_1_ngay,
-    gia_thue_3_ngay: d.gia_thue_3_ngay,
-    ghi_chu: d.ghi_chu || '',
-    anh_vay: null,
-  }));
+  // Find max ma_vay number
+  let maxNum = 0;
+  existing.forEach(ex => {
+    const m = parseInt((ex.ma_vay || 'V000').replace(/\D/g, ''), 10);
+    if (m > maxNum) maxNum = m;
+  });
+  console.log(`   Max ma_vay hiện tại: V${String(maxNum).padStart(3, '0')}`);
 
-  console.log(`\n📥 Upserting ${insertRows.length} dresses with correct prices...`);
-  const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/dresses`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(insertRows),
+  // Build map: ten_vay (lowercase) -> new dress data from XLSX
+  const dressByName = {};
+  dresses.forEach((d) => {
+    dressByName[d.ten_vay.toLowerCase().trim()] = d;
   });
 
-  if (!insertRes.ok) {
-    const err = await insertRes.text();
-    console.error(`❌ Insert failed (${insertRes.status}):`, err);
-    process.exit(1);
+  // Separate: updates vs inserts
+  const updates = [];
+  const inserts = [];
+  const usedKeys = new Set();
+  existing.forEach(ex => {
+    const key = (ex.ten_vay || '').toLowerCase().trim();
+    const matched = dressByName[key];
+    if (matched) {
+      updates.push({ id: ex.id, ma_vay: ex.ma_vay, ...matched });
+      usedKeys.add(key);
+    }
+  });
+  // XLSX rows not matched = new inserts
+  dresses.forEach((d) => {
+    const key = d.ten_vay.toLowerCase().trim();
+    if (!usedKeys.has(key)) inserts.push(d);
+  });
+
+  console.log(`   Tìm thấy ${updates.length} váy cần update, ${inserts.length} váy mới.`);
+
+  // UPDATE existing in batches of 50
+  for (let i = 0; i < updates.length; i += 50) {
+    const batch = updates.slice(i, i + 50);
+    for (const u of batch) {
+      await fetch(`${SUPABASE_URL}/rest/v1/dresses?id=eq.${u.id}`, {
+        method: 'PATCH',
+        headers: { 'apikey': KEY, 'Authorization': `Bearer ${KEY}`, 'Prefer': 'return=minimal', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ten_vay: u.ten_vay,
+          size: u.size,
+          gia_vay_goc: u.gia_vay_goc,
+          gia_thue_12h: u.gia_thue_12h,
+          gia_thue_1_ngay: u.gia_thue_1_ngay,
+          gia_thue_3_ngay: u.gia_thue_3_ngay,
+          ghi_chu: u.ghi_chu || '',
+        }),
+      });
+    }
+    console.log(`   ✅ Updated ${Math.min(i + 50, updates.length)}/${updates.length} váy.`);
   }
 
-  console.log(`✅ Upserted ${insertRows.length} dresses with correct prices (V${String(nextNum).padStart(3, '0')} → V${String(nextNum + insertRows.length - 1).padStart(3, '0')})`);
+  // INSERT new dresses
+  if (inserts.length > 0) {
+    const insertRows = inserts.map((d, i) => ({
+      ma_vay: `V${String(maxNum + i + 1).padStart(3, '0')}`,
+      ten_vay: d.ten_vay,
+      size: d.size,
+      gia_vay_goc: d.gia_vay_goc,
+      gia_thue_12h: d.gia_thue_12h,
+      gia_thue_1_ngay: d.gia_thue_1_ngay,
+      gia_thue_3_ngay: d.gia_thue_3_ngay,
+      ghi_chu: d.ghi_chu || '',
+      anh_vay: null,
+    }));
+    console.log(`   📥 Inserting ${insertRows.length} váy mới...`);
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/dresses`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(insertRows),
+    });
+    if (!insertRes.ok) {
+      const err = await insertRes.text();
+      console.error(`   ❌ Insert failed (${insertRes.status}):`, err);
+    }
+  }
+
+  console.log(`\n✅ Xong! Đã cập nhật ${updates.length} váy, thêm ${inserts.length} váy mới.`);
   console.log('\n📋 Bước tiếp:');
-  console.log('   - Mở web app → hard refresh → tab Váy để verify');
-})();
+  console.log('   - Mở web app → hard refresh (Cmd+Shift+R) → tab Váy để verify');
+  return;
+});
