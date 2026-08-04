@@ -1507,17 +1507,6 @@ function renderKho() {
   list.innerHTML = '';
   list.className = 'gallery';
 
-  if (!arr.length) {
-    if (!db.vay || db.vay.length === 0) {
-      list.className = '';
-      showSkeleton(list, 6);
-      return;
-    }
-    list.className = '';
-    list.innerHTML = '<div class="empty empty-cta"><div class="icon">👗</div><div class="title">Kho trống</div><button class="btn primary" onclick="openEditItem(\'vay\', null)">＋ Thêm váy đầu tiên</button></div>';
-    return;
-  }
-
   // Build busyVaySet once for today — dress is busy if any non-hoan order covers today
   const todayIso = isoOf(today);
   const todayD = parseD(todayIso);
@@ -1539,6 +1528,26 @@ function renderKho() {
       const id = dh.vay || dh.Ma_Vay;
       if (id) busyVaySet.add(id);
     }
+  }
+
+  const totalAll = (db.vay || []).length;
+  const totalShown = arr.length;
+  const totalBusy = arr.filter(v => busyVaySet.has(v.Ma_Vay || v.ma)).length;
+  const countEl = $('#kho-count');
+  if (countEl) {
+    const filterTxt = (search || curSizeFilter) ? ` (lọc: ${totalShown})` : '';
+    countEl.textContent = `👗 Tổng: ${totalAll} váy${filterTxt} · 📦 Đang thuê hôm nay: ${totalBusy}`;
+  }
+
+  if (!arr.length) {
+    if (!db.vay || db.vay.length === 0) {
+      list.className = '';
+      showSkeleton(list, 6);
+      return;
+    }
+    list.className = '';
+    list.innerHTML = '<div class="empty empty-cta"><div class="icon">👗</div><div class="title">Kho trống</div><button class="btn primary" onclick="openEditItem(\'vay\', null)">＋ Thêm váy đầu tiên</button></div>';
+    return;
   }
 
   arr.forEach((v, idx) => {
