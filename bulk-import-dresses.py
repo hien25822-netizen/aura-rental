@@ -159,6 +159,17 @@ for i, d in enumerate(dresses):
 status, body = sb_req('dresses', method='POST', body=insert_rows)
 if status not in (200, 201):
     print(f'   ❌ Insert failed ({status}): {body}')
+    # Try one by one to find which row fails
+    print(f'   🔍 Debug: thử insert từng dòng...')
+    for j, row in enumerate(insert_rows):
+        st, bd = sb_req('dresses', method='POST', body=[row])
+        if st not in (200, 201):
+            print(f'      ❌ Row {j+1}: {row["ma_vay"]} - {row["ten_vay"]} -> {st}: {bd}')
+            if j >= 4:
+                print(f'      ... (dừng debug sau 5 lỗi)')
+                break
+        else:
+            print(f'      ✅ Row {j+1}: {row["ma_vay"]} - {row["ten_vay"]}')
     sys.exit(1)
 else:
     print(f'   ✅ Inserted {len(insert_rows)} váy.')
