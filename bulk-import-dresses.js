@@ -13,15 +13,19 @@
 const fs = require('fs');
 const zlib = require('zlib');
 
-// Load .env file manually (Node < 20 compat)
-const envPath = '.env';
+// Load .env file — use absolute path to avoid cwd issues
+const envPath = '/Users/nguyenhien/Hienrrr/Apps/Aura Rental/.env';
 if (fs.existsSync(envPath)) {
+  console.log('   Loading .env from:', envPath);
   fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
     const [key, ...rest] = line.split('=');
     if (key && rest.length) {
       process.env[key.trim()] = rest.join('=').trim();
     }
   });
+} else {
+  console.error('❌ .env not found at:', envPath);
+  process.exit(1);
 }
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mmiygzcljqayrfomxkkk.supabase.co';
@@ -30,8 +34,13 @@ const DRY = process.argv.includes('--dry-run');
 const XLSX_PATH = process.argv.find(a => a.endsWith('.xlsx')) ||
   '/Users/nguyenhien/Hienrrr/Apps/Aura Rental/inventory.xlsx';
 
+console.log('🚀 Bắt đầu bulk-import-dresses...');
+console.log('   SUPABASE_URL:', SUPABASE_URL);
+console.log('   KEY loaded:', KEY ? '✅ (' + KEY.substring(0, 20) + '...)' : '❌ MISSING');
+console.log('   XLSX_PATH:', XLSX_PATH);
+
 if (!KEY) {
-  console.error('❌ Thiếu SUPABASE_SERVICE_KEY. Tạo file .env cùng thư mục:');
+  console.error('❌ Thiếu SUPABASE_SERVICE_KEY. Kiểm tra file .env:');
   console.error('   SUPABASE_URL=https://mmiygzcljqayrfomxkkk.supabase.co');
   console.error('   SUPABASE_SERVICE_KEY=eyJhbG...');
   process.exit(1);
