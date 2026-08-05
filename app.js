@@ -22,7 +22,7 @@ if (_storedVersion < STORAGE_VERSION) {
  *  Xem hướng dẫn trong README_DEPLOY.md
  * ============================================================ */
 const SYNC = {
- WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbx_R_hOEMbrGnOJPEFQOfQX5DPD6a7VrF6_tfkunyNR/exec',
+ WEB_APP_URL: 'https://script.google.com/macros/s/AKfycbyuiLkssHm3lybpdhvzZR5qaUeaE_DlopF4_M1EVJq0oKH41m_uEeJS_ItHpaJzZi4Giw/exec',
   POLL_MS: 10000,        // pull mỗi 10 giây (real-time)
   DEVICE_ID: 'dev_' + Math.random().toString(36).slice(2, 8),
   LAST_PULL_TS: 'aura_last_pull_ts',
@@ -2853,6 +2853,9 @@ function doSaveRefund(coc, cp, tong, hoan) {
   toast('Đã hoàn cọc', 'success');
   refreshCurView();
 
+  // Sync refund record to Google Sheets immediately
+  if (SYNC.WEB_APP_URL) syncRefundToSheets();
+
   // Show screenshot modal for sharing
   showRefundScreenshot(refundDon, coc, tong, cp, hoan);
 };
@@ -3603,6 +3606,64 @@ function renderRefundOrdersFull() {
     };
   },
 };
+
+function syncRefundToSheets() {
+  if (!refundDon) return;
+  const o = refundDon;
+  const coc = o.tien_coc || o.coc || 0;
+  const cp = o.chiphi || 0;
+  const tong = o.tong_thue || o.tong || 0;
+  const thuctra = coc - cp;
+  const goi = o.Goi_Thue || o.goi || '';
+  const ngayLay = o.Ngay_Lay || o.lay || '';
+  const ngayTra = ngayTraThuc(goi, ngayLay);
+
+  // Build dress/accessory detail string
+  let itemsDetail = '';
+  if (o.dhvs && o.dhvs.length > 0) {
+    itemsDetail = o.dhvs.map(dhv => {
+      const v = vayById.get(dhv.vay || dhv.Ma_Vay);
+      if (!v) return '';
+      return `${v.Ten_Vay || v.ten || ''} (Size ${v.Size || v.size || '-'})`;
+    }).filter(Boolean).join('; ');
+  }
+  const pkIds = o.Ma_PK || o.pks || [];
+  if (pkIds.length > 0) {
+    const pkNames = pkIds.map(pkId => {
+      const p = pkById.get(pkId);
+      return p ? (p.Ten_PK || p.ten || '') : '';
+    }).filter(Boolean);
+    if (pkNames.length) itemsDetail += (itemsDetail ? '; ' : '') + pkNames.join('; ');
+  }
+
+  const record = {
+    Ma_Don: o.Ma_Don || o.id,
+    Insta_Khach: o.Insta_Khach || o.insta || '',
+    SDT: o.SDT || o.sdt || '',
+    Ngay_Lay: ngayLay,
+    Ngay_Tra: ngayTra || '',
+    Goi_Thue: goi,
+    Tien_Coc: coc,
+    Tong_Thue: tong,
+    Chi_Phi: cp,
+    So_Thanh_Toan: thuctra,
+    Hinh_Thuc_Coc: o.Hinh_Thuc_Coc || o.coc || '',
+    Dia_Chi: o.Dia_Chi || o.diachi || '',
+    Su_Kien: o.Su_Kien || o.sukien || '',
+    Ghi_Chu: o.Ghi_Chu || o.ghichu || '',
+    Ngay_Hoan: new Date().toISOString(),
+    Items_Detail: itemsDetail,
+    _ts: Date.now(),
+  };
+
+  fetch(SYNC.WEB_APP_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'pushRefund', record }),
+  }).then(res => res.json()).then(data => {
+    if (data.error) console.warn('pushRefund error:', data.error);
+    else console.log('✅ Refund synced to Sheets');
+  }).catch(err => console.warn('pushRefund failed:', err));
+}
 
 // Listen for storage changes from other tabs/windows (real-time sync)
 window.addEventListener('storage', (e) => {

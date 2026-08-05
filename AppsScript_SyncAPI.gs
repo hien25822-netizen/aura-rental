@@ -35,6 +35,7 @@ const SYNC_CONFIG = {
     DON_HANG: 'DON_HANG',
     DON_HANG_VAY: 'DON_HANG_VAY',
     THANH_TOAN: 'THANH_TOAN',
+    HOAN_COC: 'HOAN_COC',
     FORM: 'FORM',
     SYNC_LOG: 'SYNC_LOG',
   },
@@ -75,6 +76,7 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const action = data.action;
     if (action === 'push') return json_(push_(data.records || [], data.device || 'unknown'));
+    if (action === 'pushRefund') return json_(pushRefund_(data.record || {}));
     if (action === 'pull') return json_(pull_(Number(data.since) || 0));
     return json_({ error: 'Unknown action: ' + action });
   } catch (err) {
@@ -301,13 +303,67 @@ function setupAll() {
 }
 
 /* ============================================================
+ *  PUSH REFUND — ghi 1 phiếu hoàn cọc vào tab HOAN_COC
+ *  Mỗi phiếu hoàn cọc = 1 row mới (append, không merge)
+ * ============================================================ */
+
+function pushRefund_(record) {
+  if (!record || !record.Ma_Don) return { error: 'Missing Ma_Don' };
+
+  const ss = SpreadsheetApp.getActive();
+  let sheet = ss.getSheetByName(SYNC_CONFIG.SHEET_TABS.Hoan_COC);
+  if (!sheet) {
+    sheet = ss.insertSheet(SYNC_CONFIG.SHEET_TABS.Hoan_COC);
+    // Write headers
+    const headers = [
+      'Ma_Don', 'Insta_Khach', 'SDT', 'Ngay_Lay', 'Ngay_Tra', 'Goi_Thue',
+      'Tien_Coc', 'Tong_Thue', 'Chi_Phi', 'So_Thanh_Toan',
+      'Hinh_Thuc_Coc', 'Dia_Chi', 'Su_Kien', 'Ghi_Chu', 'Ngay_Hoan', 'Items_Detail', '_ts'
+    ];
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    // Format header row
+    sheet.getRange(1, 1, 1, headers.length)
+      .setBackground('#dfe6e9')
+      .setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+
+  const headers = sheet.getDataRange().getValues()[0];
+  const row = headers.map(h => {
+    const key = h;
+    if (key === '_ts') return Date.now();
+    return record[key] !== undefined ? record[key] : '';
+  });
+
+  sheet.appendRow(row);
+
+  // Format number columns
+  const lastRow = sheet.getLastRow();
+  const numCols = {
+    'Tien_Coc': 7,
+    'Tong_Thue': 8,
+    'Chi_Phi': 9,
+    'So_Thanh_Toan': 10,
+  };
+  Object.entries(numCols).forEach(([colName, colIdx]) => {
+    const idx = headers.indexOf(colName);
+    if (idx >= 0) {
+      sheet.getRange(lastRow, idx + 1).setNumberFormat('#,##0');
+    }
+  });
+
+  log_('POST', 'app', 'pushRefund', 1, 'OK', record.Ma_Don);
+  return { ok: true, ts: Date.now() };
+}
+
+/* ============================================================
  *  MAINTENANCE
  * ============================================================ */
 
 function getSyncStats() {
   const ss = SpreadsheetApp.getActive();
   const stats = {};
-  ['KHO_VAY', 'PHU_KIEN', 'DON_HANG', 'DON_HANG_VAY', 'THANH_TOAN', 'FORM'].forEach(t => {
+  ['KHO_VAY', 'PHU_KIEN', 'DON_HANG', 'DON_HANG_VAY', 'THANH_TOAN', 'HOAN_COC', 'FORM'].forEach(t => {
     const s = ss.getSheetByName(t);
     stats[t] = s ? s.getLastRow() - 1 : 0;
   });
