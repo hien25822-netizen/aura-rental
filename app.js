@@ -3381,6 +3381,15 @@ let curRefundSearch = '';
 
 function openRefundOrders() {
   curRefundSearch = '';
+  // Reload từ localStorage trước khi hiển thị — đảm bảo luôn thấy đơn vừa hoàn cọc
+  const cached = localStorage.getItem('aura_v8');
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.don) db.don = parsed.don;
+      if (parsed.tt) db.tt = parsed.tt;
+    } catch(e) {}
+  }
   renderRefundOrdersFull();
   openModal('m-refund-orders');
 }
