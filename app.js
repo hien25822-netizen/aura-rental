@@ -2063,7 +2063,8 @@ window.navCalMini = (delta) => {
 window.selectCalMiniDate = (y, m, d) => {
   availState.date = new Date(y, m, d);
   availState.dateStr = isoOf(availState.date);
-  document.getElementById('av-date-display').textContent = `${String(d).padStart(2,'0')}/${String(m+1).padStart(2,'0')}/${y}`;
+  const dateDisplay = document.getElementById('av-date-display');
+  if (dateDisplay) dateDisplay.textContent = `${String(d).padStart(2,'0')}/${String(m+1).padStart(2,'0')}/${y}`;
   renderCalMini();
   renderAvail();
 };
