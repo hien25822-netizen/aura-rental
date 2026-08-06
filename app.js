@@ -1997,7 +1997,9 @@ function renderCalMini() {
   const daysInMonth = new Date(y, m + 1, 0).getDate();
 
   let html = `<div class="cal-mini-header">
+    <button class="cal-mini-nav" onclick="navCalMini(-1)" aria-label="Tháng trước">‹</button>
     <span class="cal-mini-month">Tháng ${m+1}/${y}</span>
+    <button class="cal-mini-nav" onclick="navCalMini(1)" aria-label="Tháng sau">›</button>
   </div>`;
 
   html += '<div class="cal-mini-grid">';
@@ -2043,8 +2045,20 @@ function renderCalMini() {
   }
 
   html += '</div>';
+  html += `<div class="cal-mini-selected">Đang check: <b>${String(d.getDate()).padStart(2,'0')}/${String(m+1).padStart(2,'0')}/${y}</b></div>`;
   cal.innerHTML = html;
 }
+
+window.navCalMini = (delta) => {
+  const nd = new Date(availState.date);
+  nd.setMonth(nd.getMonth() + delta);
+  if (nd < new Date(new Date().getFullYear() - 1, 0, 1)) return;
+  if (nd > new Date(new Date().getFullYear() + 2, 11, 31)) return;
+  availState.date = nd;
+  availState.dateStr = isoOf(nd);
+  renderCalMini();
+  renderAvail();
+};
 
 window.selectCalMiniDate = (y, m, d) => {
   availState.date = new Date(y, m, d);
@@ -2133,7 +2147,11 @@ function renderAvail() {
     const ten = x.Ten_Vay || x.Ten_PK || x.ten;
     const size = x.Size || x.Loai || x.size || '';
     const anh = x.Anh_Vay || x.Anh_PK || x.anh || '';
-    const gia = x.Gia_Thue_1_Ngay || x.Gia_Thue_3_Ngay || x.t1 || x.t3 || 0;
+    const t12 = x.Gia_Thue_12h || x.t12 || 0;
+    const t1 = x.Gia_Thue_1_Ngay || x.t1 || 0;
+    const t3 = x.Gia_Thue_3_Ngay || x.t3 || 0;
+    const goc = x.Gia_Goc || x.goc || 0;
+    const gia = t1 || t3;
 
     // Renter info from pre-built busy data
     let renterInfo = null;
@@ -2148,7 +2166,7 @@ function renderAvail() {
       };
     }
 
-    return { ...x, id, ten, size, anh, gia, busy, renterInfo };
+    return { ...x, id, ten, size, anh, gia, t12, t1, t3, goc, busy, renterInfo };
   }).filter(x => {
     if (!searchTerm) return true;
     return x.ten.toLowerCase().includes(searchTerm);
@@ -2186,11 +2204,19 @@ function renderAvail() {
 
     list.innerHTML = items.map(x => {
       const renterHtml = x.renterInfo ? `
-        <div class="renter-info">
-          <span class="renter-name">👤 ${escapeHtml(x.renterInfo.insta)}</span>
-          <span class="renter-dates">📅 ${isoToVN(x.renterInfo.ngayLay)} → ${x.renterInfo.ngayTra}</span>
+        <div class="avail-item-renter">
+          <span class="renter-name">👤 ${escapeHtml(x.renterInfo.insta)}${x.renterInfo.sdt ? ' · ' + escapeHtml(x.renterInfo.sdt) : ''}</span>
+          <span class="renter-dates">📅 ${isoToVN(x.renterInfo.ngayLay)} → ${x.renterInfo.ngayTra} · ${escapeHtml(x.renterInfo.goi)}</span>
         </div>
       ` : '';
+
+      const priceChips = [
+        x.t12 ? `<div class="price-chip"><span class="pc-lbl">12h</span><span>${fmtVND(x.t12)}</span></div>` : '',
+        x.t1 ? `<div class="price-chip"><span class="pc-lbl">1 ngày</span><span>${fmtVND(x.t1)}</span></div>` : '',
+        x.t3 ? `<div class="price-chip"><span class="pc-lbl">3 ngày</span><span>${fmtVND(x.t3)}</span></div>` : '',
+      ].filter(Boolean).join('');
+
+      const gocRow = x.goc ? `<div class="avail-item-goc">💰 Giá gốc: <b>${fmtVND(x.goc)}</b></div>` : '';
 
       return `
       <div class="avail-item ${x.busy ? 'busy' : 'free'}">
@@ -2199,8 +2225,10 @@ function renderAvail() {
         </div>
         <div class="avail-item-info">
           <div class="avail-item-name">${escapeHtml(x.ten)}</div>
-          <div class="avail-item-meta">${escapeHtml(x.size)} · ${fmtVND(x.gia)}</div>
+          <div class="avail-item-meta">${escapeHtml(x.size || '—')}</div>
+          ${priceChips ? `<div class="avail-item-prices">${priceChips}</div>` : ''}
           ${renterHtml}
+          ${gocRow}
         </div>
         <div class="avail-item-status">
           ${x.busy

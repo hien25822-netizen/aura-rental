@@ -1367,6 +1367,68 @@ input.search::placeholder {
   color: var(--danger);
 }
 
+.avail-item-meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.avail-item-prices {
+  display: flex;
+  gap: 6px;
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.price-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--bg-muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.price-chip .pc-lbl {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 10px;
+}
+
+.avail-item-renter {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border-light);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.avail-item-renter .renter-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.avail-item-renter .renter-dates {
+  color: var(--text-muted);
+}
+
+.avail-item-goc {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.avail-item-goc b {
+  color: var(--gold-700, #9A7532);
+  font-weight: 700;
+}
+
 /* =====================================================
    CALENDAR MINI
    ===================================================== */
@@ -1428,10 +1490,11 @@ input.search::placeholder {
 
 .cal-mini-day {
   aspect-ratio: 1;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--bg-muted);
@@ -1456,6 +1519,10 @@ input.search::placeholder {
   font-weight: 700;
 }
 
+.cal-mini-day.today.has-events::after {
+  background: var(--white);
+}
+
 .cal-mini-day.selected {
   background: var(--primary-100);
   color: var(--primary-700);
@@ -1463,8 +1530,30 @@ input.search::placeholder {
   border: 2px solid var(--primary-500);
 }
 
-.cal-mini-day.has-events {
-  border-bottom: 2px solid var(--primary-400);
+.cal-mini-day.has-events::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.cal-mini-selected {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--border-light);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cal-mini-selected b {
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 /* =====================================================
