@@ -1604,14 +1604,58 @@ $$('#kho-chips button').forEach(b => b.onclick = () => {
 let curPkFilter = '';
 function renderPk() {
   const search = $('#search-pk').value.toLowerCase().trim();
+  const today = new Date();
   let arr = db.pk.slice();
   if (curPkFilter) arr = arr.filter(p => (p.Loai || p.loai) === curPkFilter);
   if (search) arr = arr.filter(p => (p.Ten_PK || p.ten || '').toLowerCase().includes(search));
-  arr.sort((a, b) => (a.Loai || a.loai || '').localeCompare(b.Loai || b.loai || ''));
+
+  const sortVal = (document.getElementById('sort-pk') || {}).value || 'name';
+  arr.sort((a, b) => {
+    if (sortVal === 'name') return (a.Ten_PK || a.ten || '').localeCompare(b.Ten_PK || b.ten || '');
+    if (sortVal === 'popular') return (b.So_Lan_Thue || b.sl || 0) - (a.So_Lan_Thue || a.sl || 0);
+    if (sortVal === 'price-asc') return (a.Gia_Thue_1_Ngay || a.t1 || 0) - (b.Gia_Thue_1_Ngay || b.t1 || 0);
+    if (sortVal === 'price-desc') return (b.Gia_Thue_1_Ngay || b.t1 || 0) - (a.Gia_Thue_1_Ngay || a.t1 || 0);
+    if (sortVal === 'stock-asc') return (a.So_Luong_Tong || 0) - (b.So_Luong_Tong || 0);
+    if (sortVal === 'stock-desc') return (b.So_Luong_Tong || 0) - (a.So_Luong_Tong || 0);
+    return (a.Loai || a.loai || '').localeCompare(b.Loai || b.loai || '');
+  });
 
   const list = $('#pk-list');
   list.innerHTML = '';
   list.className = 'gallery';
+
+  // Build busyPKSet once for today
+  const todayIso = isoOf(today);
+  const todayD = parseD(todayIso);
+  const busyPKSet = new Set();
+  for (const o of (db.don || [])) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : layIso;
+    const layD = parseD(layIso);
+    const traD = parseD(traIso);
+    let busy = false;
+    if (goi === '12h') busy = +todayD === +layD;
+    else busy = todayD >= layD && todayD <= traD;
+    if (!busy) continue;
+    const pks = o.Ma_PK || o.pks || [];
+    for (const pk of pks) {
+      const id = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
+      if (id) busyPKSet.add(id);
+    }
+  }
+
+  const totalAll = (db.pk || []).length;
+  const totalShown = arr.length;
+  const totalBusy = arr.filter(p => busyPKSet.has(p.Ma_PK || p.ma)).length;
+  const countEl = $('#pk-count');
+  if (countEl) {
+    const filterTxt = (search || curPkFilter) ? ` (lọc: ${totalShown})` : '';
+    countEl.textContent = `💍 Tổng: ${totalAll} phụ kiện${filterTxt} · 📦 Đang thuê hôm nay: ${totalBusy}`;
+  }
 
   if (!arr.length) {
     if (!db.pk || db.pk.length === 0) {
@@ -1620,14 +1664,15 @@ function renderPk() {
       return;
     }
     list.className = '';
-    list.innerHTML = '<div class="empty empty-cta"><div class="icon">💍</div><div class="title">Chưa có phụ kiện</div><button class="btn primary" onclick="openEditItem(\'pk\', null)">＋ Thêm phụ kiện đầu tiên</button></div>';
+    list.innerHTML = '<div class="empty empty-cta"><div class="icon">💍</div><div class="title">Kho trống</div><button class="btn primary" onclick="openEditItem(\'pk\', null)">＋ Thêm phụ kiện đầu tiên</button></div>';
     return;
   }
 
   arr.forEach((p, idx) => {
     const ten = p.Ten_PK || p.ten || '';
     const loai = p.Loai || p.loai || '';
-    const sl = p.So_Luong_Tong || p.sl || 1;
+    const sl = p.So_Luong_Tong || p.sl || 0;
+    const busy = busyPKSet.has(p.Ma_PK || p.ma);
     const item = el('div', { class: 'gallery-item stagger-item' });
     if (p._dbId && typeof isRecentRemote === 'function' && isRecentRemote('pk', p._dbId)) {
       item.classList.add('is-new');
@@ -1636,13 +1681,16 @@ function renderPk() {
     const thumb = el('div', { class: 'gallery-thumb' });
     if (p.Anh_PK || p.anh) thumb.appendChild(el('img', { src: p.Anh_PK || p.anh, alt: '' }));
     else thumb.appendChild(el('div', { text: ten[0] || 'P' }));
-    thumb.appendChild(el('div', { class: 'gallery-stock', text: 'x' + sl }));
+    if (sl > 0) thumb.appendChild(el('div', { class: 'gallery-stock', text: 'x' + sl }));
+    if (busy) thumb.appendChild(el('div', { class: 'gallery-busy', text: 'ĐANG THUÊ' }));
     item.appendChild(thumb);
     const info = el('div', { class: 'gallery-info' });
     info.appendChild(el('div', { class: 'gallery-name', text: ten || '—' }));
-    info.appendChild(el('div', { class: 'gallery-sub', text: loai + ' · 1 ngày ' + fmtVND(p.Gia_Thue_1_Ngay || p.t1 || 0) }));
+    info.appendChild(el('div', { class: 'gallery-sub', text: loai + ' · ' + (p.So_Lan_Thue || p.sl || 0) + ' lượt' }));
+    const t1 = p.Gia_Thue_1_Ngay || p.t1 || 0;
+    if (t1) info.appendChild(el('div', { class: 'gallery-goc-price', html: fmtVND(t1) }));
     item.appendChild(info);
-    item.onclick = () => openEditItem('pk', p.Ma_PK || p.ma);
+    item.onclick = () => showPKDetail(p);
     list.appendChild(item);
   });
 }
@@ -1688,6 +1736,37 @@ function showDressDetail(v) {
     <div class="item-detail-actions">
       <button class="btn danger" onclick="closeModal('m-detail');deleteItem('vay','${ma}')">Xóa váy</button>
       <button class="btn primary" onclick="closeModal('m-detail');openEditItem('vay','${ma}')">Sửa váy</button>
+      <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
+    </div>`;
+  openModal('m-detail');
+}
+
+function showPKDetail(p) {
+  const img = p.Anh_PK || p.anh ?
+    `<img src="${p.Anh_PK || p.anh}" alt="${p.Ten_PK}">` :
+    `<div style="font-size:64px">${(p.Ten_PK || 'P')[0]}</div>`;
+  const gc = p.Ghi_Chu ? `<div class="item-detail-desc">${escHtml(p.Ghi_Chu)}</div>` : '';
+  const ma = p.Ma_PK || p.ma || '';
+  const sl = p.So_Luong_Tong || p.sl || 0;
+
+  $('#d-body').innerHTML = `
+    <div class="item-detail-img">${img}</div>
+    <div class="item-detail-info">
+      <div class="item-detail-name">${escHtml(p.Ten_PK || '—')}</div>
+      <div class="item-detail-meta">
+        <span class="item-detail-tag">${escHtml(p.Loai || '—')}</span>
+        ${sl > 0 ? `<span class="item-detail-tag">Tồn: ${sl}</span>` : '<span class="item-detail-tag muted">Chưa nhập số lượng</span>'}
+      </div>
+      <div class="item-detail-prices">
+        <div class="detail-price-row"><span class="detail-lbl">12h</span><span class="detail-val">${fmtVND(p.Gia_Thue_12h)}</span></div>
+        <div class="detail-price-row"><span class="detail-lbl">1 ngày</span><span class="detail-val">${fmtVND(p.Gia_Thue_1_Ngay)}</span></div>
+        <div class="detail-price-row"><span class="detail-lbl">3 ngày</span><span class="detail-val">${fmtVND(p.Gia_Thue_3_Ngay)}</span></div>
+      </div>
+      ${gc}
+    </div>
+    <div class="item-detail-actions">
+      <button class="btn danger" onclick="closeModal('m-detail');deleteItem('pk','${ma}')">Xóa phụ kiện</button>
+      <button class="btn primary" onclick="closeModal('m-detail');openEditItem('pk','${ma}')">Sửa phụ kiện</button>
       <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
     </div>`;
   openModal('m-detail');

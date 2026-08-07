@@ -109,6 +109,14 @@
 <section class="view" id="v-pk">
   <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
     <input class="search" id="search-pk" placeholder="Tìm phụ kiện..." style="flex:1;min-width:0" />
+    <select id="sort-pk" onchange="renderPk()" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);font-size:var(--text-xs);background:var(--bg);color:var(--text);cursor:pointer">
+      <option value="name">📛 Tên A→Z</option>
+      <option value="popular">🔥 Phổ biến</option>
+      <option value="price-asc">💰 Giá ↑</option>
+      <option value="price-desc">💰 Giá ↓</option>
+      <option value="stock-asc">📦 Tồn ↑</option>
+      <option value="stock-desc">📦 Tồn ↓</option>
+    </select>
     <button class="header-btn" onclick="openBulkImportModal()" title="Nhập Excel" style="flex-shrink:0">📥</button>
   </div>
   <div class="chips" id="pk-chips">
@@ -119,6 +127,7 @@
     <button data-loai="Khăn">Khăn</button>
     <button data-loai="Khác">Khác</button>
   </div>
+  <div id="pk-count" style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 4px;font-weight:600"></div>
   <div id="pk-list"></div>
 </section>
 
@@ -262,8 +271,8 @@
     document.head.appendChild(s);
   }
   loadScript('supabase-service.js?v=20', function() {
-    loadScript('app.js?v=41', function() {
-      loadScript('supabase-app.js?v=41', function() {
+    loadScript('app.js?v=42', function() {
+      loadScript('supabase-app.js?v=42', function() {
         console.log('All scripts loaded dynamically');
       });
     });
