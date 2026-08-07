@@ -3586,6 +3586,7 @@ function renderRefundOrdersFull() {
       <input type="text" class="refund-orders-search" id="ro-search"
         placeholder="Tìm tên, SĐT, mã đơn..." value="${escapeHtml(curRefundSearch)}"
         oninput="curRefundSearch = this.value; renderRefundOrdersFull();" />
+      <div class="refund-orders-meta">${arr.length} đơn</div>
     </div>
     <div class="refund-orders-list" id="ro-list"></div>
   `;
@@ -3601,33 +3602,61 @@ function renderRefundOrdersFull() {
     return;
   }
 
+  const groups = new Map();
   arr.forEach(o => {
-    const id = o.Ma_Don || o.id || '';
-    const ins = o.Insta_Khach || o.insta || '—';
-    const sdt = o.SDT || o.sdt || '—';
-    const ngayHoan = o.time_hoan ? isoToVN(o.time_hoan.slice(0, 10)) : isoToVN(o.Ngay_Tao?.slice(0, 10));
-    const thoiGianHoan = o.time_hoan ? o.time_hoan.slice(0, 16).replace('T', ' ') : '';
+    const key = (o.time_hoan || o.Ngay_Tao || '').slice(0, 10) || 'unknown';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(o);
+  });
 
-    const card = document.createElement('div');
-    card.className = 'refund-order-card';
-    card.onclick = () => {
-      closeModal('m-refund-orders');
-      openOrderDetail(id);
-    };
+  const groupKeys = Array.from(groups.keys()).sort((a, b) => b.localeCompare(a));
+  const todayIso = isoOf(new Date());
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayIso = isoOf(yesterday);
 
-    card.innerHTML = `
-      <div class="refund-order-header">
-        <span class="refund-order-id">${id}</span>
-        <span class="refund-order-date">${ngayHoan}</span>
+  groupKeys.forEach(dateKey => {
+    const items = groups.get(dateKey);
+    const dateLabel = dateKey === todayIso ? 'Hôm nay'
+      : dateKey === yesterdayIso ? 'Hôm qua'
+      : isoToVN(dateKey);
+    const weekday = ['CN','T2','T3','T4','T5','T6','T7'][new Date(dateKey).getDay()];
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'refund-date-group';
+    groupEl.innerHTML = `
+      <div class="refund-date-group-head">
+        <span class="refund-date-label">📅 ${dateLabel} <span class="refund-date-weekday">(${weekday})</span></span>
+        <span class="refund-date-count">${items.length} đơn</span>
       </div>
-      <div class="refund-order-customer">${escapeHtml(ins)}</div>
-      <div class="refund-order-phone">📞 ${escapeHtml(sdt)}</div>
-      <div class="refund-order-time">
-        <span>⏰</span>
-        <span>Hoàn lúc: ${thoiGianHoan}</span>
-      </div>
+      <div class="refund-date-group-body"></div>
     `;
-    list.appendChild(card);
+    const bodyEl = groupEl.querySelector('.refund-date-group-body');
+
+    items.forEach(o => {
+      const id = o.Ma_Don || o.id || '';
+      const ins = o.Insta_Khach || o.insta || '—';
+      const sdt = o.SDT || o.sdt || '—';
+      const thoiGianHoan = o.time_hoan ? o.time_hoan.slice(11, 16) : '';
+
+      const card = document.createElement('div');
+      card.className = 'refund-order-card';
+      card.onclick = () => {
+        closeModal('m-refund-orders');
+        openOrderDetail(id);
+      };
+
+      card.innerHTML = `
+        <div class="refund-order-header">
+          <span class="refund-order-id">${id}</span>
+          ${thoiGianHoan ? `<span class="refund-order-time-tag">⏰ ${thoiGianHoan}</span>` : ''}
+        </div>
+        <div class="refund-order-customer">${escapeHtml(ins)}</div>
+        <div class="refund-order-phone">📞 ${escapeHtml(sdt)}</div>
+      `;
+      bodyEl.appendChild(card);
+    });
+
+    list.appendChild(groupEl);
   });
 }const Sync = {
   async ping() {
