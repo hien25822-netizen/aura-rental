@@ -1734,7 +1734,6 @@ function showDressDetail(v) {
       ${gc}
     </div>
     <div class="item-detail-actions">
-      <button class="btn danger" onclick="closeModal('m-detail');deleteItem('vay','${ma}')">Xóa váy</button>
       <button class="btn primary" onclick="closeModal('m-detail');openEditItem('vay','${ma}')">Sửa váy</button>
       <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
     </div>`;
@@ -1765,7 +1764,6 @@ function showPKDetail(p) {
       ${gc}
     </div>
     <div class="item-detail-actions">
-      <button class="btn danger" onclick="closeModal('m-detail');deleteItem('pk','${ma}')">Xóa phụ kiện</button>
       <button class="btn primary" onclick="closeModal('m-detail');openEditItem('pk','${ma}')">Sửa phụ kiện</button>
       <button class="btn secondary" onclick="closeModal('m-detail')">Đóng</button>
     </div>`;
