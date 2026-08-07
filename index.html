@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=34" />
+<link rel="stylesheet" href="styles.css?v=35" />
 </head>
 <body>
 <div class="app">
@@ -107,7 +107,10 @@
 
 <!-- ===== ACCESSORIES (PHỤ KIỆN) ===== -->
 <section class="view" id="v-pk">
-  <input class="search" id="search-pk" placeholder="Tìm phụ kiện..." />
+  <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
+    <input class="search" id="search-pk" placeholder="Tìm phụ kiện..." style="flex:1;min-width:0" />
+    <button class="header-btn" onclick="openBulkImportModal()" title="Nhập Excel" style="flex-shrink:0">📥</button>
+  </div>
   <div class="chips" id="pk-chips">
     <button class="on" data-loai="">Tất cả</button>
     <button data-loai="Giày">Giày</button>
@@ -216,8 +219,9 @@
           <div class="bulk-drop-text">Kéo file Excel vào đây<br><small>hoặc bấm để chọn file</small></div>
         </div>
         <div class="bulk-format-hint">
-          <b>Format cột:</b> Tên váy | Size | Ghi chú | Giá gốc | 12h | 1 ngày | 3 ngày<br>
-          <small>Hỗ trợ file có nhiều dòng header (auto-detect). Cột 12h/1 ngày/3 ngày có thể là công thức — tự động lấy giá trị.</small>
+          <b>Format váy:</b> Tên váy | Size | Ghi chú | Giá gốc | 12h | 1 ngày | 3 ngày<br>
+          <b>Format phụ kiện:</b> Tên PK | Size | 12h | 1 ngày | 3 ngày<br>
+          <small>Tự động nhận diện loại file Excel. Phụ kiện nhập với So_Luong_Tong = 0 (nhập sau trên web).</small>
         </div>
       </div>
       <div id="bulk-step-preview" style="display:none">
@@ -258,8 +262,8 @@
     document.head.appendChild(s);
   }
   loadScript('supabase-service.js?v=20', function() {
-    loadScript('app.js?v=40', function() {
-      loadScript('supabase-app.js?v=40', function() {
+    loadScript('app.js?v=41', function() {
+      loadScript('supabase-app.js?v=41', function() {
         console.log('All scripts loaded dynamically');
       });
     });

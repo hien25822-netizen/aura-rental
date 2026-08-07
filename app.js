@@ -2092,6 +2092,33 @@ window.filterCheckItems = function(search) {
   renderAvail();
 };
 
+function countRentedPK(pkId, dateIso) {
+  if (!db.don) return 0;
+  const dd = parseD(dateIso);
+  let count = 0;
+  for (const o of db.don) {
+    if (isHoanOrder(o)) continue;
+    const layIso = o.Ngay_Lay || o.lay;
+    if (!layIso) continue;
+    const goi = o.Goi_Thue || o.goi;
+    const tra = ngayTraThuc(goi, layIso);
+    const traIso = tra ? isoOf(tra) : layIso;
+    const layD = parseD(layIso);
+    const traD = parseD(traIso);
+    let isActive;
+    if (goi === '12h') {
+      isActive = +dd === +layD;
+    } else {
+      isActive = dd >= layD && dd <= traD;
+    }
+    if (!isActive) continue;
+    const pks = o.Ma_PK || o.pks || [];
+    const pkIds = pks.map(id => typeof id === 'object' ? id.Ma_PK : id).filter(Boolean);
+    if (pkIds.includes(pkId)) count++;
+  }
+  return count;
+}
+
 function renderAvail() {
   const isVay = availState.type === 'vay';
   const arr = isVay ? db.vay : db.pk;
@@ -2219,6 +2246,23 @@ function renderAvail() {
 
       const gocRow = x.goc ? `<div class="avail-item-goc">💰 Giá gốc: <b>${fmtVND(x.goc)}</b></div>` : '';
 
+      // Stock badge for PK
+      let stockBadge = '';
+      if (!isVay) {
+        const total = x.So_Luong_Tong || 0;
+        const rented = countRentedPK(x.id, date);
+        const available = total - rented;
+        if (total === 0) {
+          stockBadge = `<div class="avail-item-stock neutral">⚪ Chưa nhập số lượng</div>`;
+        } else if (available <= 0) {
+          stockBadge = `<div class="avail-item-stock oos">🔴 Hết hàng (0/${total})</div>`;
+        } else if (available < total) {
+          stockBadge = `<div class="avail-item-stock low">🟡 Tồn: ${available}/${total}</div>`;
+        } else {
+          stockBadge = `<div class="avail-item-stock ok">🟢 Tồn: ${available}/${total}</div>`;
+        }
+      }
+
       return `
       <div class="avail-item ${x.busy ? 'busy' : 'free'}">
         <div class="avail-item-img">
@@ -2228,6 +2272,7 @@ function renderAvail() {
           <div class="avail-item-name">${escapeHtml(x.ten)}</div>
           <div class="avail-item-meta">${escapeHtml(x.size || '—')}</div>
           ${priceChips ? `<div class="avail-item-prices">${priceChips}</div>` : ''}
+          ${stockBadge}
           ${renterHtml}
           ${gocRow}
         </div>
@@ -3134,11 +3179,22 @@ function openNewOrder() {
       const imgHtml = anh ? '<img src="' + anh + '">' : '💍';
       const safeTen = escapeHtml(ten);
       const safeLoai = escapeHtml(loai);
-      pkItemsHtml += '<div class="form-new-chip" data-pk="' + id + '" data-ten="' + ten.toLowerCase() + '" onclick="window.toggleNewPK(\'' + id + '\', this)">' +
-        '<input type="checkbox" name="pks" value="' + id + '">' +
+
+      // Check stock: if So_Luong_Tong > 0 and available <= 0, disable chip
+      const total = p.So_Luong_Tong || 0;
+      const today = isoOf(new Date());
+      const rented = countRentedPK(id, today);
+      const available = total - rented;
+      const outOfStock = total > 0 && available <= 0;
+      const disabledAttr = outOfStock ? ' disabled="1"' : '';
+      const chipClass = outOfStock ? 'form-new-chip oos' : 'form-new-chip';
+      const oosNote = outOfStock ? ' <span style="color:#dc2626;font-size:10px">Hết hàng</span>' : '';
+
+      pkItemsHtml += '<div class="' + chipClass + '" data-pk="' + id + '" data-ten="' + ten.toLowerCase() + '" onclick="if(!this.hasAttribute(\'disabled\')) window.toggleNewPK(\'' + id + '\', this)"' + disabledAttr + '>' +
+        '<input type="checkbox" name="pks" value="' + id + '"' + disabledAttr + '>' +
         '<span class="form-new-chip-check"></span>' +
         '<div class="form-new-chip-img">' + imgHtml + '</div>' +
-        '<div class="form-new-chip-name">' + safeTen + '</div>' +
+        '<div class="form-new-chip-name">' + safeTen + oosNote + '</div>' +
         '<div class="form-new-chip-meta">' + safeLoai + '</div>' +
         '</div>';
     });
@@ -4109,7 +4165,9 @@ function loadHtml2Canvas(callback) {
 // ============================
 
 let _bulkParsedDresses = [];
+let _bulkParsedAccessories = [];
 let _bulkStep = 'upload'; // upload | preview | progress | done
+let _bulkImportType = 'dresses'; // 'dresses' | 'accessories'
 
 function openBulkImportModal() {
   _bulkParsedDresses = [];
@@ -4158,17 +4216,71 @@ function handleBulkFile(file) {
   reader.onload = (e) => {
     try {
       const wb = XLSX.read(e.target.result, { type: 'array', cellDates: false });
-      const dresses = parseExcelDresses(wb);
-      if (dresses.length === 0) {
-        toast('Không tìm thấy dữ liệu váy trong file. Kiểm tra lại format cột.', 'error');
-        return;
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+
+      // Detect type: peek at first non-empty row
+      let type = 'dresses';
+      const VALID_DRESS_SIZES = ['S', 'M', 'L', 'XL', 'Free size'];
+      for (let i = 0; i < Math.min(rows.length, 10); i++) {
+        const cells = (rows[i] || []).map(c => String(c || '').trim().toLowerCase());
+        const cellStr = cells.join('|');
+        if (cellStr.includes('tên váy') || cellStr.includes('ten_vay')) {
+          type = 'dresses';
+          break;
+        }
+        if (cellStr.includes('tên pk') || cellStr.includes('ten pk')) {
+          type = 'accessories';
+          break;
+        }
+        // Heuristic: if any cell is a valid dress size, treat as dresses
+        if (cells.some(c => VALID_DRESS_SIZES.map(s => s.toLowerCase()).includes(c))) {
+          type = 'dresses';
+          break;
+        }
+        // If "Tên" column has a non-dress-size value in data rows, it's likely PK
+        const tenIdx = cells.findIndex(c => c === 'tên' || c === 'ten' || c === 'name');
+        if (tenIdx !== -1) {
+          // Check a few data rows
+          for (let j = i + 1; j < Math.min(i + 4, rows.length); j++) {
+            const dataCell = String(rows[j]?.[tenIdx] || '').trim();
+            if (dataCell && !VALID_DRESS_SIZES.map(s => s.toLowerCase()).includes(dataCell.toLowerCase())) {
+              // Data cell is not a dress size, might be PK
+              type = 'accessories';
+              break;
+            }
+          }
+        }
+        if (type === 'accessories') break;
       }
-      _bulkParsedDresses = dresses;
-      previewBulkDresses(dresses);
-      showBulkStep('preview');
-      const btn = document.getElementById('bulk-btn-action');
-      btn.disabled = false;
-      btn.textContent = `Nhập ${dresses.length} váy`;
+
+      _bulkImportType = type;
+
+      if (type === 'accessories') {
+        const accessories = parseExcelAccessories(wb);
+        if (accessories.length === 0) {
+          toast('Không tìm thấy dữ liệu phụ kiện trong file. Kiểm tra lại format cột.', 'error');
+          return;
+        }
+        _bulkParsedAccessories = accessories;
+        previewBulkAccessories(accessories);
+        showBulkStep('preview');
+        const btn = document.getElementById('bulk-btn-action');
+        btn.disabled = false;
+        btn.textContent = `Nhập ${accessories.length} phụ kiện`;
+      } else {
+        const dresses = parseExcelDresses(wb);
+        if (dresses.length === 0) {
+          toast('Không tìm thấy dữ liệu váy trong file. Kiểm tra lại format cột.', 'error');
+          return;
+        }
+        _bulkParsedDresses = dresses;
+        previewBulkDresses(dresses);
+        showBulkStep('preview');
+        const btn = document.getElementById('bulk-btn-action');
+        btn.disabled = false;
+        btn.textContent = `Nhập ${dresses.length} váy`;
+      }
     } catch (err) {
       console.error('Excel parse error:', err);
       toast('Lỗi đọc file: ' + err.message, 'error');
@@ -4257,6 +4369,161 @@ function parseExcelDresses(workbook) {
   }
 
   return dresses;
+}
+
+function parseExcelAccessories(workbook) {
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+
+  if (rows.length < 2) return [];
+
+  // Auto-detect header row — look for "tên pk" or "ten pk"
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const cells = (rows[i] || []).map(c => String(c || '').trim().toLowerCase());
+    if (cells.some(c => c.includes('tên pk') || c.includes('ten pk') || c === 'tên' || c === 'ten')) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) {
+    // Fallback: use first row as header
+    headerIdx = 0;
+  }
+
+  const headers = (rows[headerIdx] || []).map(h => String(h).trim().toLowerCase());
+
+  const ci = {
+    ten: _findCol(headers, ['tên pk', 'ten pk', 'tên', 'ten', 'name']),
+    size: _findCol(headers, ['size', 'kích cỡ', 'loại', 'loai']),
+    t12: _findCol(headers, ['12h', '12 giờ', 'thue 12h', 'gia_12h', 't12', 'giá 12h']),
+    t1: _findCol(headers, ['1 ngày', '1ngay', 't1', 'gia_1_ngay', '1day', 'giá 1 ngày', 'thue 1 ngày']),
+    t3: _findCol(headers, ['3 ngày', '3ngay', 't3', 'gia_3_ngay', '3day', 'giá 3 ngày', 'thue 3 ngày']),
+  };
+
+  if (ci.ten === -1) {
+    throw new Error('Không tìm thấy cột "Tên PK" trong file. Kiểm tra lại header.');
+  }
+
+  const accessories = [];
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const ten = String(row[ci.ten] || '').trim();
+    if (!ten) continue; // skip empty rows
+
+    const loai = ci.size !== -1 ? String(row[ci.size] || '').trim() : '';
+    const t12 = ci.t12 !== -1 ? _parseNum(row[ci.t12]) : 0;
+    const t1 = ci.t1 !== -1 ? _parseNum(row[ci.t1]) : 0;
+    const t3 = ci.t3 !== -1 ? _parseNum(row[ci.t3]) : 0;
+
+    accessories.push({
+      Ma_PK: uid('P'),
+      Ten_PK: ten,
+      Loai: loai,
+      So_Luong_Tong: 0, // user nhập sau trên web
+      Gia_Thue_12h: t12 || 0,
+      Gia_Thue_1_Ngay: t1 || 0,
+      Gia_Thue_3_Ngay: t3 || 0,
+      Anh_PK: '',
+      Ghi_Chu: '',
+      So_Lan_Thue: 0,
+      _ts: Date.now(),
+      _row: i + 1,
+    });
+  }
+
+  return accessories;
+}
+
+function previewBulkAccessories(accessories) {
+  const info = document.getElementById('bulk-preview-info');
+  const table = document.getElementById('bulk-preview-table');
+  const errorsEl = document.getElementById('bulk-errors');
+
+  info.textContent = `Tìm thấy ${accessories.length} phụ kiện`;
+
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = `<tr>
+    <th>#</th><th>Tên PK</th><th>Size</th>
+    <th>12h</th><th>1 ngày</th><th>3 ngày</th>
+  </tr>`;
+
+  tbody.innerHTML = accessories.map((a, i) => `
+    <tr class="ok">
+      <td>${i + 1}</td>
+      <td title="${escHtml(a.Ten_PK)}">${escHtml(a.Ten_PK)}</td>
+      <td>${escHtml(a.Loai || '—')}</td>
+      <td>${fmt(a.Gia_Thue_12h)}</td>
+      <td>${fmt(a.Gia_Thue_1_Ngay)}</td>
+      <td>${fmt(a.Gia_Thue_3_Ngay)}</td>
+    </tr>`).join('');
+
+  errorsEl.style.display = 'none';
+}
+
+async function submitBulkAccessories() {
+  const accessories = _bulkParsedAccessories;
+  if (!accessories.length) return;
+
+  showBulkStep('progress');
+  const btn = document.getElementById('bulk-btn-action');
+  btn.disabled = true;
+
+  const total = accessories.length;
+  let imported = 0;
+  let synced = 0;
+  const progressFill = document.getElementById('bulk-progress-fill');
+  const progressCount = document.getElementById('bulk-progress-count');
+  const progressText = document.getElementById('bulk-progress-text');
+
+  progressText.textContent = `Đang nhập vào localStorage...`;
+
+  // Save to localStorage — upsert by Ma_PK
+  if (!db.pk) db.pk = [];
+  const existingMap = {};
+  db.pk.forEach((p, i) => { if (p.Ma_PK) existingMap[p.Ma_PK] = i; });
+  accessories.forEach(a => {
+    const existingIdx = existingMap[a.Ma_PK];
+    if (existingIdx !== undefined) {
+      db.pk[existingIdx] = a;
+    } else {
+      db.pk.push(a);
+    }
+  });
+  save();
+  imported = total;
+  progressFill.style.width = '50%';
+  progressCount.textContent = `${imported}/${total} đã lưu localStorage`;
+
+  // Sync to Supabase
+  if (window.SupabaseService && window.SupabaseService.isConfigured()) {
+    try {
+      for (const a of accessories) {
+        await window.SupabaseService.createAccessory(a);
+        synced++;
+      }
+    } catch (err) {
+      console.warn('Bulk accessory sync failed:', err);
+    }
+  }
+
+  progressFill.style.width = '100%';
+  progressCount.textContent = `${synced}/${total} đã sync Supabase`;
+
+  setTimeout(() => {
+    showBulkStep('done');
+    btn.disabled = false;
+    btn.textContent = 'Đóng';
+    btn.onclick = closeBulkImportModal;
+    document.getElementById('bulk-done-text').innerHTML =
+      `✅ Đã nhập <b>${imported} phụ kiện</b>!<br>` +
+      (synced ? `🔄 Đã sync <b>${synced}</b> phụ kiện lên Supabase.<br>` : '') +
+      `Kho phụ kiện sẽ được cập nhật tự động.`;
+
+    if (curView === 'v-pk') renderKho();
+  }, 300);
 }
 
 function _findCol(headers, aliases) {
@@ -4354,7 +4621,11 @@ function bulkImportNextStep() {
     return;
   }
   if (_bulkStep === 'preview') {
-    submitBulkDresses();
+    if (_bulkImportType === 'accessories') {
+      submitBulkAccessories();
+    } else {
+      submitBulkDresses();
+    }
     return;
   }
 }

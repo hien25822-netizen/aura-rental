@@ -1429,6 +1429,19 @@ input.search::placeholder {
   font-weight: 700;
 }
 
+.avail-item-stock {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+.avail-item-stock.neutral { background: rgba(107,114,128,.15); color: var(--text-muted); }
+.avail-item-stock.ok { background: rgba(16,185,129,.15); color: #059669; }
+.avail-item-stock.low { background: rgba(245,158,11,.15); color: #d97706; }
+.avail-item-stock.oos { background: rgba(239,68,68,.15); color: #dc2626; }
+
 /* =====================================================
    CALENDAR MINI
    ===================================================== */
