@@ -2016,6 +2016,137 @@ body.auth-locked .app {
   color: var(--text-secondary);
 }
 
+/* ---- Action buttons on day-order-card ---- */
+.day-card-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  flex-shrink: 0;
+  min-width: 40px;
+}
+
+.day-chuan-bi-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-light);
+  background: var(--bg-card);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.day-chuan-bi-btn:hover {
+  border-color: var(--success, #10b981);
+  background: var(--success-bg, #d1fae5);
+  color: var(--success, #10b981);
+  transform: scale(1.1);
+}
+
+.day-chuan-bi-btn.done {
+  border-color: var(--success, #10b981);
+  background: var(--success, #10b981);
+  color: #fff;
+}
+
+.day-chuan-bi-btn.done:hover {
+  background: #059669;
+  border-color: #059669;
+  transform: scale(1.1);
+}
+
+.day-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.day-action-btn:hover {
+  background: var(--primary-50);
+  border-color: var(--primary-300);
+  color: var(--primary-500);
+  transform: scale(1.1);
+}
+
+.day-action-btn.has-note {
+  background: var(--gold-50);
+  border-color: var(--gold-200);
+  color: var(--gold-600);
+}
+
+.day-action-btn.has-note:hover {
+  background: var(--gold-100);
+  border-color: var(--gold-400);
+  color: var(--gold-700);
+}
+
+.note-btn { opacity: 0.4; }
+.note-btn.has-note { opacity: 1; }
+
+/* Card dimmed when chuan bi done */
+.day-order-card.chuan-bi-done {
+  opacity: 0.75;
+}
+
+.day-order-card.chuan-bi-done .day-card-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--success, #10b981);
+}
+
+/* Note preview chip */
+.day-card-note-preview {
+  font-size: 11px;
+  color: var(--gold-600, #b45309);
+  font-style: italic;
+  cursor: pointer;
+  padding: 2px 6px;
+  background: var(--gold-50, #fef3c7);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold-200, #fde68a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  display: inline-block;
+}
+
+.day-card-note-preview:hover {
+  background: var(--gold-100, #fde68a);
+}
+
+/* "Đã chuẩn bị" inline chip */
+.chuan-bi-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.chuan-bi-chip.done {
+  background: var(--success, #10b981);
+  color: #fff;
+}
+
 /* =====================================================
    ORDER DETAIL MODAL — Refined Card Layout (v2)
    ===================================================== */

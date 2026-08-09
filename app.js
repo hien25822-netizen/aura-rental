@@ -1024,8 +1024,13 @@ function DayOrderCard(o, group) {
   const firstDress = firstDressId && vayById.get(firstDressId);
   const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
 
+  // Shortcuts for lay/tra groups
+  const isLayOrTra = group === 'lay' || group === 'tra';
+  const daChuanBi = !!o.Da_Chuan_Bi;
+  const hasNote = !!(o.Ghi_Chu || o.ghichu);
+
   return `
-    <div class="day-order-card" onclick="openOrderDetail('${id}')">
+    <div class="day-order-card ${daChuanBi ? 'chuan-bi-done' : ''}" onclick="openOrderDetail('${id}')">
       <div class="day-card-left" style="background: ${bgColor}; border-left: 3px solid ${color};">
         <div class="day-card-avatar">
           ${dressImg ? `<img src="${dressImg}" alt="">` : `<span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>`}
@@ -1038,10 +1043,12 @@ function DayOrderCard(o, group) {
         </div>
         <div class="day-card-type">
           <span class="day-type-badge day-type-${(o.Trang_Thai_Don || o.type || 'Chốt thuê').replace(/\s/g, '').toLowerCase()}">${o.Trang_Thai_Don || o.type || 'Chốt thuê'}</span>
+          ${isLayOrTra && daChuanBi ? '<span class="chuan-bi-chip done">✓ Đã chuẩn bị</span>' : ''}
         </div>
         ${ins ? `<div class="day-card-customer">${escapeHtml(ins)}</div>` : ''}
         ${sdt ? `<div class="day-card-phone">📞 ${escapeHtml(sdt)}</div>` : ''}
         ${tenPK ? `<div class="day-card-pk">💍 ${escapeHtml(tenPK)}</div>` : ''}
+        ${hasNote ? `<div class="day-card-note-preview" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml((o.Ghi_Chu || o.ghichu || '').substring(0, 40))}${((o.Ghi_Chu || o.ghichu || '').length > 40 ? '…' : '')}</div>` : ''}
         <div class="day-card-dates">
           <span class="date-chip">
             <span style="color:${color}">📦</span>
@@ -1053,6 +1060,15 @@ function DayOrderCard(o, group) {
           </span>
         </div>
       </div>
+      ${isLayOrTra ? `
+      <div class="day-card-actions" onclick="event.stopPropagation()">
+        <button class="day-action-btn note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh" ${hasNote ? '' : 'style="opacity:0.4"'}>
+          ${hasNote ? '📝' : '📋'}
+        </button>
+        <button class="day-chuan-bi-btn ${daChuanBi ? 'done' : ''}" onclick="toggleChuanBi('${id}')" title="${daChuanBi ? 'Bỏ đánh dấu đã chuẩn bị' : 'Đánh dấu đã chuẩn bị'}">
+          ${daChuanBi ? '✓' : '○'}
+        </button>
+      </div>` : ''}
     </div>
   `;
 }
@@ -1260,6 +1276,57 @@ window.setOrderType = async (id, type) => {
   closeModal('m-confirm');
   toast('Đã đổi loại đơn → ' + type, 'success');
 };
+
+// Toggle "Đã chuẩn bị" for an order — used in calendar day view
+window.toggleChuanBi = async (id) => {
+  const o = db.don.find(x => (x.Ma_Don || x.id) === id);
+  if (!o) return;
+  o.Da_Chuan_Bi = !o.Da_Chuan_Bi;
+  o._ts = Date.now();
+  save();
+  syncOrderToSupabase(o);
+  refreshCurView();
+  if (o.Da_Chuan_Bi) toast('✓ Đã đánh dấu đã chuẩn bị', 'success');
+};
+
+// Quick note shortcut — prompt inline, save to Ghi_Chu
+window.openQuickNote = (id) => {
+  const o = db.don.find(x => (x.Ma_Don || x.id) === id);
+  if (!o) return;
+  const current = o.Ghi_Chu || o.ghichu || '';
+  const note = prompt('📝 Ghi chú nhanh cho đơn ' + id + ':\n(Nhấn OK để lưu, Cancel để bỏ)', current);
+  if (note === null) return; // Cancelled
+  o.Ghi_Chu = note;
+  o._ts = Date.now();
+  save();
+  syncOrderToSupabase(o);
+  refreshCurView();
+  if (note) toast('Đã lưu ghi chú', 'success');
+  else toast('Đã xóa ghi chú', 'success');
+};
+
+// Sync one order to Supabase (shared helper)
+async function syncOrderToSupabase(o) {
+  if (typeof window.SupabaseService === 'undefined' || !window.SupabaseService.isConfigured?.()) return;
+  try {
+    const payload = { ...o, pks: o.Ma_PK };
+    if (o._dbId) {
+      await window.SupabaseService.updateOrder(o._dbId, payload);
+    } else {
+      const existing = await window.SupabaseService.findOrderByMaDon(o.Ma_Don);
+      if (existing) {
+        o._dbId = existing._dbId;
+        await window.SupabaseService.updateOrder(existing._dbId, payload);
+      } else {
+        const created = await window.SupabaseService.createOrder(payload);
+        if (created?._dbId) o._dbId = created._dbId;
+      }
+    }
+  } catch (err) {
+    console.warn('Supabase sync failed:', err);
+    markOrderPendingSync(o);
+  }
+}
 
 /* ============================================================
  *  ORDERS VIEW
