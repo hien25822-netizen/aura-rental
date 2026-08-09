@@ -2648,12 +2648,14 @@ function openEditOrder(id) {
         <!-- Dresses -->
         <div class="eo-section">
           <div class="eo-section-title">👗 Váy thuê</div>
+          <input type="text" class="eo-search" id="eo-vay-search" placeholder="🔍 Tìm váy..." oninput="filterEoPills('eo-vays', this.value)" />
           <div id="eo-vays" class="eo-pills-container">${vayPills}</div>
         </div>
 
         <!-- Accessories -->
         <div class="eo-section">
           <div class="eo-section-title">💍 Phụ kiện</div>
+          <input type="text" class="eo-search" id="eo-pk-search" placeholder="🔍 Tìm phụ kiện..." oninput="filterEoPills('eo-pks', this.value)" />
           <div id="eo-pks" class="eo-pills-container">${pkPills}</div>
         </div>
 
@@ -2688,6 +2690,33 @@ function openEditOrder(id) {
     document.querySelectorAll('.eo-type-pill').forEach(p => p.classList.remove('selected'));
     el.classList.add('selected');
     document.querySelector('#eo-form [name="type"]').value = el.dataset.type;
+  };
+
+  // Filter pills for vay/pk search
+  window.filterEoPills = function(containerId, q) {
+    q = (q || '').toLowerCase().trim();
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const pills = container.querySelectorAll('.eo-pill');
+    let visible = 0;
+    pills.forEach(p => {
+      const text = (p.textContent || '').toLowerCase();
+      const match = !q || text.includes(q);
+      p.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    let empty = container.parentElement.querySelector('.eo-pills-empty');
+    if (visible === 0 && q) {
+      if (!empty) {
+        empty = document.createElement('div');
+        empty.className = 'eo-empty eo-pills-empty';
+        empty.textContent = 'Không tìm thấy';
+        container.appendChild(empty);
+      }
+      empty.style.display = '';
+    } else if (empty) {
+      empty.style.display = 'none';
+    }
   };
 
   closeModal('m-detail');
