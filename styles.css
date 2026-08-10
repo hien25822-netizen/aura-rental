@@ -844,19 +844,24 @@ input.search::placeholder {
 }
 
 .olc-avatar {
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--primary-100), var(--primary-50));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--primary-600);
   overflow: hidden;
   flex-shrink: 0;
   box-shadow: var(--shadow-xs);
+}
+
+.olc-avatar span {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .olc-avatar img {
@@ -870,15 +875,14 @@ input.search::placeholder {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 4px;
 }
 
 /* Row 1: Dress name + Package badge */
-.olc-header {
+.olc-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
 }
 
 .olc-name {
@@ -899,119 +903,110 @@ input.search::placeholder {
   letter-spacing: 0.03em;
 }
 
-/* Row 2: Customer info */
-.olc-customer-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+.olc-row-meta .type-pill {
+  font-size: 10px;
+  padding: 3px 10px;
 }
 
-.olc-customer {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--text-primary);
+.olc-row-meta .olc-id {
+  margin-left: auto;
 }
 
-.olc-phone {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-}
-
-/* Row 3: Date range */
-.olc-dates {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
+.olc-id {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .olc-date-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 4px 10px;
-  background: var(--bg-muted);
-  border-radius: var(--radius-md);
-}
-
-.olc-date-chip.lay {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--cal-green);
-}
-
-.olc-date-chip.tra {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--cal-red);
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .olc-date-sep {
   color: var(--text-muted);
-  font-weight: 500;
+  font-size: 12px;
 }
 
-/* Type pill - NỔI BẬT */
-.olc-type-row {
+.olc-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  cursor: pointer;
+  padding: 2px 8px;
+  background: var(--gold-50, #FBF7EF);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold-200, #EBD9AF);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+
+.olc-note:hover {
+  background: var(--gold-100, #F5ECD7);
+}
+
+.olc-note.olc-note-empty {
+  color: var(--text-muted);
+  font-style: normal;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-medium);
+}
+
+.olc-note-empty:hover {
+  color: var(--gold-700, #7A5F30);
+  border-color: var(--gold-400, #C9A86C);
+  background: var(--gold-50, #FBF7EF);
+}
+
+.olc-actions {
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.olc-note-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  font-size: 13px;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--border-light);
-}
-
-.olc-type-label {
-  font-size: 11px;
-  font-weight: 600;
+  justify-content: center;
+  transition: all 0.15s ease;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  opacity: 0.45;
 }
 
-.olc-type-row .type-pill {
-  font-size: 11px;
-  padding: 6px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  border: none;
-  font-family: var(--font-body);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  transition: all 0.2s ease;
-  position: relative;
+.olc-note-btn:hover {
+  background: var(--gold-50);
+  border-color: var(--gold-300);
+  color: var(--gold-600);
+  transform: scale(1.1);
+  opacity: 1;
 }
 
-.olc-type-row .type-pill::after {
-  content: '✎';
-  position: absolute;
-  right: -8px;
-  top: -6px;
-  font-size: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+.olc-note-btn.has-note {
+  background: var(--gold-50);
+  border-color: var(--gold-200);
+  color: var(--gold-600);
+  opacity: 1;
 }
 
-.olc-type-row .type-pill:hover::after {
-  opacity: 0.6;
-}
-
-.olc-type-row .type-pill:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
-.olc-type-row .type-pill:active {
-  transform: scale(0.95);
-}
-
-.olc-id {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
+.olc-note-btn.has-note:hover {
+  background: var(--gold-100);
+  border-color: var(--gold-400);
+  color: var(--gold-700);
 }
 
 /* =====================================================
@@ -1893,8 +1888,9 @@ body.auth-locked .app {
 }
 
 .day-card-left {
-  width: 64px;
-  height: 80px;
+  width: 56px;
+  align-self: stretch;
+  min-height: 56px;
   flex-shrink: 0;
   border-radius: var(--radius-lg);
   display: flex;
@@ -1930,12 +1926,6 @@ body.auth-locked .app {
   justify-content: center;
 }
 
-.day-card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
 .day-card-name {
   font-size: var(--text-base);
   font-weight: 700;
@@ -1964,10 +1954,6 @@ body.auth-locked .app {
   color: var(--warning);
 }
 
-.day-card-type {
-  display: flex;
-}
-
 .day-type-badge {
   font-size: 10px;
   font-weight: 700;
@@ -1986,34 +1972,70 @@ body.auth-locked .app {
 .day-type-badge.day-type-chờxácnhận { background: #10b981; color: #fff; }
 .day-type-badge:not([class*="day-type-"]) { background: var(--gold-100); color: var(--gold-700); }
 
-.day-card-customer {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.day-card-phone, .day-card-pk {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.day-card-dates {
+.day-card-row {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
-  margin-top: 4px;
-  flex-wrap: wrap;
 }
 
-.day-card-dates .date-chip {
+.day-card-row-top {
+  gap: var(--space-2);
+}
+
+.day-card-row-meta {
+  gap: var(--space-1);
+}
+
+.day-card-row-dates {
+  gap: 5px;
+}
+
+.day-date-chip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-muted);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.day-date-sep {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.day-card-note {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  cursor: pointer;
+  padding: 2px 8px;
+  background: var(--gold-50, #FBF7EF);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--gold-200, #EBD9AF);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+}
+
+.day-card-note:hover {
+  background: var(--gold-100, #F5ECD7);
+}
+
+.day-card-note.day-card-note-empty {
+  color: var(--text-muted);
+  font-style: normal;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-medium);
+}
+
+.day-card-note-empty:hover {
+  color: var(--gold-700, #7A5F30);
+  border-color: var(--gold-400, #C9A86C);
+  background: var(--gold-50, #FBF7EF);
 }
 
 /* ---- Action buttons on day-order-card ---- */
@@ -2023,9 +2045,10 @@ body.auth-locked .app {
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: var(--space-2);
+  padding-left: var(--space-1);
+  padding-right: var(--space-1);
   flex-shrink: 0;
-  min-width: 40px;
+  min-width: 36px;
 }
 
 .day-chuan-bi-btn {
@@ -2063,9 +2086,9 @@ body.auth-locked .app {
   transform: scale(1.1);
 }
 
-.day-action-btn {
-  width: 28px;
-  height: 28px;
+.day-note-btn {
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
   background: var(--bg-card);
@@ -2077,29 +2100,29 @@ body.auth-locked .app {
   transition: all 0.15s ease;
   color: var(--text-muted);
   flex-shrink: 0;
+  opacity: 0.45;
 }
 
-.day-action-btn:hover {
-  background: var(--primary-50);
-  border-color: var(--primary-300);
-  color: var(--primary-500);
+.day-note-btn:hover {
+  background: var(--gold-50);
+  border-color: var(--gold-300);
+  color: var(--gold-600);
   transform: scale(1.1);
+  opacity: 1;
 }
 
-.day-action-btn.has-note {
+.day-note-btn.has-note {
   background: var(--gold-50);
   border-color: var(--gold-200);
   color: var(--gold-600);
+  opacity: 1;
 }
 
-.day-action-btn.has-note:hover {
+.day-note-btn.has-note:hover {
   background: var(--gold-100);
   border-color: var(--gold-400);
   color: var(--gold-700);
 }
-
-.note-btn { opacity: 0.4; }
-.note-btn.has-note { opacity: 1; }
 
 /* Card dimmed when chuan bi done */
 .day-order-card.chuan-bi-done {
@@ -2109,27 +2132,6 @@ body.auth-locked .app {
 .day-order-card.chuan-bi-done .day-card-name {
   text-decoration: line-through;
   text-decoration-color: var(--success, #10b981);
-}
-
-/* Note preview chip */
-.day-card-note-preview {
-  font-size: 11px;
-  color: var(--gold-600, #b45309);
-  font-style: italic;
-  cursor: pointer;
-  padding: 2px 6px;
-  background: var(--gold-50, #fef3c7);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--gold-200, #fde68a);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 200px;
-  display: inline-block;
-}
-
-.day-card-note-preview:hover {
-  background: var(--gold-100, #fde68a);
 }
 
 /* "Đã chuẩn bị" inline chip */
@@ -2848,8 +2850,8 @@ textarea:focus {
   }
 
   .olc-avatar {
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
   }
 
   /* Modal centered */
@@ -3883,6 +3885,66 @@ h1, h2, h3, h4 {
   align-items: center;
   gap: 8px;
   background: rgba(0,0,0,0.01);
+}
+
+/* Minimal body — chỉ thời gian + ghi chú */
+.order-card-body-minimal {
+  padding: 8px 14px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-card-note {
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-muted);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  line-height: 1.4;
+  border-left: 3px solid var(--gold-400);
+}
+
+/* Minimal foot — mã đơn + nút ghi chú */
+.order-card-foot-minimal {
+  justify-content: space-between;
+}
+
+.order-card-ma {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.order-note-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  color: var(--text-secondary);
+  padding: 0;
+}
+.order-note-btn:hover {
+  background: var(--gold-100);
+  border-color: var(--gold-400);
+  transform: scale(1.05);
+}
+.order-note-btn:active {
+  transform: scale(0.95);
+}
+.order-note-btn.has-note {
+  background: var(--gold-100);
+  border-color: var(--gold-400);
+  color: var(--gold-700);
 }
 
 /* Type pill — nổi bật, clickable để đổi loại đơn */

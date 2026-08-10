@@ -50,6 +50,12 @@ const isoOf = d => {
 };
 
 var db = JSON.parse(localStorage.getItem(STORE) || '{}');
+// Normalize: đôi khi dhvs/pks bị Apps Script serialize thành chuỗi Java
+// ("[Ljava.lang.Object;@...") thay vì mảng — chuyển về [] để không crash
+(db.don || []).forEach(o => {
+  if (o.dhvs !== undefined && !Array.isArray(o.dhvs)) o.dhvs = [];
+  if (o.pks !== undefined && !Array.isArray(o.pks)) o.pks = [];
+});
 // Debounce utility — prevents search re-render on every keystroke
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 // Migration: convert old lowercase format → PascalCase
@@ -1001,74 +1007,61 @@ function DayOrderCard(o, group) {
   const tenVay = donTenVay(o);
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
-  const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-    const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
-    const p = key ? pkById.get(key) : null;
-    return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
-  }).filter(Boolean).join(', ') || '';
-  const sdt = o.SDT || o.sdt || '';
-  const ins = o.Insta_Khach || o.insta || '';
   const goi = o.Goi_Thue || o.goi || '';
   const is12h = goi === '12h';
   const ngayLay = o.Ngay_Lay || o.lay || '';
   const ngayTra = ngayTraThuc(goi, ngayLay);
   const ngayLayDisplay = isoToVN(ngayLay);
   const ngayTraDisplay = ngayTra ? isoToVN(ngayTra) : '—';
+  const type = o.Trang_Thai_Don || o.type || 'Chốt thuê';
 
   // Color based on group
   const color = group === 'lay' ? '#10b981' : group === 'tra' ? '#ef4444' : '#f59e0b';
   const bgColor = group === 'lay' ? '#d1fae5' : group === 'tra' ? '#fee2e2' : '#fef3c7';
 
-  // Dress image
-  const firstDressId = (o.dhvs || [])[0]?.vay;
-  const firstDress = firstDressId && vayById.get(firstDressId);
-  const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
-
   // Shortcuts for lay/tra groups
   const isLayOrTra = group === 'lay' || group === 'tra';
   const daChuanBi = !!o.Da_Chuan_Bi;
   const hasNote = !!(o.Ghi_Chu || o.ghichu);
+  const noteText = o.Ghi_Chu || o.ghichu || '';
 
   return `
     <div class="day-order-card ${daChuanBi ? 'chuan-bi-done' : ''}" onclick="openOrderDetail('${id}')">
       <div class="day-card-left" style="background: ${bgColor}; border-left: 3px solid ${color};">
         <div class="day-card-avatar">
-          ${dressImg ? `<img src="${dressImg}" alt="">` : `<span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>`}
+          <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
         </div>
       </div>
       <div class="day-card-content">
-        <div class="day-card-header">
+        <div class="day-card-row day-card-row-top">
           <span class="day-card-name">${escapeHtml(tenVayPrimary)}${tenVayMore}</span>
           ${is12h ? '<span class="day-card-badge badge-12h">12h</span>' : `<span class="day-card-badge">${goi}</span>`}
         </div>
-        <div class="day-card-type">
-          <span class="day-type-badge day-type-${(o.Trang_Thai_Don || o.type || 'Chốt thuê').replace(/\s/g, '').toLowerCase()}">${o.Trang_Thai_Don || o.type || 'Chốt thuê'}</span>
+        <div class="day-card-row day-card-row-meta">
+          <span class="day-type-badge day-type-${type.replace(/\s/g, '').toLowerCase()}">${type}</span>
           ${isLayOrTra && daChuanBi ? '<span class="chuan-bi-chip done">✓ Đã chuẩn bị</span>' : ''}
         </div>
-        ${ins ? `<div class="day-card-customer">${escapeHtml(ins)}</div>` : ''}
-        ${sdt ? `<div class="day-card-phone">📞 ${escapeHtml(sdt)}</div>` : ''}
-        ${tenPK ? `<div class="day-card-pk">💍 ${escapeHtml(tenPK)}</div>` : ''}
-        ${hasNote ? `<div class="day-card-note-preview" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml((o.Ghi_Chu || o.ghichu || '').substring(0, 40))}${((o.Ghi_Chu || o.ghichu || '').length > 40 ? '…' : '')}</div>` : ''}
-        <div class="day-card-dates">
-          <span class="date-chip">
-            <span style="color:${color}">📦</span>
-            Lấy: ${ngayLayDisplay}
-          </span>
-          <span class="date-chip">
-            <span style="color:${color}">🔄</span>
-            Trả: ${ngayTraDisplay}
-          </span>
+        <div class="day-card-row day-card-row-dates">
+          <span class="day-date-chip"><span style="color:${color}">📦</span> ${ngayLayDisplay}</span>
+          <span class="day-date-sep">→</span>
+          <span class="day-date-chip"><span style="color:${color}">🔄</span> ${ngayTraDisplay}</span>
         </div>
+        ${hasNote ? `<div class="day-card-note" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml(noteText)}</div>` : `<div class="day-card-note day-card-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')">+ Thêm ghi chú</div>`}
       </div>
       ${isLayOrTra ? `
       <div class="day-card-actions" onclick="event.stopPropagation()">
-        <button class="day-action-btn note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh" ${hasNote ? '' : 'style="opacity:0.4"'}>
-          ${hasNote ? '📝' : '📋'}
-        </button>
         <button class="day-chuan-bi-btn ${daChuanBi ? 'done' : ''}" onclick="toggleChuanBi('${id}')" title="${daChuanBi ? 'Bỏ đánh dấu đã chuẩn bị' : 'Đánh dấu đã chuẩn bị'}">
           ${daChuanBi ? '✓' : '○'}
         </button>
-      </div>` : ''}
+        <button class="day-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
+          ${hasNote ? '📝' : '📋'}
+        </button>
+      </div>` : `
+      <div class="day-card-actions" onclick="event.stopPropagation()">
+        <button class="day-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
+          ${hasNote ? '📝' : '📋'}
+        </button>
+      </div>`}
     </div>
   `;
 }
@@ -1131,20 +1124,14 @@ const OrderCard = {
     const firstDress = firstDressId && vayById.get(firstDressId);
     const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
 
+    const id = o.Ma_Don || o.id || '';
+    const hasNote = !!(o.Ghi_Chu || o.ghichu);
+    const noteText = o.Ghi_Chu || o.ghichu || '';
+
     const card = el('div', { class: 'order-card', style: dimmed });
-    card.onclick = () => openOrderDetail(o.Ma_Don || o.id);
+    card.onclick = () => openOrderDetail(id);
 
-    // Status bar ở trên card
-    if (statusBarColor) {
-      const statusBar = el('div', {
-        class: 'order-status-bar',
-        style: `background: ${statusBarColor}; padding: 6px 14px; display: flex; align-items: center; gap: 6px;`
-      });
-      statusBar.innerHTML = `<span style="font-size:14px">${statusIcon}</span><span style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.05em">${statusText}</span>`;
-      card.appendChild(statusBar);
-    }
-
-    // HEAD: dress image + name + package badge
+    // HEAD: dress image + name + package badge + type
     const head = el('div', { class: 'order-card-head' });
     const imgWrap = el('div', { class: 'dress-img' });
     if (dressImg) imgWrap.appendChild(el('img', { src: dressImg, alt: '' }));
@@ -1152,7 +1139,6 @@ const OrderCard = {
     head.appendChild(imgWrap);
     const headText = el('div', { class: 'head-text' });
     headText.appendChild(el('div', { class: 'dress-name', text: tenVayPrimary + tenVayMore }));
-    // Type badge + gói badge trên cùng dòng
     const headMeta = el('div', { class: 'head-meta' });
     const typeBadge = el('span', {
       class: 'type-pill-inline ' + typeClass(type),
@@ -1168,37 +1154,32 @@ const OrderCard = {
     head.appendChild(headText);
     card.appendChild(head);
 
-    // BODY: tên khách + SĐT + thời gian theo format mới
-    const body = el('div', { class: 'order-card-body' });
-    body.appendChild(rowKV('Khách', custName, true));
-    body.appendChild(rowKV('SĐT', sdt, true));
+    // BODY: ngày lấy → ngày trả + ghi chú
+    const body = el('div', { class: 'order-card-body order-card-body-minimal' });
     body.appendChild(rowKV('Thời gian', `${isoToVN(ngayLay)} → ${isoToVN(ngayTra)}`, false));
+    if (hasNote) {
+      body.appendChild(el('div', { class: 'order-card-note', text: `📝 ${noteText}` }));
+    }
     card.appendChild(body);
 
-    // FOOT: type pill lớn, nổi bật + clickable
-    const foot = el('div', { class: 'order-card-foot' });
-    const typeLabel = el('span', {
-      style: 'font-size:11px;color:#86868b;font-weight:500;margin-right:auto'
-    });
-    typeLabel.textContent = 'Loại:';
-    foot.appendChild(typeLabel);
+    // FOOT: mã đơn + nút ghi chú nhanh (không có nút tick ở tab Đơn)
+    const foot = el('div', { class: 'order-card-foot order-card-foot-minimal' });
 
-    const typePill = el('button', {
-      class: 'type-pill ' + typeClass(type),
+    const maSpan = el('span', { class: 'order-card-ma', text: id });
+    foot.appendChild(maSpan);
+
+    const noteBtn = el('button', {
+      class: 'order-note-btn' + (hasNote ? ' has-note' : ''),
+      title: 'Ghi chú nhanh',
     });
-    typePill.type = 'button';
-    typePill.innerHTML = `<span style="font-size:10px;margin-right:4px">✏️</span>${type}`;
-    typePill.onclick = (e) => {
+    noteBtn.type = 'button';
+    noteBtn.textContent = hasNote ? '📝' : '📋';
+    noteBtn.onclick = (e) => {
       e.stopPropagation();
-      openTypePicker(o);
+      openQuickNote(id);
     };
-    foot.appendChild(typePill);
+    foot.appendChild(noteBtn);
 
-    if (o.Ma_Don || o.id) {
-      const maSpan = el('span', { style: 'font-size:11px;color:#86868b;font-family:var(--font-mono);margin-left:8px' });
-      maSpan.textContent = o.Ma_Don || o.id;
-      foot.appendChild(maSpan);
-    }
     card.appendChild(foot);
     return card;
   }
@@ -1450,20 +1431,16 @@ function OrderCardListCard(o, refDate = new Date()) {
   const tenVay = donTenVay(o);
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
   const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
-  const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
-    const key = typeof pk === 'object' ? (pk.Ma_PK || '') : pk;
-    const p = key ? pkById.get(key) : null;
-    return p ? (p.Ten_PK || p.ten) : (typeof pk === 'object' ? pk.Ten_PK : '?');
-  }).filter(Boolean).join(', ') || '';
   const ngayLay = o.Ngay_Lay || o.lay || '';
   const ngayLayDisplay = isoToVN(ngayLay);
   const goi = o.Goi_Thue || o.goi || '';
   const ngayTra = ngayTraThuc(goi, ngayLay);
   const ngayTraDisplay = ngayTra ? isoToVN(ngayTra) : '—';
-  const sdt = o.SDT || o.sdt || '';
-  const ins = o.Insta_Khach || o.insta || '';
   const is12h = goi === '12h';
   const status = statusForDate(o, isoOf(refDate));
+  const type = o.Trang_Thai_Don || o.type || 'Chốt thuê';
+  const hasNote = !!(o.Ghi_Chu || o.ghichu);
+  const noteText = o.Ghi_Chu || o.ghichu || '';
 
   // Status color
   let statusColor = '#f59e0b';
@@ -1471,13 +1448,6 @@ function OrderCardListCard(o, refDate = new Date()) {
   else if (status === 'Tra_Ve') statusColor = '#ef4444';
   else if (status === 'Qua_Han') statusColor = '#6b7280';
   else if (is12h && status === 'Dang_Thue_12h') statusColor = 'linear-gradient(135deg, #10b981, #ef4444)';
-
-  // Dress image
-  const firstDressId = (o.dhvs || [])[0]?.vay;
-  const firstDress = firstDressId && vayById.get(firstDressId);
-  const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
-
-  const type = o.Trang_Thai_Don || o.type || 'Chốt thuê';
 
   const card = document.createElement('div');
   card.className = `order-list-card status-${status === 'Chuan_Bi' ? 'lay' : status === 'Tra_Ve' ? 'tra' : status === 'Qua_Han' ? 'qua' : 'dang'}`;
@@ -1488,33 +1458,30 @@ function OrderCardListCard(o, refDate = new Date()) {
 
   card.innerHTML = `
     <div class="olc-main-row">
-      <div class="olc-avatar">
-        ${dressImg ? `<img src="${dressImg}" alt="">` : `<span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>`}
+      <div class="olc-avatar" style="background: ${statusColor};">
+        <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
       </div>
       <div class="olc-content">
-        <div class="olc-header">
+        <div class="olc-row olc-row-top">
           <span class="olc-name">${escapeHtml(tenVayPrimary)}${tenVayMore}</span>
           ${is12h ? '<span class="olc-badge">12h</span>' : `<span class="olc-badge">${goi}</span>`}
         </div>
-        <div class="olc-customer-row">
-          ${ins ? `<span class="olc-customer">${escapeHtml(ins)}</span>` : ''}
-          ${sdt ? `<span class="olc-phone">${escapeHtml(sdt)}</span>` : ''}
+        <div class="olc-row olc-row-meta">
+          <button type="button" class="type-pill ${typeClass(type)}" data-type-btn>${type}</button>
+          <span class="olc-id">${id}</span>
         </div>
+        <div class="olc-row olc-row-dates">
+          <span class="olc-date-chip"><span style="color:${statusColor}">📦</span> ${ngayLayDisplay}</span>
+          <span class="olc-date-sep">→</span>
+          <span class="olc-date-chip"><span style="color:${statusColor}">🔄</span> ${ngayTraDisplay}</span>
+        </div>
+        ${hasNote ? `<div class="olc-note" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml(noteText)}</div>` : `<div class="olc-note olc-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')">+ Thêm ghi chú</div>`}
       </div>
-    </div>
-    <div class="olc-dates">
-      <span class="olc-date-chip lay">
-        <span>📦</span> ${ngayLayDisplay}
-      </span>
-      <span class="olc-date-sep">→</span>
-      <span class="olc-date-chip tra">
-        <span>🔄</span> ${ngayTraDisplay}
-      </span>
-    </div>
-    <div class="olc-type-row">
-      <span class="olc-type-label">Loại:</span>
-      <button type="button" class="type-pill ${typeClass(type)}" data-type-btn>${type}</button>
-      <span class="olc-id">${id}</span>
+      <div class="olc-actions" onclick="event.stopPropagation()">
+        <button class="olc-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
+          ${hasNote ? '📝' : '📋'}
+        </button>
+      </div>
     </div>
   `;
 
