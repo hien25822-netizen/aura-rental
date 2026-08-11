@@ -1046,22 +1046,14 @@ function DayOrderCard(o, group) {
           <span class="day-date-sep">→</span>
           <span class="day-date-chip"><span style="color:${color}">🔄</span> ${ngayTraDisplay}</span>
         </div>
-        ${hasNote ? `<div class="day-card-note" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml(noteText)}</div>` : `<div class="day-card-note day-card-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')">+ Thêm ghi chú</div>`}
+        ${hasNote ? `<div class="day-card-note">📝 ${escapeHtml(noteText)}</div>` : ''}
       </div>
       ${isLayOrTra ? `
       <div class="day-card-actions" onclick="event.stopPropagation()">
         <button class="day-chuan-bi-btn ${daChuanBi ? 'done' : ''}" onclick="toggleChuanBi('${id}')" title="${daChuanBi ? 'Bỏ đánh dấu đã chuẩn bị' : 'Đánh dấu đã chuẩn bị'}">
           ${daChuanBi ? '✓' : '○'}
         </button>
-        <button class="day-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
-          ${hasNote ? '📝' : '📋'}
-        </button>
-      </div>` : `
-      <div class="day-card-actions" onclick="event.stopPropagation()">
-        <button class="day-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
-          ${hasNote ? '📝' : '📋'}
-        </button>
-      </div>`}
+      </div>` : ''}
     </div>
   `;
 }
@@ -1167,18 +1159,6 @@ const OrderCard = {
 
     const maSpan = el('span', { class: 'order-card-ma', text: id });
     foot.appendChild(maSpan);
-
-    const noteBtn = el('button', {
-      class: 'order-note-btn' + (hasNote ? ' has-note' : ''),
-      title: 'Ghi chú nhanh',
-    });
-    noteBtn.type = 'button';
-    noteBtn.textContent = hasNote ? '📝' : '📋';
-    noteBtn.onclick = (e) => {
-      e.stopPropagation();
-      openQuickNote(id);
-    };
-    foot.appendChild(noteBtn);
 
     card.appendChild(foot);
     return card;
