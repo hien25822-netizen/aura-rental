@@ -1977,10 +1977,11 @@ body.auth-locked .app {
   background: var(--gold-50, #FBF7EF);
   border-radius: var(--radius-sm);
   border: 1px solid var(--gold-200, #EBD9AF);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: inline-block;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: block;
 }
 
 .day-card-note:hover {

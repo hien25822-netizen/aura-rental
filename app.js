@@ -1046,7 +1046,10 @@ function DayOrderCard(o, group) {
           <span class="day-date-sep">→</span>
           <span class="day-date-chip"><span style="color:${color}">🔄</span> ${ngayTraDisplay}</span>
         </div>
-        ${hasNote ? `<div class="day-card-note">📝 ${escapeHtml(noteText)}</div>` : ''}
+        ${hasNote
+          ? `<div class="day-card-note" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để sửa">📝 ${escapeHtml(noteText)}</div>`
+          : `<div class="day-card-note day-card-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để thêm ghi chú">+ Thêm ghi chú</div>`
+        }
       </div>
       ${isLayOrTra ? `
       <div class="day-card-actions" onclick="event.stopPropagation()">
