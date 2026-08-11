@@ -957,6 +957,21 @@ input.search::placeholder {
   background: var(--gold-100, #F5ECD7);
 }
 
+.olc-note.olc-note-empty {
+  color: var(--text-muted);
+  font-style: normal;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border-medium);
+  text-align: left;
+}
+
+.olc-note-empty:hover {
+  color: var(--gold-700, #7A5F30);
+  border-color: var(--gold-400, #C9A86C);
+  background: var(--gold-50, #FBF7EF);
+}
+
 /* =====================================================
    INVENTORY — Product Grid
    ===================================================== */
