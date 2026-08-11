@@ -938,75 +938,23 @@ input.search::placeholder {
   color: var(--text-secondary);
   font-style: italic;
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 4px 8px;
   background: var(--gold-50, #FBF7EF);
   border-radius: var(--radius-sm);
   border: 1px solid var(--gold-200, #EBD9AF);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: inline-block;
+  display: block;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+  line-height: 1.4;
+  align-self: stretch;
 }
 
 .olc-note:hover {
   background: var(--gold-100, #F5ECD7);
-}
-
-.olc-note.olc-note-empty {
-  color: var(--text-muted);
-  font-style: normal;
-  background: transparent;
-  border-style: dashed;
-  border-color: var(--border-medium);
-}
-
-.olc-note-empty:hover {
-  color: var(--gold-700, #7A5F30);
-  border-color: var(--gold-400, #C9A86C);
-  background: var(--gold-50, #FBF7EF);
-}
-
-.olc-actions {
-  align-self: center;
-  flex-shrink: 0;
-}
-
-.olc-note-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-light);
-  background: var(--bg-card);
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  opacity: 0.45;
-}
-
-.olc-note-btn:hover {
-  background: var(--gold-50);
-  border-color: var(--gold-300);
-  color: var(--gold-600);
-  transform: scale(1.1);
-  opacity: 1;
-}
-
-.olc-note-btn.has-note {
-  background: var(--gold-50);
-  border-color: var(--gold-200);
-  color: var(--gold-600);
-  opacity: 1;
-}
-
-.olc-note-btn.has-note:hover {
-  background: var(--gold-100);
-  border-color: var(--gold-400);
-  color: var(--gold-700);
 }
 
 /* =====================================================

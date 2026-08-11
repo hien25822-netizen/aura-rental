@@ -1455,12 +1455,7 @@ function OrderCardListCard(o, refDate = new Date()) {
           <span class="olc-date-sep">→</span>
           <span class="olc-date-chip"><span style="color:${statusColor}">🔄</span> ${ngayTraDisplay}</span>
         </div>
-        ${hasNote ? `<div class="olc-note" onclick="event.stopPropagation();openQuickNote('${id}')">📝 ${escapeHtml(noteText)}</div>` : `<div class="olc-note olc-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')">+ Thêm ghi chú</div>`}
-      </div>
-      <div class="olc-actions" onclick="event.stopPropagation()">
-        <button class="olc-note-btn ${hasNote ? 'has-note' : ''}" onclick="openQuickNote('${id}')" title="Ghi chú nhanh">
-          ${hasNote ? '📝' : '📋'}
-        </button>
+        ${hasNote ? `<div class="olc-note" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để sửa">📝 ${escapeHtml(noteText)}</div>` : ''}
       </div>
     </div>
   `;
