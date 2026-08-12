@@ -901,6 +901,8 @@ input.search::placeholder {
   color: var(--gold-800);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .olc-row-meta .type-pill {
@@ -1926,13 +1928,13 @@ body.auth-locked .app {
   letter-spacing: 0.04em;
 }
 .day-type-badge.day-type-chotthue,
-.day-type-badge.day-type-chốtthuê { background: #8b5cf6; color: #fff; }
-.day-type-badge.day-type-fitting { background: #60a5fa; color: #fff; }
-.day-type-badge.day-type-fittingxa { background: #059669; color: #fff; }
+.day-type-badge.day-type-chốtthuê { background: #10b981; color: #fff; }
+.day-type-badge.day-type-fitting { background: #f59e0b; color: #fff; }
+.day-type-badge.day-type-fittingxa { background: #ea580c; color: #fff; }
 .day-type-badge.day-type-datship,
 .day-type-badge.day-type-đặtship { background: #dc2626; color: #fff; }
 .day-type-badge.day-type-choxacnhan,
-.day-type-badge.day-type-chờxácnhận { background: #10b981; color: #fff; }
+.day-type-badge.day-type-chờxácnhận { background: #38bdf8; color: #fff; }
 .day-type-badge:not([class*="day-type-"]) { background: var(--gold-100); color: var(--gold-700); }
 
 .day-card-row {
@@ -3961,6 +3963,28 @@ h1, h2, h3, h4 {
   background: #38bdf8;
   color: #fff;
 }
+
+/* Quick Note Modal */
+.qn-label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
+.qn-textarea {
+  width: 100%; min-height: 120px; resize: vertical;
+  padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+  font-size: var(--text-sm); font-family: inherit;
+  background: var(--surface); color: var(--text);
+  box-sizing: border-box; outline: none;
+}
+.qn-textarea:focus { border-color: var(--accent); }
+.qn-footer { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+
+/* Phone call button */
+.call-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 14px;
+  text-decoration: none; cursor: pointer; border: none;
+  transition: opacity 0.2s; flex-shrink: 0; margin-left: 6px;
+}
+.call-btn:hover { opacity: 0.85; }
 
 /* =====================================================
    REFUND MODAL — Apple-style redesign (enhanced)

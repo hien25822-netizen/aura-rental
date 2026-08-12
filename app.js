@@ -418,7 +418,7 @@ function statusForDate(don, dateIso) {
 }
 
 function donTenVay(don) {
-  if (!don || !don.dhvs) return [];
+  if (!don || !don.dhvs || !Array.isArray(don.dhvs)) return [];
   return don.dhvs.map(x => {
     // Prefer already-resolved name (from Supabase booking sync)
     if (x.Ten_Vay) return x.Ten_Vay;
@@ -431,7 +431,7 @@ function donTenVay(don) {
 function donTienThueVay(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
-  return (don.dhvs || []).reduce((s, x) => {
+  return ((don.dhvs || []).filter ? (don.dhvs || []) : []).reduce((s, x) => {
     const key = x.Ma_Vay || x.vay;
     const v = key ? vayById.get(key) : null;
     return s + (v ? Number(v[g] || 0) : 0);
@@ -440,7 +440,8 @@ function donTienThueVay(don) {
 function donTienThuePK(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
-  return (don.Ma_PK || don.pks || []).reduce((s, id) => {
+  const pkArr = ((don.Ma_PK || don.pks || []).filter ? (don.Ma_PK || don.pks || []) : []);
+  return pkArr.reduce((s, id) => {
     const key = typeof id === 'object' ? (id.Ma_PK || '') : id;
     const p = key ? pkById.get(key) : null;
     return s + (p ? Number(p[g] || 0) : 0);
@@ -468,7 +469,7 @@ window.debugIsHoan = isHoanOrder;
 function isVayBusy(ma, dateIso, goi) {
   return db.don.some(o => {
     if (isHoanOrder(o)) return false;
-    const has = (o.dhvs || []).some(x => (x.vay || x.Ma_Vay) === ma);
+    const has = ((o.dhvs || []).some ? (o.dhvs || []) : []).some(x => (x.vay || x.Ma_Vay) === ma);
     if (!has) return false;
     const lay = parseD(o.Ngay_Lay);
     const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
@@ -1038,7 +1039,7 @@ function DayOrderCard(o, group) {
           ${is12h ? '<span class="day-card-badge badge-12h">12h</span>' : `<span class="day-card-badge">${goi}</span>`}
         </div>
         <div class="day-card-row day-card-row-meta">
-          <span class="day-type-badge day-type-${type.replace(/\s/g, '').toLowerCase()}">${type}</span>
+          <span class="day-type-badge day-type-${type.replace(/\s/g, '').toLowerCase()}" data-type-btn onclick="event.stopPropagation();openTypePickerById('${id}')">${type}</span>
           ${isLayOrTra && daChuanBi ? '<span class="chuan-bi-chip done">✓ Đã chuẩn bị</span>' : ''}
         </div>
         <div class="day-card-row day-card-row-dates">
@@ -1185,9 +1186,13 @@ function typeClass(type) {
   return 'ChotThue';
 }
 
+window.openTypePickerById = (id) => {
+  const o = db.don.find(x => (x.Ma_Don || x.id) === id);
+  if (o) openTypePicker(o);
+};
 function openTypePicker(o) {
   const id = o.Ma_Don || o.id;
-  const types = ['Chốt thuê', 'Fitting', 'Fitting xa', 'Đặt ship'];
+  const types = ['Chốt thuê', 'Fitting', 'Fitting xa', 'Đặt ship', 'Chờ xác nhận'];
   const choices = types.map(t => {
     const sel = (o.Trang_Thai_Don || o.type) === t;
     return `<div class="kv" style="cursor:pointer;padding:12px;background:${sel ? 'var(--green-soft)' : 'var(--surface)'};border-radius:8px;margin-bottom:6px" onclick="setOrderType('${id}','${t}')">
@@ -1258,15 +1263,32 @@ window.openQuickNote = (id) => {
   const o = db.don.find(x => (x.Ma_Don || x.id) === id);
   if (!o) return;
   const current = o.Ghi_Chu || o.ghichu || '';
-  const note = prompt('📝 Ghi chú nhanh cho đơn ' + id + ':\n(Nhấn OK để lưu, Cancel để bỏ)', current);
-  if (note === null) return; // Cancelled
+  $('#qn-body').innerHTML = `
+    <div class="sheet-head"><h2>📝 Ghi chú — ${id}</h2><button class="sheet-close" data-close>×</button></div>
+    <div class="sheet-body">
+      <div class="qn-label">Nội dung ghi chú</div>
+      <textarea id="qn-textarea" class="qn-textarea" placeholder="Nhập ghi chú...">${escapeHtml(current)}</textarea>
+      <div class="qn-footer">
+        <button class="btn secondary" data-close>Hủy</button>
+        <button class="btn primary" onclick="saveQuickNote('${id}')">Lưu</button>
+      </div>
+    </div>
+  `;
+  openModal('m-quick-note');
+  setTimeout(() => $('#qn-textarea')?.focus(), 100);
+};
+
+window.saveQuickNote = (id) => {
+  const o = db.don.find(x => (x.Ma_Don || x.id) === id);
+  if (!o) return;
+  const note = $('#qn-textarea')?.value || '';
   o.Ghi_Chu = note;
   o._ts = Date.now();
   save();
   syncOrderToSupabase(o);
+  closeAllModals();
   refreshCurView();
-  if (note) toast('Đã lưu ghi chú', 'success');
-  else toast('Đã xóa ghi chú', 'success');
+  toast(note ? 'Đã lưu ghi chú' : 'Đã xóa ghi chú', 'success');
 };
 
 // Sync one order to Supabase (shared helper)
@@ -1305,6 +1327,14 @@ function renderOrders() {
   const todayIso = isoOf(today);
 
   let arr = db.don.slice();
+  // Deduplicate by Ma_Don/id — keep first occurrence
+  const seen = new Set();
+  arr = arr.filter(o => {
+    const key = o.Ma_Don || o.id || '';
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   // Filter theo ngày lấy (Ngay_Lay) — null = hiện tất cả (trừ đã hoàn)
   if (curOrderDate) {
     arr = arr.filter(o => !isHoanOrder(o) && (o.Ngay_Lay || o.lay) === curOrderDate);
@@ -1462,6 +1492,28 @@ function OrderCardListCard(o, refDate = new Date()) {
       </div>
     </div>
   `;
+
+  // Extra dress images when order has 2+ dresses
+  if (tenVay.length > 1) {
+    const dhvs = o.dhvs || o.dresses || [];
+    const extraWrap = document.createElement('div');
+    extraWrap.style.cssText = 'display:flex;gap:4px;padding:0 12px 8px 52px;flex-wrap:wrap';
+    dhvs.slice(1).forEach(item => {
+      const v = vayById.get(item.vay || item.Ma_Vay);
+      if (!v) return;
+      const imgSrc = v.Anh_Vay || v.anh || '';
+      const div = document.createElement('div');
+      div.style.cssText = 'width:36px;height:36px;border-radius:6px;overflow:hidden;background:#f3f4f6;flex-shrink:0';
+      if (imgSrc) {
+        div.innerHTML = `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover" alt="" />`;
+      } else {
+        div.textContent = (v.Ten_Vay || v.ten || '?')[0].toUpperCase();
+        div.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#666';
+      }
+      extraWrap.appendChild(div);
+    });
+    card.appendChild(extraWrap);
+  }
 
   // Type pill click → mở picker
   const typeBtn = card.querySelector('[data-type-btn]');
@@ -2391,7 +2443,7 @@ function openOrderDetail(id) {
 
   const tenVay = donTenVay(o);
   const tenVayStr = tenVay.join(', ') || '—';
-  const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
+  const tenPK = ((o.Ma_PK || o.pks || []).filter ? (o.Ma_PK || o.pks || []) : []).map(pk => {
     const p = pkById.get(pk);
     return p ? (p.Ten_PK || p.ten) : '?';
   }).join(', ') || '—';
@@ -2453,7 +2505,10 @@ function openOrderDetail(id) {
         </div>
         <div class="od-row">
           <span class="label">Số điện thoại</span>
-          <span class="value">${escapeHtml(o.SDT || o.sdt || '—')}</span>
+          <span class="value">
+            <a href="tel:${String(o.SDT || o.sdt || '').replace(/\s/g,'')}" class="call-btn" title="Gọi ngay">📲</a>
+            <span style="margin-left:2px">${escapeHtml(String(o.SDT || o.sdt || '—'))}</span>
+          </span>
         </div>
       </div>
 

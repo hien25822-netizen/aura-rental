@@ -197,6 +197,7 @@
 <div class="modal" id="m-login"><div class="login-card" id="login-body"></div></div>
 <div class="modal" id="m-refund-orders"><div class="sheet" id="ro-body"></div></div>
 <div class="modal" id="m-refund-screenshot"><div class="sheet" id="rss-body"></div></div>
+<div class="modal" id="m-quick-note"><div class="sheet" id="qn-body"></div></div>
 
 <!-- Supabase Configuration -->
 <script>
@@ -271,8 +272,8 @@
     document.head.appendChild(s);
   }
   loadScript('supabase-service.js?v=20', function() {
-    loadScript('app.js?v=45', function() {
-      loadScript('supabase-app.js?v=45', function() {
+    loadScript('app.js?v=50', function() {
+      loadScript('supabase-app.js?v=50', function() {
         console.log('All scripts loaded dynamically');
       });
     });
