@@ -1469,10 +1469,30 @@ function OrderCardListCard(o, refDate = new Date()) {
   }
   card.onclick = () => openOrderDetail(id);
 
+  // Build extra dress avatars (2nd, 3rd, ...) shown stacked right below avatar #1
+  let extraAvatarsHTML = '';
+  if (tenVay.length > 1) {
+    const dhvs = o.dhvs || o.dresses || [];
+    const extras = dhvs.slice(1).map(item => {
+      const v = vayById.get(item.vay || item.Ma_Vay);
+      if (!v) return '';
+      const imgSrc = v.Anh_Vay || v.anh || '';
+      const letter = (v.Ten_Vay || v.ten || '?')[0].toUpperCase();
+      if (imgSrc) {
+        return `<div class="olc-avatar olc-avatar-sm" style="background: ${statusColor};"><img src="${escapeHtml(imgSrc)}" alt="" /></div>`;
+      }
+      return `<div class="olc-avatar olc-avatar-sm" style="background: ${statusColor};"><span>${letter}</span></div>`;
+    }).join('');
+    extraAvatarsHTML = `<div class="olc-extras">${extras}</div>`;
+  }
+
   card.innerHTML = `
     <div class="olc-main-row">
-      <div class="olc-avatar" style="background: ${statusColor};">
-        <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+      <div class="olc-avatar-col">
+        <div class="olc-avatar" style="background: ${statusColor};">
+          <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+        </div>
+        ${extraAvatarsHTML}
       </div>
       <div class="olc-content">
         <div class="olc-row olc-row-top">
@@ -1492,28 +1512,6 @@ function OrderCardListCard(o, refDate = new Date()) {
       </div>
     </div>
   `;
-
-  // Extra dress images when order has 2+ dresses
-  if (tenVay.length > 1) {
-    const dhvs = o.dhvs || o.dresses || [];
-    const extraWrap = document.createElement('div');
-    extraWrap.style.cssText = 'display:flex;gap:4px;padding:0 12px 8px 52px;flex-wrap:wrap';
-    dhvs.slice(1).forEach(item => {
-      const v = vayById.get(item.vay || item.Ma_Vay);
-      if (!v) return;
-      const imgSrc = v.Anh_Vay || v.anh || '';
-      const div = document.createElement('div');
-      div.style.cssText = 'width:36px;height:36px;border-radius:6px;overflow:hidden;background:#f3f4f6;flex-shrink:0';
-      if (imgSrc) {
-        div.innerHTML = `<img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover" alt="" />`;
-      } else {
-        div.textContent = (v.Ten_Vay || v.ten || '?')[0].toUpperCase();
-        div.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#666';
-      }
-      extraWrap.appendChild(div);
-    });
-    card.appendChild(extraWrap);
-  }
 
   // Type pill click → mở picker
   const typeBtn = card.querySelector('[data-type-btn]');

@@ -843,6 +843,29 @@ input.search::placeholder {
   gap: var(--space-3);
 }
 
+.olc-avatar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+
+.olc-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.olc-avatar.olc-avatar-sm {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  opacity: 0.85;
+}
+
 .olc-avatar {
   width: 48px;
   height: 48px;
