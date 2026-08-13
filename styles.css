@@ -2243,16 +2243,22 @@ body.auth-locked .app {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: transform 0.1s ease-out, border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
   color: var(--text-muted);
   flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .day-chuan-bi-btn:hover {
   border-color: var(--success, #10b981);
   background: var(--success-bg, #d1fae5);
   color: var(--success, #10b981);
-  transform: scale(1.1);
+}
+
+.day-chuan-bi-btn:active {
+  transform: scale(0.9);
+  transition-duration: 80ms;
 }
 
 .day-chuan-bi-btn.done {
@@ -2261,10 +2267,10 @@ body.auth-locked .app {
   color: #fff;
 }
 
-.day-chuan-bi-btn.done:hover {
+.day-chuan-bi-btn.done:active {
   background: #059669;
   border-color: #059669;
-  transform: scale(1.1);
+  transform: scale(0.9);
 }
 
 .day-note-btn {
