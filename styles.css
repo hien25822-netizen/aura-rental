@@ -4862,60 +4862,59 @@ h1, h2, h3, h4 {
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
-/* Logo Aura Rental — serif, wide tracking, grad subtle */
+/* Logo Aura Rental — serif Didot-style, refined tracking, no italic */
 .rss-logo {
   display: inline-block;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
 .rss-logo-text {
-  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
-  font-size: 32px;
+  font-family: 'Playfair Display', 'Cormorant Garamond', 'Times New Roman', serif;
+  font-size: 30px;
   font-weight: 500;
-  font-style: italic;
-  letter-spacing: 0.18em;
-  background: linear-gradient(135deg, #1a4f7c 0%, #4a9e7c 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  color: #0f172a;
   text-transform: uppercase;
   line-height: 1;
+  -webkit-font-smoothing: antialiased;
 }
 
 .rss-divider {
-  width: 36px;
+  width: 32px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.18), transparent);
-  margin: 14px auto 14px;
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.22), transparent);
+  margin: 14px auto 12px;
 }
 
 .rss-header-meta {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .rss-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  color: #1e40af;
+  color: #475569;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
 }
 
 .rss-code {
-  font-size: 12px;
-  font-weight: 600;
-  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
   font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
-  letter-spacing: 0.04em;
-  background: rgba(255,255,255,0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 4px 12px;
+  letter-spacing: 0.06em;
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  padding: 5px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 /* Sections */
