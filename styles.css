@@ -383,16 +383,16 @@ nav.bottom button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px var(--space-2);
+  gap: 3px;
+  padding: 5px var(--space-2);
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-tertiary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   min-height: 56px;
   position: relative;
-  transition: color 150ms ease, transform 100ms ease-out;
+  transition: background 150ms ease, color 150ms ease, transform 100ms ease-out;
 }
 
 nav.bottom button .ico {
@@ -408,36 +408,25 @@ nav.bottom button small {
   line-height: 1.2;
 }
 
-/* Active state — Apple blue tint */
+/* Active state — Apple filled pill (not dot) */
 nav.bottom button.active {
   color: var(--primary-600);
+  background: var(--primary-100);
 }
 
 nav.bottom button.active .ico {
-  transform: scale(1.08) translateY(-1px);
+  transform: scale(1.05);
 }
 
 nav.bottom button.active small {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--primary-700);
 }
 
-/* Active dot indicator — Apple style */
-nav.bottom button.active::before {
-  content: '';
-  position: absolute;
-  top: 5px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 18px;
-  height: 3px;
-  background: var(--primary-600);
-  border-radius: var(--radius-full);
-}
-
-/* Hover — subtle bg (Apple tab bars only tint on press, not hover) */
+/* Hover — subtle bg */
 nav.bottom button:hover:not(.active) {
   color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 nav.bottom button:active {
@@ -977,8 +966,8 @@ input.search::placeholder {
 }
 
 .olc-avatar.olc-avatar-sm {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-md);
   font-size: 14px;
   box-shadow: var(--shadow-xs);
