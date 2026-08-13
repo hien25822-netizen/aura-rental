@@ -1566,6 +1566,11 @@ input.search::placeholder {
   box-shadow: var(--shadow-sm), 0 0 0 0.5px rgba(0,0,0,0.06);
   margin-bottom: var(--space-4);
   z-index: 1;
+  /* Lock width so day cells stay stable regardless of results below */
+  width: 100%;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .cal-mini-header {
@@ -1606,7 +1611,7 @@ input.search::placeholder {
 .cal-mini-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 4px;
 }
 
 .cal-mini-head {
@@ -1619,7 +1624,6 @@ input.search::placeholder {
 }
 
 .cal-mini-day {
-  aspect-ratio: 1;
   position: relative;
   display: flex;
   align-items: center;
@@ -1630,7 +1634,10 @@ input.search::placeholder {
   background: var(--bg-muted);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 150ms ease;
+  /* Locked square via padding-bottom (avoids aspect-ratio when parent shifts) */
+  aspect-ratio: 1 / 1;
+  min-width: 0;
 }
 
 .cal-mini-day:hover {
