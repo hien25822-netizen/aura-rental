@@ -4814,18 +4814,25 @@ h1, h2, h3, h4 {
 /* =====================================================
    REFUND SCREENSHOT CARD — Apple-style receipt card
    ===================================================== */
+/* =====================================================
+   REFUND SCREENSHOT CARD — Apple-style
+   ===================================================== */
 .refund-card {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 28px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 40px rgba(15, 23, 42, 0.08),
+    0 24px 60px rgba(15, 23, 42, 0.06);
   margin: 0 auto;
-  font-family: var(--font-body);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
   width: 360px;
   max-width: 100%;
   box-sizing: border-box;
-  /* Ensure consistent rendering for capture */
   position: relative;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Modal body for screenshot - no extra padding */
@@ -4840,65 +4847,99 @@ h1, h2, h3, h4 {
   max-height: none !important;
   background: transparent !important;
   max-width: 380px !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
 }
 
-/* Header với logo */
+/* Header — soft glass blue */
 .rss-header {
-  background: linear-gradient(135deg, #daf0fe 0%, #b8e4fc 100%);
-  padding: var(--space-6);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.0) 100%),
+    linear-gradient(135deg, #eaf6fd 0%, #d4ebfa 100%);
+  padding: 28px var(--space-5) 22px;
   text-align: center;
   position: relative;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
-.rss-logo-wrap {
-  margin-bottom: var(--space-3);
+/* Logo Aura Rental — serif, wide tracking, grad subtle */
+.rss-logo {
+  display: inline-block;
+  margin-bottom: 10px;
 }
 
 .rss-logo-text {
-  font-size: 24px;
-  font-weight: 800;
-  color: #1a1a1a;
-  letter-spacing: -0.02em;
-  text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+  font-family: 'Cormorant Garamond', 'Times New Roman', serif;
+  font-size: 32px;
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.18em;
+  background: linear-gradient(135deg, #1a4f7c 0%, #4a9e7c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.rss-divider {
+  width: 36px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.18), transparent);
+  margin: 14px auto 14px;
+}
+
+.rss-header-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .rss-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1a1a1a;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: var(--space-2);
+  letter-spacing: 0.18em;
 }
 
 .rss-code {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: #555;
-  font-family: var(--font-mono);
+  color: #475569;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  letter-spacing: 0.04em;
   background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   padding: 4px 12px;
   border-radius: 999px;
-  display: inline-block;
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 /* Sections */
 .rss-section {
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid #f0f0f0;
+  padding: 20px var(--space-5);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.rss-section:last-of-type {
+  border-bottom: none;
 }
 
 .rss-section-payment {
-  padding-bottom: var(--space-3);
+  padding-bottom: 16px;
+  background: #fafbfc;
 }
 
 .rss-section-title {
   font-size: 11px;
-  font-weight: 700;
-  color: #86868b;
+  font-weight: 600;
+  color: #6b7280;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: var(--space-3);
+  letter-spacing: 0.1em;
+  margin-bottom: 14px;
 }
 
 /* Rows */
@@ -4906,58 +4947,103 @@ h1, h2, h3, h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-2) 0;
+  padding: 7px 0;
+  gap: 12px;
 }
 
 .rss-label {
-  font-size: 14px;
-  color: #666;
+  font-size: 13px;
+  color: #6b7280;
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .rss-value {
   font-size: 14px;
-  color: #1a1a1a;
+  color: #0f172a;
   font-weight: 600;
   text-align: right;
+  letter-spacing: -0.01em;
 }
 
 /* Items */
 .rss-items {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 6px;
 }
 
 .rss-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: var(--space-2) 0;
+  align-items: baseline;
+  padding: 6px 0;
+  gap: 12px;
+}
+
+/* Backwards-compat: r-item uses inline spans (older code path) */
+.r-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  gap: 12px;
+}
+
+.r-item-name, .r-item-price {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.r-item-price {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.r-item-size {
+  font-size: 12px;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-left: 4px;
 }
 
 .rss-item-name {
   font-size: 14px;
-  color: #1a1a1a;
+  color: #0f172a;
   font-weight: 500;
+  letter-spacing: -0.01em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rss-item-size {
   font-size: 12px;
-  color: #86868b;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-left: 4px;
 }
 
 .rss-item-price {
   font-size: 14px;
-  color: #1a1a1a;
+  color: #0f172a;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .rss-empty {
   font-size: 14px;
-  color: #86868b;
+  color: #9ca3af;
   text-align: center;
-  padding: var(--space-3);
+  padding: 12px 0;
+  font-weight: 500;
 }
 
 /* Payment rows */
@@ -4965,18 +5051,22 @@ h1, h2, h3, h4 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-2) 0;
+  padding: 6px 0;
 }
 
 .rss-pay-label {
   font-size: 14px;
-  color: #555;
+  color: #475569;
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .rss-pay-value {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .rss-green {
@@ -4987,62 +5077,82 @@ h1, h2, h3, h4 {
   color: #ef4444;
 }
 
-/* Total */
+.rss-muted {
+  color: #94a3b8;
+}
+
+/* Total — prominent Apple-style card */
 .rss-total {
-  padding: var(--space-5);
+  padding: 18px 22px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0 var(--space-3) var(--space-3);
-  border-radius: 16px;
+  margin: 0 16px 20px;
+  border-radius: 18px;
+  position: relative;
 }
 
 .rss-total-pos {
-  background: linear-gradient(135deg, #E8F8EE, #D4F1DF);
-  border: 1px solid #A7F3D0;
+  background:
+    linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 2px 8px rgba(16, 185, 129, 0.08);
 }
 
 .rss-total-neg {
-  background: linear-gradient(135deg, #FFE9E5, #FFD4CC);
-  border: 1px solid #FECACA;
+  background:
+    linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 2px 8px rgba(239, 68, 68, 0.08);
 }
 
 .rss-total-label {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: #0f172a;
+  letter-spacing: -0.01em;
 }
 
 .rss-total-amount {
-  font-size: 24px;
-  font-weight: 800;
-  color: #1a1a1a;
-  letter-spacing: -0.02em;
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Actions */
 .rss-actions {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  background: #fafafa;
-  border-top: 1px solid #f0f0f0;
+  gap: 10px;
+  padding: 16px 20px 20px;
+  background: #ffffff;
+  border-top: 1px solid rgba(15, 23, 42, 0.04);
 }
 
 .rss-btn {
   flex: 1;
-  padding: var(--space-4);
+  padding: 13px 16px;
   border-radius: 14px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: 6px;
   border: none;
-  font-family: var(--font-body);
+  font-family: inherit;
+  letter-spacing: -0.01em;
+}
+
+.rss-btn:active {
+  transform: scale(0.98);
 }
 
 .rss-btn-icon {
@@ -5050,27 +5160,30 @@ h1, h2, h3, h4 {
 }
 
 .rss-btn-ghost {
-  background: #f5f5f7;
-  color: #1a1a1a;
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .rss-btn-ghost:hover {
-  background: #e8e8ed;
+  background: #e2e8f0;
 }
 
 .rss-btn-copy {
-  background: linear-gradient(135deg, var(--primary-600), var(--primary-500));
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow:
+    0 2px 8px rgba(59, 130, 246, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .rss-btn-copy:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  box-shadow:
+    0 4px 12px rgba(59, 130, 246, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .rss-btn-copy:active {
-  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.3);
 }
 
 /* =====================================================

@@ -3154,7 +3154,7 @@ function showRefundScreenshot(o, coc, tong, cp, hoan) {
       if (v) {
         const ten = v.Ten_Vay || v.ten || '';
         const gia = v[g] || 0;
-        itemsHtml += `<div class="r-item"><span class="r-item-name">${escapeHtml(ten)} <span class="r-item-size">(Size ${v.Size || v.size || '-'})</span></span><span class="r-item-price">${fmtVND(gia)}</span></div>`;
+        itemsHtml += `<div class="r-item"><span class="r-item-name">${escapeHtml(ten)} <span class="r-item-size">(Size ${v.Size || v.size || '-'})</span></span><span class="r-item-price">${' '}${fmtVND(gia)}</span></div>`;
       }
     });
   }
@@ -3175,11 +3175,14 @@ function showRefundScreenshot(o, coc, tong, cp, hoan) {
     <div class="refund-card" id="refund-screenshot">
       <!-- Header với logo Aura Rental -->
       <div class="rss-header">
-        <div class="rss-logo-wrap">
-          <div class="rss-logo-text">Aura Rental</div>
+        <div class="rss-logo">
+          <span class="rss-logo-text">Aura Rental</span>
         </div>
-        <div class="rss-title">PHIẾU HOÀN CỌC</div>
-        <div class="rss-code">${id}</div>
+        <div class="rss-divider"></div>
+        <div class="rss-header-meta">
+          <div class="rss-title">PHIẾU HOÀN CỌC</div>
+          <div class="rss-code">${id}</div>
+        </div>
       </div>
 
       <!-- Thông tin khách hàng -->
@@ -3213,14 +3216,14 @@ function showRefundScreenshot(o, coc, tong, cp, hoan) {
       <!-- Chi tiết thanh toán -->
       <div class="rss-section rss-section-payment">
         <div class="rss-payment-row">
-          <span class="rss-pay-label">💰 Tiền cọc</span>
-          <span class="rss-pay-value rss-green">${fmtVND(coc)}</span>
+          <span class="rss-pay-label">Tiền cọc</span>
+          <span class="rss-pay-value ${coc > 0 ? 'rss-green' : 'rss-muted'}">${fmtVND(coc)}</span>
         </div>
         <div class="rss-payment-row">
-          <span class="rss-pay-label">👗 Tiền thuê</span>
-          <span class="rss-pay-value rss-red">−${fmtVND(tong)}</span>
+          <span class="rss-pay-label">Tiền thuê</span>
+          <span class="rss-pay-value ${tong > 0 ? 'rss-red' : 'rss-muted'}">${tong > 0 ? '−' + fmtVND(tong) : '0đ'}</span>
         </div>
-        ${cp > 0 ? `<div class="rss-payment-row"><span class="rss-pay-label">🚚 Phí khác</span><span class="rss-pay-value rss-red">−${fmtVND(cp)}</span></div>` : ''}
+        ${cp > 0 ? `<div class="rss-payment-row"><span class="rss-pay-label">Phí khác</span><span class="rss-pay-value rss-red">−${fmtVND(cp)}</span></div>` : ''}
       </div>
 
       <!-- Tổng hoàn -->
