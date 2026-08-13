@@ -1022,7 +1022,8 @@ input.search::placeholder {
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.25;
+  word-break: break-word;
 }
 
 /* Package badge — Apple style pill */
@@ -2100,11 +2101,10 @@ body.auth-locked .app {
   font-size: var(--text-base);
   font-weight: 700;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.25;
   flex: 1;
   min-width: 0;
+  word-break: break-word;
 }
 
 .day-card-badge {

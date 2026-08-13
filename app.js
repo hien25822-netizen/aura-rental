@@ -428,6 +428,12 @@ function donTenVay(don) {
     return v ? (v.Ten_Vay || v.ten) : '';
   }).filter(Boolean);
 }
+
+// Render full list of dress names (joined) for multi-dress orders
+function renderTenVayList(tenVayArr) {
+  if (!tenVayArr || !tenVayArr.length) return 'Chưa chọn váy';
+  return tenVayArr.map(v => escapeHtml(v)).join(' + ');
+}
 function donTienThueVay(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
@@ -1007,7 +1013,7 @@ function DayOrderCard(o, group) {
   const id = o.Ma_Don || o.id || '';
   const tenVay = donTenVay(o);
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
-  const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
+  const tenVayList = renderTenVayList(tenVay);
   const goi = o.Goi_Thue || o.goi || '';
   const is12h = goi === '12h';
   const ngayLay = o.Ngay_Lay || o.lay || '';
@@ -1055,7 +1061,7 @@ function DayOrderCard(o, group) {
       </div>
       <div class="day-card-content">
         <div class="day-card-row day-card-row-top">
-          <span class="day-card-name">${escapeHtml(tenVayPrimary)}${tenVayMore}</span>
+          <span class="day-card-name">${tenVayList}</span>
           ${is12h ? '<span class="day-card-badge badge-12h">12h</span>' : `<span class="day-card-badge">${goi}</span>`}
         </div>
         <div class="day-card-row day-card-row-meta">
@@ -1091,7 +1097,7 @@ const OrderCard = {
   render(o, refDate = new Date()) {
     const tenVay = donTenVay(o);
     const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
-    const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
+    const tenVayList = renderTenVayList(tenVay);
     const tenPK = (o.Ma_PK || o.pks || []).map(pk => {
       const p = pkById.get(pk);
       return p ? (p.Ten_PK || p.ten) : '?';
@@ -1155,7 +1161,7 @@ const OrderCard = {
     else imgWrap.textContent = (tenVayPrimary[0] || 'V').toUpperCase();
     head.appendChild(imgWrap);
     const headText = el('div', { class: 'head-text' });
-    headText.appendChild(el('div', { class: 'dress-name', text: tenVayPrimary + tenVayMore }));
+    headText.appendChild(el('div', { class: 'dress-name', text: tenVayList }));
     const headMeta = el('div', { class: 'head-meta' });
     const typeBadge = el('span', {
       class: 'type-pill-inline ' + typeClass(type),
@@ -1464,7 +1470,7 @@ function OrderCardListCard(o, refDate = new Date()) {
   const id = o.Ma_Don || o.id || '';
   const tenVay = donTenVay(o);
   const tenVayPrimary = tenVay[0] || 'Chưa chọn váy';
-  const tenVayMore = tenVay.length > 1 ? ` +${tenVay.length - 1}` : '';
+  const tenVayList = renderTenVayList(tenVay);
   const ngayLay = o.Ngay_Lay || o.lay || '';
   const ngayLayDisplay = isoToVN(ngayLay);
   const goi = o.Goi_Thue || o.goi || '';
@@ -1517,7 +1523,7 @@ function OrderCardListCard(o, refDate = new Date()) {
       </div>
       <div class="olc-content">
         <div class="olc-row olc-row-top">
-          <span class="olc-name">${escapeHtml(tenVayPrimary)}${tenVayMore}</span>
+          <span class="olc-name">${tenVayList}</span>
           ${is12h ? '<span class="olc-badge">12h</span>' : `<span class="olc-badge">${goi}</span>`}
         </div>
         <div class="olc-row olc-row-meta">
