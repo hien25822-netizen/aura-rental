@@ -846,7 +846,7 @@ input.search::placeholder {
 .olc-avatar-col {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   flex-shrink: 0;
   align-items: flex-start;
 }
@@ -854,16 +854,16 @@ input.search::placeholder {
 .olc-extras {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-left: 6px;
+  gap: 8px;
+  margin-left: 12px;
 }
 
 .olc-avatar.olc-avatar-sm {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  font-size: 14px;
-  opacity: 0.85;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  font-size: 16px;
+  opacity: 0.92;
 }
 
 .olc-avatar {
@@ -1905,6 +1905,34 @@ body.auth-locked .app {
   object-fit: cover;
 }
 
+.day-card-avatar-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.day-card-extras {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.day-card-avatar.day-card-avatar-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  flex-shrink: 0;
+  opacity: 0.92;
+  overflow: hidden;
+}
+
 .day-card-content {
   flex: 1;
   min-width: 0;
@@ -1972,6 +2000,16 @@ body.auth-locked .app {
 
 .day-card-row-meta {
   gap: var(--space-1);
+}
+
+.day-card-row-meta .day-card-id {
+  margin-left: auto;
+}
+
+.day-card-id {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .day-card-row-dates {

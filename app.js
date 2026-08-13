@@ -1026,11 +1026,31 @@ function DayOrderCard(o, group) {
   const hasNote = !!(o.Ghi_Chu || o.ghichu);
   const noteText = o.Ghi_Chu || o.ghichu || '';
 
+  // Build extra avatars for 2nd, 3rd, ... dresses (match OrderCardListCard pattern)
+  let extraAvatarsHTML = '';
+  if (tenVay.length > 1) {
+    const dhvs = o.dhvs || o.dresses || [];
+    const extras = dhvs.slice(1).map(item => {
+      const v = vayById.get(item.vay || item.Ma_Vay);
+      if (!v) return '';
+      const imgSrc = v.Anh_Vay || v.anh || '';
+      const letter = (v.Ten_Vay || v.ten || '?')[0].toUpperCase();
+      if (imgSrc) {
+        return `<div class="day-card-avatar day-card-avatar-sm" style="background: ${bgColor};"><img src="${escapeHtml(imgSrc)}" alt="" /></div>`;
+      }
+      return `<div class="day-card-avatar day-card-avatar-sm" style="background: ${bgColor};"><span>${letter}</span></div>`;
+    }).join('');
+    extraAvatarsHTML = `<div class="day-card-extras">${extras}</div>`;
+  }
+
   return `
     <div class="day-order-card ${daChuanBi ? 'chuan-bi-done' : ''}" onclick="openOrderDetail('${id}')">
       <div class="day-card-left" style="background: ${bgColor}; border-left: 3px solid ${color};">
-        <div class="day-card-avatar">
-          <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+        <div class="day-card-avatar-col">
+          <div class="day-card-avatar" style="background: ${bgColor};">
+            <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+          </div>
+          ${extraAvatarsHTML}
         </div>
       </div>
       <div class="day-card-content">
@@ -1040,6 +1060,7 @@ function DayOrderCard(o, group) {
         </div>
         <div class="day-card-row day-card-row-meta">
           <span class="day-type-badge day-type-${type.replace(/\s/g, '').toLowerCase()}" data-type-btn onclick="event.stopPropagation();openTypePickerById('${id}')">${type}</span>
+          <span class="day-card-id">${id}</span>
           ${isLayOrTra && daChuanBi ? '<span class="chuan-bi-chip done">✓ Đã chuẩn bị</span>' : ''}
         </div>
         <div class="day-card-row day-card-row-dates">
