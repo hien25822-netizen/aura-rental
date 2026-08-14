@@ -4827,7 +4827,7 @@ h1, h2, h3, h4 {
     0 24px 60px rgba(15, 23, 42, 0.06);
   margin: 0 auto;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
-  width: 360px;
+  width: 340px;
   max-width: 100%;
   box-sizing: border-box;
   position: relative;
@@ -4975,22 +4975,24 @@ h1, h2, h3, h4 {
 .rss-item {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  padding: 6px 0;
-  gap: 12px;
+  align-items: center;
+  padding: 5px 0;
+  gap: 10px;
+  min-width: 0;
 }
 
 /* Backwards-compat: r-item uses inline spans (older code path) */
 .r-item {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
-  padding: 6px 0;
-  gap: 12px;
+  align-items: center;
+  padding: 5px 0;
+  gap: 10px;
+  min-width: 0;
 }
 
 .r-item-name, .r-item-price {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #0f172a;
   letter-spacing: -0.01em;
@@ -5004,14 +5006,14 @@ h1, h2, h3, h4 {
 }
 
 .r-item-size {
-  font-size: 12px;
+  font-size: 11px;
   color: #9ca3af;
   font-weight: 500;
   margin-left: 4px;
 }
 
 .rss-item-name {
-  font-size: 14px;
+  font-size: 13px;
   color: #0f172a;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -5080,75 +5082,39 @@ h1, h2, h3, h4 {
   color: #94a3b8;
 }
 
-/* Total — Apple-style frosted glass card */
+/* Total — Apple-style minimal: just typography + semantic color */
 .rss-total {
-  padding: 22px 24px;
+  padding: 20px 20px 8px;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 4px;
-  margin: 0 18px 22px;
-  border-radius: 22px;
-  position: relative;
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-}
-
-.rss-total::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 100%);
-  opacity: 0.6;
-}
-
-.rss-total-pos {
-  background: rgba(236, 253, 245, 0.85);
-  border: 1px solid rgba(16, 185, 129, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 1px 2px rgba(15, 23, 42, 0.03),
-    0 8px 24px rgba(16, 185, 129, 0.10);
-}
-
-.rss-total-neg {
-  background: rgba(254, 242, 242, 0.85);
-  border: 1px solid rgba(239, 68, 68, 0.22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    0 1px 2px rgba(15, 23, 42, 0.03),
-    0 8px 24px rgba(239, 68, 68, 0.10);
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .rss-total-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  position: relative;
+  color: #374151;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
 
 .rss-total-amount {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'cv11' 1;
   color: #0f172a;
-  position: relative;
+  text-align: right;
 }
 
 .rss-total-pos .rss-total-amount {
-  color: #047857;
+  color: #059669;
 }
 
 .rss-total-neg .rss-total-amount {
-  color: #b91c1c;
+  color: #dc2626;
 }
 
 /* Actions */
