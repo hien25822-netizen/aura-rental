@@ -8,6 +8,7 @@
  * - Auth UI (login modal)
  * - Data sync from Supabase
  * - Offline fallback to localStorage
+ */
 
 /* ============================================================
  * NOTIFICATION BANNER
@@ -1194,9 +1195,10 @@ function stopAllPolling() {
 let crossTabDebounce = null;
 
 function setupCrossTabSync() {
+  // Listen to main app storage (aura_v8)
   window.addEventListener('storage', e => {
     if (e.key !== STORE) return;
-    if (e.newValue === null) return; // cleared — skip
+    if (e.newValue === null) return;
 
     clearTimeout(crossTabDebounce);
     crossTabDebounce = setTimeout(() => {
@@ -1204,7 +1206,6 @@ function setupCrossTabSync() {
         const remote = JSON.parse(e.newValue);
         if (!remote || typeof remote !== 'object') return;
 
-        // Merge remote data into local db — remote wins on _ts conflict
         const mergedDon = mergeOrderLists(db.don || [], remote.don || []);
         const mergedVay = mergeItemLists(db.vay || [], remote.vay || []);
         const mergedPk = mergeItemLists(db.pk || [], remote.pk || []);
@@ -1223,6 +1224,103 @@ function setupCrossTabSync() {
       }
     }, 300);
   });
+
+  // Listen to booking-form storage (aura_bookings) — convert bookings → orders in db.don
+  window.addEventListener('storage', e => {
+    if (e.key !== 'aura_bookings') return;
+    if (e.newValue === null) return;
+
+    clearTimeout(bookingDebounce);
+    bookingDebounce = setTimeout(() => {
+      try {
+        const bookings = JSON.parse(e.newValue);
+        if (!Array.isArray(bookings) || bookings.length === 0) return;
+
+        let newCount = 0;
+        bookings.forEach(b => {
+          // Skip if already in db.don (by Ma_Don)
+          if (b.id && db.don.some(o => (o.Ma_Don || o.id) === b.id)) return;
+
+          const order = {
+            _fromBooking: true,
+            _bookingId: b.id,
+            Ma_Don: b.id,
+            Trang_Thai_Don: 'Chờ xác nhận',
+            Insta_Khach: b.Insta_Khach || b.insta_khach || '',
+            SDT: b.SDT || b.sdt || '',
+            dhvs: Array.isArray(b.dhvs) ? b.dhvs : [],
+            Ma_PK: Array.isArray(b.Ma_PK) ? b.Ma_PK : [],
+            Goi_Thue: b.Goi_Thue || b.goi_thue || '',
+            Ngay_Lay: b.Ngay_Lay || b.ngay_lay || '',
+            Gio_Lay: b.Gio_Lay || b.gio_lay || '',
+            Ngay_Tra: b.Ngay_Tra || b.ngay_tra || '',
+            Hinh_Thuc_Nhan: b.Hinh_Thuc_Nhan || b.hinh_thuc_nhan || '',
+            Hinh_Thuc_Coc: b.Hinh_Thuc_Coc || b.hinh_thuc_coc || '',
+            Dia_Chi: b.Dia_Chi || b.dia_chi || '',
+            Su_Kien: b.Su_Kien || b.su_kien || '',
+            Ghi_Chu: b.Ghi_Chu || b.ghi_chu || '',
+            _ts: b.Ngay_Tao ? new Date(b.Ngay_Tao).getTime() : (b._ts || Date.now()),
+          };
+
+          db.don.push(order);
+          newCount++;
+        });
+
+        if (newCount > 0) {
+          syncStateAndRender();
+          SyncBanner.success(`📋 Có ${newCount} đơn đặt thuê mới từ website!`);
+        }
+      } catch (err) {
+        console.warn('Booking cross-tab sync error:', err);
+      }
+    }, 300);
+  });
+}
+
+let bookingDebounce = null;
+
+// Import bookings from aura_bookings localStorage (same-tab: booking-form + main app in same tab)
+function importBookingsFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem('aura_bookings');
+    if (!raw) return;
+    const bookings = JSON.parse(raw);
+    if (!Array.isArray(bookings) || bookings.length === 0) return;
+
+    let newCount = 0;
+    bookings.forEach(b => {
+      if (b.id && db.don.some(o => (o.Ma_Don || o.id) === b.id)) return;
+
+      db.don.push({
+        _fromBooking: true,
+        _bookingId: b.id,
+        Ma_Don: b.id,
+        Trang_Thai_Don: 'Chờ xác nhận',
+        Insta_Khach: b.Insta_Khach || b.insta_khach || '',
+        SDT: b.SDT || b.sdt || '',
+        dhvs: Array.isArray(b.dhvs) ? b.dhvs : [],
+        Ma_PK: Array.isArray(b.Ma_PK) ? b.Ma_PK : [],
+        Goi_Thue: b.Goi_Thue || b.goi_thue || '',
+        Ngay_Lay: b.Ngay_Lay || b.ngay_lay || '',
+        Gio_Lay: b.Gio_Lay || b.gio_lay || '',
+        Ngay_Tra: b.Ngay_Tra || b.ngay_tra || '',
+        Hinh_Thuc_Nhan: b.Hinh_Thuc_Nhan || b.hinh_thuc_nhan || '',
+        Hinh_Thuc_Coc: b.Hinh_Thuc_Coc || b.hinh_thuc_coc || '',
+        Dia_Chi: b.Dia_Chi || b.dia_chi || '',
+        Su_Kien: b.Su_Kien || b.su_kien || '',
+        Ghi_Chu: b.Ghi_Chu || b.ghi_chu || '',
+        _ts: b.Ngay_Tao ? new Date(b.Ngay_Tao).getTime() : (b._ts || Date.now()),
+      });
+      newCount++;
+    });
+
+    if (newCount > 0) {
+      syncStateAndRender();
+      console.log(`📋 Imported ${newCount} bookings from aura_bookings`);
+    }
+  } catch (err) {
+    console.warn('importBookingsFromLocalStorage error:', err);
+  }
 }
 
 function mergeOrderLists(local, remote) {
@@ -1331,6 +1429,9 @@ async function initWithSupabase() {
   // Cross-tab sync works in ALL modes (demo or full)
   setupCrossTabSync();
 
+  // Also read bookings from aura_bookings (same-tab scenario: booking-form + main app)
+  importBookingsFromLocalStorage();
+
   // Wait for app.js to finish loading (it defines `db`)
   let retries = 0;
   while (typeof db === 'undefined' && retries < 50) {
@@ -1345,6 +1446,9 @@ async function initWithSupabase() {
   if (IS_DEMO_MODE) {
     console.log('🎭 Demo mode - using localStorage only');
     loadFromLocalStorage();
+    // Also import from aura_bookings (same-tab: booking-form + main app)
+    importBookingsFromLocalStorage();
+    syncStateAndRender();
     go('v-cal');
     return;
   }
@@ -1365,6 +1469,8 @@ async function initWithSupabase() {
     } else {
       console.log('🔐 Not authenticated');
       loadFromLocalStorage();
+      importBookingsFromLocalStorage();
+      syncStateAndRender();
       showLoginModal();
       document.body.classList.add('auth-locked');
     }
@@ -1372,6 +1478,8 @@ async function initWithSupabase() {
   } catch (err) {
     console.error('Init failed:', err);
     loadFromLocalStorage();
+    importBookingsFromLocalStorage();
+    syncStateAndRender();
     toast('Offline mode - dữ liệu cục bộ', 'warn');
     go('v-cal');
   }

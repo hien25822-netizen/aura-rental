@@ -3311,7 +3311,11 @@ function copyRefundImageDirect() {
       return;
     }
 
-    // Get exact dimensions
+    // Scroll element into view and reset page scroll to eliminate capture offset
+    el.scrollIntoView({ block: 'start', behavior: 'instant' });
+    window.scrollTo(0, 0);
+
+    // Get exact dimensions after scroll
     const width = el.offsetWidth;
     const height = el.offsetHeight;
 
@@ -3321,7 +3325,11 @@ function copyRefundImageDirect() {
       useCORS: true,
       logging: false,
       width: width,
-      height: height
+      height: height,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      x: 0,
+      y: 0
     }).then(canvas => {
       canvas.toBlob(blob => {
         if (blob) {
