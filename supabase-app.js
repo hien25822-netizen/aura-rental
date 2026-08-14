@@ -1275,6 +1275,26 @@ function setupCrossTabSync() {
       }
     }, 300);
   });
+
+  // ── Khi tab được focus / hiển thị, kiểm tra booking mới ──
+  let lastBookingsLen = 0;
+  function checkNewBookings() {
+    try {
+      const raw = localStorage.getItem('aura_bookings');
+      if (!raw) return;
+      const bookings = JSON.parse(raw);
+      if (!Array.isArray(bookings) || bookings.length === lastBookingsLen) return;
+      lastBookingsLen = bookings.length;
+      importBookingsFromLocalStorage();
+    } catch (e) {}
+  }
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkNewBookings();
+  });
+
+  // Polling: kiểm tra định kỳ phòng khi event bị miss
+  setInterval(checkNewBookings, 5000);
 }
 
 let bookingDebounce = null;
