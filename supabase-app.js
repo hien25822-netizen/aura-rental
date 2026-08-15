@@ -644,21 +644,27 @@ async function handleRealtimeDressChange(payload) {
     }
     if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
       const sup = payload.new;
-      const idx = (db.vay || []).findIndex(v => v._dbId === sup._dbId);
-      const local = idx !== -1 ? db.vay[idx] : null;
-      const merged = local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
-      if (idx !== -1) db.vay[idx] = merged;
-      else {
-        db.vay.push(merged);
-        if (payload.eventType === 'INSERT') markRemoteInsert('vay', sup._dbId);
+      // Skip partial payload (e.g. from upsert select returning only id+ma_pk)
+      // — missing Ten_Vay indicates broadcast is incomplete, fall through to full refetch
+      if (!sup.Ten_Vay && !sup.ten_vay) {
+        // fall through to full refetch below
+      } else {
+        const idx = (db.vay || []).findIndex(v => v._dbId === sup._dbId);
+        const local = idx !== -1 ? db.vay[idx] : null;
+        const merged = local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
+        if (idx !== -1) db.vay[idx] = merged;
+        else {
+          db.vay.push(merged);
+          if (payload.eventType === 'INSERT') markRemoteInsert('vay', sup._dbId);
+        }
+        localStorage.setItem(STORE, JSON.stringify(db));
+        if (typeof rebuildIndexes === 'function') rebuildIndexes();
+        syncStateAndRender();
+        return;
       }
-      localStorage.setItem(STORE, JSON.stringify(db));
-      if (typeof rebuildIndexes === 'function') rebuildIndexes();
-      syncStateAndRender();
-      return;
     }
 
-    // Fallback: full refetch (eventType undefined / not provided)
+    // Fallback: full refetch (eventType undefined / not provided / partial payload)
     const dresses = await window.SupabaseService.fetchDresses();
     const localByDbId = {};
     (db.vay || []).forEach(v => { if (v._dbId) localByDbId[v._dbId] = v; });
@@ -704,21 +710,27 @@ async function handleRealtimeAccessoryChange(payload) {
     }
     if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') && payload.new) {
       const sup = payload.new;
-      const idx = (db.pk || []).findIndex(p => p._dbId === sup._dbId);
-      const local = idx !== -1 ? db.pk[idx] : null;
-      const merged = local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
-      if (idx !== -1) db.pk[idx] = merged;
-      else {
-        db.pk.push(merged);
-        if (payload.eventType === 'INSERT') markRemoteInsert('pk', sup._dbId);
+      // Skip partial payload (e.g. from upsert select returning only id+ma_pk)
+      // — missing ten_pk indicates broadcast is incomplete, fall through to full refetch
+      if (!sup.ten_pk && !sup.Ten_PK) {
+        // fall through to full refetch below
+      } else {
+        const idx = (db.pk || []).findIndex(p => p._dbId === sup._dbId);
+        const local = idx !== -1 ? db.pk[idx] : null;
+        const merged = local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
+        if (idx !== -1) db.pk[idx] = merged;
+        else {
+          db.pk.push(merged);
+          if (payload.eventType === 'INSERT') markRemoteInsert('pk', sup._dbId);
+        }
+        localStorage.setItem(STORE, JSON.stringify(db));
+        if (typeof rebuildIndexes === 'function') rebuildIndexes();
+        syncStateAndRender();
+        return;
       }
-      localStorage.setItem(STORE, JSON.stringify(db));
-      if (typeof rebuildIndexes === 'function') rebuildIndexes();
-      syncStateAndRender();
-      return;
     }
 
-    // Fallback: full refetch (eventType undefined / not provided)
+    // Fallback: full refetch (eventType undefined / not provided / partial payload)
     const accessories = await window.SupabaseService.fetchAccessories();
     const localByDbId = {};
     (db.pk || []).forEach(p => { if (p._dbId) localByDbId[p._dbId] = p; });
