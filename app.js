@@ -4949,3 +4949,23 @@ async function submitBulkAccessories() {
 
 // Khởi tạo app — gọi view mặc định
 go('v-cal');
+
+// Skew protection: lắng nghe SW update notification
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data?.type === 'SW_UPDATE_AVAILABLE') {
+      showUpdateBanner();
+    }
+  });
+}
+
+function showUpdateBanner() {
+  const existing = document.getElementById('sw-update-banner');
+  if (existing) return;
+  const banner = document.createElement('div');
+  banner.id = 'sw-update-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#d4af37;color:#1a1d2e;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px';
+  banner.innerHTML = '🔄 Có bản cập nhật mới — bấm để tải lại <span style="margin-left:6px;font-size:11px;opacity:0.7">⏎</span>';
+  banner.onclick = () => location.reload(true);
+  document.body.appendChild(banner);
+}

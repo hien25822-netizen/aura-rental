@@ -1,10 +1,11 @@
-/* Aura Rental — Service Worker v3
+/* Aura Rental — Service Worker v4
    Cho phép:
    - Cache app để dùng offline (khi mất wifi, vẫn mở được)
    - Sync queue sẽ tự gửi khi có mạng lại
+   - Anti-skew: chỉ activate version mới khi không còn tab nào đang chạy version cũ
 */
 
-const CACHE = 'aura-v14';
+const CACHE = 'aura-v15';
 const ASSETS = [
   './',
   './index.html',
@@ -18,16 +19,40 @@ const ASSETS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(ASSETS))
   );
+  // KHÔNG gọi skipWaiting() — đợi tất cả tab đóng trước
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
+    // Chờ tất cả clients đóng trước khi claim
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      if (clients.length === 0) {
+        // Không có tab nào đang mở → claim ngay
+        return self.clients.claim();
+      }
+      // Có tab đang mở → đợi chúng đóng
+      // Gửi message cho các tab hiện tại: "version mới sẵn sàng, hãy reload"
+      clients.forEach(client => {
+        client.postMessage({ type: 'SW_UPDATE_AVAILABLE' });
+      });
+      // Claim ngay để nhận message (nhưng không force reload)
+      return self.clients.claim();
+    }).then(() => {
+      // Xoá cache cũ
+      return caches.keys();
+    }).then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    )
   );
+});
+
+self.addEventListener('message', e => {
+  // Khi tab nhận SW_UPDATE_AVAILABLE và reload, SW nhận message này
+  if (e.data?.type === 'CLIENT_RELOADED') {
+    // Tab mới đã reload → tiếp tục bình thường
+  }
 });
 
 self.addEventListener('fetch', e => {
