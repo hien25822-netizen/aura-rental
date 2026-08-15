@@ -811,8 +811,16 @@ async function handleRealtimeOrderChange(payload) {
 
     // Fallback: full refetch (eventType undefined / not provided)
     const orders = await window.SupabaseService.fetchOrders();
+    // Also filter persisted deletes (30-day window, survives page reload)
+    const persistedDeleted = new Set();
+    if (db._deletedOrderIds) {
+      Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
+        if (now - ts < 30 * 24 * 60 * 60 * 1000) persistedDeleted.add(dbId);
+      });
+    }
     const mergedAll = (orders || [])
       .filter(supOrder => !recentlyDeleted.has(supOrder._dbId))
+      .filter(supOrder => !persistedDeleted.has(supOrder._dbId))
       .filter(supOrder => !pendingCreateMaDon.has(supOrder.Ma_Don))
       .map(supOrder => {
       const local = localByDbId[supOrder._dbId];
