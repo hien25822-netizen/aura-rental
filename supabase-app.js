@@ -1614,6 +1614,71 @@ function showDemoModeBanner() {
 }
 
 // ============================================================
+// MIGRATION: Seed Supabase from localStorage
+// Run in browser console after deploying the fix:
+//   migrateLocalToSupabase()
+// ============================================================
+
+window.migrateLocalToSupabase = async function() {
+  if (!window.SupabaseService?.isConfigured()) {
+    console.error('Supabase not configured');
+    return;
+  }
+  if (!confirm('Sẽ upload toàn bộ váy/phụ kiện từ localStorage lên Supabase. Tiếp tục?')) return;
+
+  const log = (msg) => console.log('[Migration]', msg);
+
+  // 1. Migrate dresses
+  const dresses = db?.vay || [];
+  log(`Bắt đầu migrate ${dresses.length} váy...`);
+  let dressOk = 0, dressFail = 0;
+  for (const v of dresses) {
+    try {
+      await window.SupabaseService.createDress(v);
+      dressOk++;
+    } catch (e) {
+      // Check if duplicate
+      if (e?.message?.includes('duplicate') || e?.message?.includes('unique')) {
+        try {
+          await window.SupabaseService.updateDress(v._dbId, v);
+          dressOk++;
+        } catch (e2) { dressFail++; log('Váy lỗi: ' + (v.Ma_Vay || v.Ten_Vay)); }
+      } else {
+        dressFail++; log('Váy lỗi: ' + (v.Ma_Vay || v.Ten_Vay) + ' — ' + e.message);
+      }
+    }
+  }
+  log(`✅ Váy: ${dressOk} thành công, ${dressFail} thất bại`);
+
+  // 2. Migrate accessories
+  const accessories = db?.pk || [];
+  log(`Bắt đầu migrate ${accessories.length} phụ kiện...`);
+  let accOk = 0, accFail = 0;
+  for (const p of accessories) {
+    try {
+      await window.SupabaseService.createAccessory(p);
+      accOk++;
+    } catch (e) {
+      if (e?.message?.includes('duplicate') || e?.message?.includes('unique')) {
+        try {
+          await window.SupabaseService.updateAccessory(p._dbId, p);
+          accOk++;
+        } catch (e2) { accFail++; log('PK lỗi: ' + (p.Ma_PK || p.Ten_PK)); }
+      } else {
+        accFail++; log('PK lỗi: ' + (p.Ma_PK || p.Ten_PK) + ' — ' + e.message);
+      }
+    }
+  }
+  log(`✅ Phụ kiện: ${accOk} thành công, ${accFail} thất bại`);
+
+  // 3. Reload data
+  log('Reload dữ liệu...');
+  await loadFromSupabase(true);
+  log('✅ Migration hoàn tất!');
+  alert(`✅ Migration hoàn tất!\n\nVáy: ${dressOk} thành công\nPhụ kiện: ${accOk} thành công\n\nReload trang để xem kết quả.`);
+};
+
+// ============================================================
 // AUTO-INIT
 // Wait for DOM and app.js to load, then initialize
 // ============================================================
