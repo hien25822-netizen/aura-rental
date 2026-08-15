@@ -984,22 +984,24 @@ async function syncBookingsToLocal(preDresses, preAccessories) {
     }
 
     const normalized = (bookings || []).map(b => {
-      const dhvs = (b._dressIds || []).map(dressId => {
-        const dress = allDresses[dressId];
-        if (dress) {
-          return { vay: dress.Ma_Vay || dressId, Ma_Vay: dress.Ma_Vay || dressId, Ten_Vay: dress.Ten_Vay || dress.ten || 'Váy', Size: dress.Size || '' };
+      // Prefer _dressDetails from fetchBookings (Supabase dresses), fallback to allDresses map
+      const dhvs = ((b._dressDetails || b._dressIds || [])).map(entry => {
+        const dressId = entry.id || entry;
+        const detail = entry.detail || allDresses[dressId];
+        if (detail) {
+          return { vay: detail.ma_vay || dressId, Ma_Vay: detail.ma_vay || dressId, Ten_Vay: detail.ten_vay || detail.Ten_Vay || detail.ten || 'Váy', Size: detail.size || detail.Size || '' };
         }
-        // dressId is a Ma_Vay code — find in local db
         const localDress = (db.vay || []).find(v => (v.Ma_Vay || v.ma) === dressId);
         if (localDress) {
           return { vay: dressId, Ma_Vay: dressId, Ten_Vay: localDress.Ten_Vay || localDress.ten || 'Váy', Size: localDress.Size || '' };
         }
         return { vay: dressId, Ma_Vay: dressId };
       });
-      const Ma_PK = (b._accIds || []).map(accId => {
-        const acc = allAccessories[accId];
-        if (acc) {
-          return acc.Ma_PK || accId;
+      const Ma_PK = ((b._accDetails || b._accIds || [])).map(entry => {
+        const accId = entry.id || entry;
+        const detail = entry.detail || allAccessories[accId];
+        if (detail) {
+          return detail.ma_pk || detail.Ma_PK || accId;
         }
         const localAcc = (db.pk || []).find(p => (p.Ma_PK || p.ma) === accId);
         return localAcc ? (localAcc.Ma_PK || accId) : accId;

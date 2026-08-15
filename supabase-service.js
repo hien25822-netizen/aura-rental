@@ -487,12 +487,27 @@ async function createOrder(order) {
 
   const { dhvs, pks, ...orderData } = order;
 
+  // Map local Trang_Thai_Don to Supabase enum values
+  // Booking form uses 'Chờ xác nhận' which isn't in orders enum — fall back to 'Chốt thuê'
+  const STATUS_MAP = {
+    'Chờ xác nhận': 'Chốt thuê',
+    'Chốt thuê': 'Chốt thuê',
+    'Đang chuẩn bị': 'Chốt thuê',
+    'Đang thuê': 'Chốt thuê',
+    'Đã trả': 'Chốt thuê',
+    'Quá hạn': 'Chốt thuê',
+    'Đã hủy': 'Chốt thuê',
+    'Hoàn cọc': 'Chốt thuê',
+    'Chuyển đổi': 'Chốt thuê'
+  };
+  const mappedStatus = STATUS_MAP[orderData.Trang_Thai_Don] || 'Chốt thuê';
+
   // Insert order
   const { data: newOrder, error: orderErr } = await supabase
     .from('orders')
     .insert([{
       ma_don: orderData.Ma_Don,
-      trang_thai_don: orderData.Trang_Thai_Don || 'Chốt thuê',
+      trang_thai_don: mappedStatus,
       insta_khach: orderData.Insta_Khach || '',
       sdt: orderData.SDT || '',
       goi_thue: orderData.Goi_Thue,
@@ -735,27 +750,39 @@ async function fetchBookings() {
 
   // Fetch dress relations
   const bookingIds = bookings.map(b => b.id);
-  const [dressesResult, accsResult] = await Promise.all([
+  const [dressesResult, accsResult, allDressesResult, allAccsResult] = await Promise.all([
     supabase.from('booking_dresses').select('*').in('booking_id', bookingIds),
-    supabase.from('booking_accessories').select('*').in('booking_id', bookingIds)
+    supabase.from('booking_accessories').select('*').in('booking_id', bookingIds),
+    supabase.from('dresses').select('id,ma_vay,ten_vay,size').filter('deleted_at', 'is', null),
+    supabase.from('accessories').select('id,ma_pk,ten_pk,size').filter('deleted_at', 'is', null)
   ]);
 
-  // Build maps
+  // Build maps: dressId -> dress details
+  const dressDetailMap = {};
+  (allDressesResult.data || []).forEach(d => { dressDetailMap[d.id] = d; });
+  (accsResult.data || []).forEach(d => { dressDetailMap[d.id] = d; });
+
+  const accDetailMap = {};
+  (allAccsResult.data || []).forEach(a => { accDetailMap[a.id] = a; });
+
+  // Build maps: bookingId -> array of dressIds/accIds
   const dressMap = {};
   (dressesResult.data || []).forEach(d => {
     if (!dressMap[d.booking_id]) dressMap[d.booking_id] = [];
-    dressMap[d.booking_id].push(d.dress_id);
+    dressMap[d.booking_id].push({ id: d.dress_id, detail: dressDetailMap[d.dress_id] });
   });
   const accMap = {};
   (accsResult.data || []).forEach(a => {
     if (!accMap[a.booking_id]) accMap[a.booking_id] = [];
-    accMap[a.booking_id].push(a.accessory_id);
+    accMap[a.booking_id].push({ id: a.accessory_id, detail: accDetailMap[a.accessory_id] });
   });
 
   // Attach relations to bookings
   bookings.forEach(b => {
-    b._dressIds = dressMap[b.id] || [];
-    b._accIds = accMap[b.id] || [];
+    b._dressIds = (dressMap[b.id] || []).map(x => x.id);
+    b._accIds = (accMap[b.id] || []).map(x => x.id);
+    b._dressDetails = dressMap[b.id] || [];
+    b._accDetails = accMap[b.id] || [];
   });
 
   return bookings;
