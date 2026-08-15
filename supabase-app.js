@@ -1614,6 +1614,49 @@ function showDemoModeBanner() {
 }
 
 // ============================================================
+// CLEANUP: Delete all dresses from Supabase + localStorage
+// Run in browser console:
+//   deleteAllDresses()
+// ============================================================
+window.deleteAllDresses = async function() {
+  if (!confirm('XÓA TẤT CẢ VÁY khỏi Supabase + localStorage? Hành động này KHÔNG THỂ HOÀN TÁC!')) return;
+  const log = (msg) => console.log('[DeleteAll]', msg);
+
+  // 1. Delete from Supabase
+  if (window._supabaseClient) {
+    log('Đang xóa váy khỏi Supabase...');
+    const { data, error } = await window._supabaseClient.from('dresses').select('id');
+    if (!error && data?.length) {
+      const ids = data.map(d => d.id);
+      const perBatch = 50;
+      let deleted = 0;
+      for (let i = 0; i < ids.length; i += perBatch) {
+        const batch = ids.slice(i, i + perBatch);
+        await window._supabaseClient.from('dresses').delete().in('id', batch);
+        deleted += batch.length;
+        log(`Đã xóa ${deleted}/${ids.length}`);
+      }
+      log(`✅ Đã xóa ${deleted} váy khỏi Supabase`);
+    } else {
+      log('Supabase không có váy để xóa');
+    }
+  }
+
+  // 2. Clear localStorage dresses
+  if (typeof db !== 'undefined' && Array.isArray(db.vay)) {
+    log(`Xóa ${db.vay.length} váy khỏi localStorage...`);
+    db.vay = [];
+    localStorage.setItem(STORE, JSON.stringify(db));
+    log('✅ Đã xóa váy khỏi localStorage');
+  }
+
+  // 3. Reload UI
+  if (typeof refreshCurView === 'function') refreshCurView();
+  alert('Đã xóa tất cả váy! Giờ upload Excel mới.');
+  log('✅ Hoàn tất');
+};
+
+// ============================================================
 // MIGRATION: Seed Supabase from localStorage
 // Run in browser console after deploying the fix:
 //   migrateLocalToSupabase()
