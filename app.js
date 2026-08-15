@@ -4701,7 +4701,6 @@ function previewBulkAccessories(accessories) {
   errorsEl.style.display = 'none';
 }
 
-}
 
 function _findCol(headers, aliases) {
   const normalizedHeaders = headers.map(h => _normalizeHeader(h));
