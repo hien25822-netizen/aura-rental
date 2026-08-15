@@ -97,8 +97,8 @@ function rebuildIndexes() {
 }
 
 // Auto-rebuild indexes on every save (db mutation)
-const _origSave = save;
-save = function() { _origSave(); rebuildIndexes(); };
+const _origSaveApp = save;
+save = function() { _origSaveApp(); rebuildIndexes(); };
 rebuildIndexes();
 
 /* ============================================================
