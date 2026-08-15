@@ -272,6 +272,39 @@ async function createDressBatch(dresses) {
   };
 }
 
+async function createAccessoryBatch(accessories) {
+  if (!supabase) return { ids: [], count: 0 };
+
+  const rows = accessories.map(a => ({
+    ma_pk: a.Ma_PK,
+    ten_pk: a.Ten_PK,
+    loai: a.Loai || 'Khác',
+    so_luong_tong: a.So_Luong_Tong || 1,
+    gia_thue_12h: a.Gia_Thue_12h || 0,
+    gia_thue_1_ngay: a.Gia_Thue_1_Ngay || 0,
+    gia_thue_3_ngay: a.Gia_Thue_3_Ngay || 0,
+    anh_pk: a.Anh_PK || '',
+    ghi_chu: a.Ghi_Chu || '',
+    created_by: currentUser?.id
+  }));
+
+  const { data, error } = await supabase
+    .from('accessories')
+    .upsert(rows, { onConflict: 'ma_pk' })
+    .select('id, ma_pk');
+
+  if (error) {
+    console.error('createAccessoryBatch error:', error);
+    return { ids: [], count: 0 };
+  }
+
+  return {
+    ids: (data || []).map(r => r.id),
+    ma_pks: (data || []).map(r => r.ma_pk),
+    count: data?.length || 0
+  };
+}
+
 /**
  * Update dress
  * @param {string} id - Dress UUID
@@ -754,7 +787,7 @@ async function fetchBookings() {
     supabase.from('booking_dresses').select('*').in('booking_id', bookingIds),
     supabase.from('booking_accessories').select('*').in('booking_id', bookingIds),
     supabase.from('dresses').select('id,ma_vay,ten_vay,size').filter('deleted_at', 'is', null),
-    supabase.from('accessories').select('id,ma_pk,ten_pk,size').filter('deleted_at', 'is', null)
+    supabase.from('accessories').select('id,ma_pk,ten_pk').filter('deleted_at', 'is', null)
   ]);
 
   // Build maps: dressId -> dress details
@@ -1056,6 +1089,7 @@ window.SupabaseService = {
 
   // Accessories
   fetchAccessories,
+  createAccessoryBatch,
   createAccessory,
   updateAccessory,
   deleteAccessory,

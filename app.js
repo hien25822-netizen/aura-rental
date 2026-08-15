@@ -4942,5 +4942,72 @@ async function submitBulkDresses() {
 // END BULK IMPORT
 // ============================
 
+async function submitBulkAccessories() {
+  const accessories = _bulkParsedAccessories;
+  if (!accessories?.length) return;
+
+  showBulkStep('progress');
+  const btn = document.getElementById('bulk-btn-action');
+  btn.disabled = true;
+
+  const total = accessories.length;
+  let imported = 0;
+  let synced = 0;
+  const progressFill = document.getElementById('bulk-progress-fill');
+  const progressCount = document.getElementById('bulk-progress-count');
+  const progressText = document.getElementById('bulk-progress-text');
+
+  progressText.textContent = `Đang nhập vào localStorage...`;
+
+  // Save to localStorage — upsert by Ma_PK
+  if (!db.pk) db.pk = [];
+  const existingMap = {};
+  db.pk.forEach((p, i) => { if (p.Ma_PK) existingMap[p.Ma_PK] = i; });
+  accessories.forEach(p => {
+    const { _row, ...accData } = p;
+    const existingIdx = existingMap[accData.Ma_PK];
+    if (existingIdx !== undefined) {
+      db.pk[existingIdx] = accData;
+    } else {
+      db.pk.push(accData);
+    }
+  });
+  save();
+  imported = total;
+  progressFill.style.width = '50%';
+  progressCount.textContent = `${imported}/${total} đã lưu localStorage`;
+
+  // Sync to Supabase
+  if (window.SupabaseService && window.SupabaseService.isConfigured()) {
+    const clean = accessories.map(({ _row, ...p }) => p);
+    const result = await window.SupabaseService.createAccessoryBatch(clean);
+    synced = result ? clean.length : 0;
+
+    if (result && result.ids) {
+      result.ids.forEach((id, i) => {
+        const ma = result.ma_pks[i];
+        const localAcc = db.pk.find(p => p.Ma_PK === ma);
+        if (localAcc) localAcc._dbId = id;
+      });
+      save();
+    }
+  }
+
+  progressFill.style.width = '100%';
+  progressCount.textContent = `${synced}/${total} đã sync Supabase`;
+
+  setTimeout(() => {
+    showBulkStep('done');
+    btn.disabled = false;
+    btn.textContent = 'Đóng';
+    btn.onclick = closeBulkImportModal;
+    document.getElementById('bulk-done-text').innerHTML =
+      `✅ Đã nhập <b>${imported} phụ kiện</b>!<br>` +
+      (synced ? `🔄 Đã sync <b>${synced}</b> phụ kiện lên Supabase.<br>` : '') +
+      `Kho phụ kiện sẽ được cập nhật tự động.`;
+    if (curView === 'v-pk') renderPk();
+  }, 300);
+}
+
 // Khởi tạo app — gọi view mặc định
 go('v-cal');
