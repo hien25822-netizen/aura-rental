@@ -345,27 +345,43 @@ async function loadFromSupabase(force = false) {
     const localDressIds = new Set((db.vay || []).map(v => v._dbId));
     const supDressIds = new Set(Object.keys(supDresses));
 
-    // Add all Supabase dresses (filter out locally-tombstoned)
-    (dresses || []).forEach(v => {
-      if (!recentlyDeletedItems.has(v._dbId)) mergedDresses.push(v);
-    });
+    // CRITICAL: Supabase returned empty — protect local data
+    // This can happen when RLS policies block reads or Supabase is unreachable
+    // Never wipe local storage when Supabase has no data
+    const hasSupDresses = (dresses || []).length > 0;
+    const hasSupAccessories = (accessories || []).length > 0;
 
-    // Add local-only dresses (not in Supabase yet)
-    (db.vay || []).forEach(v => {
-      if (!v._dbId || !supDresses[v._dbId]) {
-        mergedDresses.push(v);
-      }
-    });
+    // Add all Supabase dresses (filter out locally-tombstoned)
+    // Only if Supabase actually has data — never overwrite local with empty
+    if (hasSupDresses) {
+      (dresses || []).forEach(v => {
+        if (!recentlyDeletedItems.has(v._dbId)) mergedDresses.push(v);
+      });
+      // Add local-only dresses (not in Supabase yet)
+      (db.vay || []).forEach(v => {
+        if (!v._dbId || !supDresses[v._dbId]) {
+          mergedDresses.push(v);
+        }
+      });
+    } else {
+      // Supabase empty — preserve all local dresses
+      mergedDresses.push(...(db.vay || []));
+    }
 
     const mergedAccessories = [];
-    (accessories || []).forEach(p => {
-      if (!recentlyDeletedItems.has(p._dbId)) mergedAccessories.push(p);
-    });
-    (db.pk || []).forEach(p => {
-      if (!p._dbId || !supAccessories[p._dbId]) {
-        mergedAccessories.push(p);
-      }
-    });
+    if (hasSupAccessories) {
+      (accessories || []).forEach(p => {
+        if (!recentlyDeletedItems.has(p._dbId)) mergedAccessories.push(p);
+      });
+      (db.pk || []).forEach(p => {
+        if (!p._dbId || !supAccessories[p._dbId]) {
+          mergedAccessories.push(p);
+        }
+      });
+    } else {
+      // Supabase empty — preserve all local accessories
+      mergedAccessories.push(...(db.pk || []));
+    }
 
     // Merge orders: prefer newer version by _ts (timestamp-based conflict resolution)
     // GRACE PERIOD: orders modified in the last 30s always win — prevents race
