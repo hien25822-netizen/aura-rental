@@ -790,6 +790,9 @@ async function handleRealtimeOrderChange(payload) {
         return;
       }
       if (recentlyDeleted.has(supOrder._dbId)) return;
+      // Persisted delete (30 days) — user explicitly deleted this order, don't resurrect
+      if (db._deletedOrderIds && db._deletedOrderIds[supOrder._dbId] &&
+          now - db._deletedOrderIds[supOrder._dbId] < 30 * 24 * 60 * 60 * 1000) return;
       const idx = (db.don || []).findIndex(o => o._dbId === supOrder._dbId);
       const local = idx !== -1 ? db.don[idx] : null;
       // Preserve local edit if within grace period
