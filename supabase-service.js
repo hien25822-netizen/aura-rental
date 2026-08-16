@@ -278,7 +278,7 @@ async function createAccessoryBatch(accessories) {
   const rows = accessories.map(a => ({
     ma_pk: a.Ma_PK,
     ten_pk: a.Ten_PK,
-    loai: a.Loai || 'Khác',
+    loai: a.Loai_PK || a.Loai || 'Khác',
     so_luong_tong: a.So_Luong_Tong || 1,
     gia_thue_12h: a.Gia_Thue_12h || 0,
     gia_thue_1_ngay: a.Gia_Thue_1_Ngay || 0,
