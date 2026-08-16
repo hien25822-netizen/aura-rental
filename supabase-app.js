@@ -1472,10 +1472,16 @@ const _origDeleteOrder = window.deleteOrder;
 window.deleteOrder = function(id) {
   const order = db.don.find(o => (o.Ma_Don || o.id) === id);
   _origDeleteOrder(id);
-  if (order && order._dbId && window.SupabaseService.isConfigured()) {
-    window.SupabaseService.deleteOrder(order._dbId).catch(err =>
-      console.warn('Failed to delete order from Supabase:', err)
-    );
+  if (order && order._dbId) {
+    // Track deleted id for 30 days so full refetch doesn't resurrect it
+    if (!db._deletedOrderIds) db._deletedOrderIds = {};
+    db._deletedOrderIds[order._dbId] = Date.now();
+    localStorage.setItem(STORE, JSON.stringify(db));
+    if (window.SupabaseService.isConfigured()) {
+      window.SupabaseService.deleteOrder(order._dbId).catch(err =>
+        console.warn('Failed to delete order from Supabase:', err)
+      );
+    }
   }
 };
 
