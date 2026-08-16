@@ -1098,7 +1098,20 @@ async function syncBookingsToLocal(preDresses, preAccessories) {
     });
 
     let newCount = 0;
+    // Filter out bookings user has explicitly deleted (30-day window)
+    const deleted30d = db._deletedOrderIds
+      ? Object.entries(db._deletedOrderIds).filter(([, ts]) => Date.now() - ts < 30 * 24 * 60 * 60 * 1000)
+      : [];
+    const deletedById = new Set(deleted30d.map(([id]) => id));
+    const deletedByMaDon = db._deletedOrderMaDon
+      ? new Set(
+          Object.entries(db._deletedOrderMaDon)
+            .filter(([, ts]) => Date.now() - ts < 30 * 24 * 60 * 60 * 1000)
+            .map(([ma]) => ma)
+        )
+      : new Set();
     normalized.forEach(b => {
+      if (deletedById.has(b._dbId) || deletedByMaDon.has(b.Ma_Don)) return;
       const existing = existingById[b._dbId] || existingByMa[b.Ma_Don] || existingByBooking[b._bookingId];
       if (existing) {
         // Update existing — preserve local _ts so realtime merge doesn't overwrite newer edits
@@ -1479,6 +1492,11 @@ window.deleteOrder = function(id) {
     // Track deleted id for 30 days so full refetch doesn't resurrect it
     if (!db._deletedOrderIds) db._deletedOrderIds = {};
     db._deletedOrderIds[order._dbId] = Date.now();
+    // Also track by Ma_Don so bookings re-import is blocked
+    if (order.Ma_Don) {
+      if (!db._deletedOrderMaDon) db._deletedOrderMaDon = {};
+      db._deletedOrderMaDon[order.Ma_Don] = Date.now();
+    }
     localStorage.setItem(STORE, JSON.stringify(db));
     if (window.SupabaseService.isConfigured()) {
       window.SupabaseService.deleteOrder(order._dbId).catch(err =>
