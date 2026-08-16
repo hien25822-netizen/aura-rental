@@ -1306,6 +1306,13 @@ function showToast(msg) {
   setTimeout(() => toast.remove(), 3000);
 }
 
+// Generate 5-digit sequential booking code: B00001, B00002, ...
+function getNextBookingCode() {
+  const counter = parseInt(localStorage.getItem('aura_booking_counter') || '0', 10) + 1;
+  localStorage.setItem('aura_booking_counter', String(counter));
+  return 'B' + String(counter).padStart(5, '0');
+}
+
 async function handleSubmit(e) {
   e.preventDefault();
 
@@ -1319,7 +1326,7 @@ async function handleSubmit(e) {
     document.getElementById('booking-form').classList.add('hidden');
     document.getElementById('submit-section').classList.add('hidden');
     document.getElementById('success-view').classList.remove('hidden');
-    document.getElementById('booking-code').textContent = 'B' + Date.now();
+    document.getElementById('booking-code').textContent = getNextBookingCode();
     return;
   }
 
@@ -1344,7 +1351,7 @@ async function handleSubmit(e) {
 
   // Build booking data
   const booking = {
-    id: 'B' + Date.now(),
+    id: getNextBookingCode(),
     Trang_Thai_Don: 'Chờ xác nhận',
     Insta_Khach: form.insta.value.trim(),
     SDT: form.sdt.value.trim(),

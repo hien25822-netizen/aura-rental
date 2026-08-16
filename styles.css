@@ -1071,6 +1071,15 @@ input.search::placeholder {
   font-size: 12px;
 }
 
+.olc-row-dates {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.olc-row-dates .olc-date-chip {
+  font-size: 12px;
+}
+
 /* Note chip — Apple style, subtle */
 .olc-note {
   font-size: 12px;
