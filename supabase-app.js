@@ -793,6 +793,9 @@ async function handleRealtimeOrderChange(payload) {
       // Persisted delete (30 days) — user explicitly deleted this order, don't resurrect
       if (db._deletedOrderIds && db._deletedOrderIds[supOrder._dbId] &&
           now - db._deletedOrderIds[supOrder._dbId] < 30 * 24 * 60 * 60 * 1000) return;
+      // Also check by Ma_Don (UUID-keyed _dbId may not match)
+      if (db._deletedOrderMaDon && db._deletedOrderMaDon[supOrder.Ma_Don] &&
+          now - db._deletedOrderMaDon[supOrder.Ma_Don] < 30 * 24 * 60 * 60 * 1000) return;
       const idx = (db.don || []).findIndex(o => o._dbId === supOrder._dbId);
       const local = idx !== -1 ? db.don[idx] : null;
       // Preserve local edit if within grace period
@@ -821,9 +824,16 @@ async function handleRealtimeOrderChange(payload) {
         if (now - ts < 30 * 24 * 60 * 60 * 1000) persistedDeleted.add(dbId);
       });
     }
+    const persistedDeletedByMaDon = new Set();
+    if (db._deletedOrderMaDon) {
+      Object.entries(db._deletedOrderMaDon).forEach(([maDon, ts]) => {
+        if (now - ts < 30 * 24 * 60 * 60 * 1000) persistedDeletedByMaDon.add(maDon);
+      });
+    }
     const mergedAll = (orders || [])
       .filter(supOrder => !recentlyDeleted.has(supOrder._dbId))
       .filter(supOrder => !persistedDeleted.has(supOrder._dbId))
+      .filter(supOrder => !persistedDeletedByMaDon.has(supOrder.Ma_Don))
       .filter(supOrder => !pendingCreateMaDon.has(supOrder.Ma_Don))
       .map(supOrder => {
       const local = localByDbId[supOrder._dbId];
