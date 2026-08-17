@@ -1499,19 +1499,26 @@ window.deleteOrder = function(id) {
   const order = db.don.find(o => (o.Ma_Don || o.id) === id);
   _origDeleteOrder(id);
   if (order && order._dbId) {
-    // Track deleted id for 30 days so full refetch doesn't resurrect it
     if (!db._deletedOrderIds) db._deletedOrderIds = {};
     db._deletedOrderIds[order._dbId] = Date.now();
-    // Also track by Ma_Don so bookings re-import is blocked
     if (order.Ma_Don) {
       if (!db._deletedOrderMaDon) db._deletedOrderMaDon = {};
       db._deletedOrderMaDon[order.Ma_Don] = Date.now();
     }
     localStorage.setItem(STORE, JSON.stringify(db));
-    if (window.SupabaseService.isConfigured()) {
-      window.SupabaseService.deleteOrder(order._dbId).catch(err =>
-        console.warn('Failed to delete order from Supabase:', err)
-      );
+    // Hard delete from Supabase + relations (bypass wrapper to avoid recursion)
+    if (window.SupabaseService.isConfigured() && window._supabaseClient) {
+      (async () => {
+        try {
+          await window._supabaseClient.from('order_dresses').delete().eq('order_id', order._dbId);
+          await window._supabaseClient.from('order_accessories').delete().eq('order_id', order._dbId);
+          await window._supabaseClient.from('orders').delete().eq('id', order._dbId);
+          console.log('✅ Hard deleted order', order.Ma_Don, 'from Supabase');
+        } catch (err) {
+          console.warn('Hard delete failed (order kept in local deleted list):', err?.message);
+        }
+      })();
+    }
     }
   }
 };
