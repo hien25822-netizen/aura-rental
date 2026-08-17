@@ -1487,43 +1487,6 @@ window.closeModal = function(id) {
 };
 
 // ============================================================
-// DELETE-ORDER WRAPPER (soft-delete in Supabase)
-// All other CRUD ops (saveNewOrder, saveEditOrder, setOrderType,
-// submitItem, saveRefund, deleteItem) are handled inline in app.js.
-// Keeping this wrapper because deleteOrder in app.js does NOT await
-// the Supabase delete — it fires-and-forgets via .catch().
-// ============================================================
-
-const _origDeleteOrder = window.deleteOrder;
-window.deleteOrder = function(id) {
-  const order = db.don.find(o => (o.Ma_Don || o.id) === id);
-  _origDeleteOrder(id);
-  if (order && order._dbId) {
-    if (!db._deletedOrderIds) db._deletedOrderIds = {};
-    db._deletedOrderIds[order._dbId] = Date.now();
-    if (order.Ma_Don) {
-      if (!db._deletedOrderMaDon) db._deletedOrderMaDon = {};
-      db._deletedOrderMaDon[order.Ma_Don] = Date.now();
-    }
-    localStorage.setItem(STORE, JSON.stringify(db));
-    // Hard delete from Supabase + relations (bypass wrapper to avoid recursion)
-    if (window.SupabaseService.isConfigured() && window._supabaseClient) {
-      (async () => {
-        try {
-          await window._supabaseClient.from('order_dresses').delete().eq('order_id', order._dbId);
-          await window._supabaseClient.from('order_accessories').delete().eq('order_id', order._dbId);
-          await window._supabaseClient.from('orders').delete().eq('id', order._dbId);
-          console.log('✅ Hard deleted order', order.Ma_Don, 'from Supabase');
-        } catch (err) {
-          console.warn('Hard delete failed (order kept in local deleted list):', err?.message);
-        }
-      })();
-    }
-    }
-  }
-};
-
-// ============================================================
 // INITIALIZATION
 // ============================================================
 
