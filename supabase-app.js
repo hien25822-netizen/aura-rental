@@ -1366,6 +1366,10 @@ let bookingDebounce = null;
 // Import bookings from aura_bookings localStorage (same-tab: booking-form + main app in same tab)
 function importBookingsFromLocalStorage() {
   try {
+    if (typeof db === 'undefined' || !db.don) {
+      // db not ready yet - will be called again after init
+      return;
+    }
     const raw = localStorage.getItem('aura_bookings');
     if (!raw) return;
     const bookings = JSON.parse(raw);

@@ -3382,8 +3382,9 @@ function openNewOrder() {
   } else {
     db.pk.forEach(p => {
       const id = p.Ma_PK || p.ma;
-      const ten = p.Ten_PK || p.ten;
-      const loai = p.Loai || p.loai;
+      const ten = p.Ten_PK || p.ten || p.Ten || '';
+      const tenLower = ten ? ten.toLowerCase() : '';
+      const loai = p.Loai || p.loai || '';
       const anh = p.Anh_PK || p.anh || '';
       const imgHtml = anh ? '<img src="' + anh + '">' : '💍';
       const safeTen = escapeHtml(ten);
@@ -3399,7 +3400,7 @@ function openNewOrder() {
       const chipClass = outOfStock ? 'form-new-chip oos' : 'form-new-chip';
       const oosNote = outOfStock ? ' <span style="color:#dc2626;font-size:10px">Hết hàng</span>' : '';
 
-      pkItemsHtml += '<div class="' + chipClass + '" data-pk="' + id + '" data-ten="' + ten.toLowerCase() + '" onclick="if(!this.hasAttribute(\'disabled\')) window.toggleNewPK(\'' + id + '\', this)"' + disabledAttr + '>' +
+      pkItemsHtml += '<div class="' + chipClass + '" data-pk="' + id + '" data-ten="' + tenLower + '" onclick="if(!this.hasAttribute(\'disabled\')) window.toggleNewPK(\'' + id + '\', this)"' + disabledAttr + '>' +
         '<input type="checkbox" name="pks" value="' + id + '"' + disabledAttr + '>' +
         '<span class="form-new-chip-check"></span>' +
         '<div class="form-new-chip-img">' + imgHtml + '</div>' +
