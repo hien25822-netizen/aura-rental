@@ -80,6 +80,29 @@
   <div id="order-list"></div>
 </section>
 
+<!-- ===== ORDERS TABLE VIEW (Excel-like) ===== -->
+<section class="view" id="v-orders-table">
+  <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
+    <input class="search" id="search-orders-table" placeholder="Tìm đơn..." style="flex:1;min-width:0" />
+    <button class="header-btn" onclick="exportOrdersToExcel()" title="Xuất Excel">📥</button>
+    <button class="header-btn" onclick="copyOrdersTable()" title="Copy bảng">📋</button>
+  </div>
+  <div class="chips" id="orders-table-chips">
+    <button class="on" data-f="all">Tất cả</button>
+    <input type="date" id="order-table-date" aria-label="Lọc theo ngày">
+    <button data-f="today">Hôm nay</button>
+    <button data-f="tomorrow">Ngày mai</button>
+    <button data-f="yesterday">Hôm qua</button>
+  </div>
+  <div id="orders-table-count" style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 4px;font-weight:600"></div>
+  <div id="orders-table-container" style="overflow-x:auto">
+    <table id="orders-table" class="orders-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
 <!-- ===== DRESSES (KHO VÁY) ===== -->
 <section class="view" id="v-kho">
   <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
@@ -174,6 +197,7 @@
 <nav class="bottom">
   <button class="active" data-go="v-cal"><span class="ico">📅</span><small>Lịch</small></button>
   <button data-go="v-orders"><span class="ico">📦</span><small>Đơn</small></button>
+  <button data-go="v-orders-table"><span class="ico">📋</span><small>Bảng</small></button>
   <button data-go="v-avail"><span class="ico">✨</span><small>Check</small></button>
   <button data-go="v-kho"><span class="ico">👗</span><small>Váy</small></button>
   <button data-go="v-pk"><span class="ico">💍</span><small>Phụ kiện</small></button>
@@ -201,12 +225,17 @@
 
 <!-- Supabase Configuration -->
 <script>
+  console.log('🚀 index.html executing...');
   window.APP_CONFIG = {
     supabaseUrl: 'https://mmiygzcljqayrfomxkkk.supabase.co',
     supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1taXlnemNsanFheXJmb214a2trIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5OTI5NzIsImV4cCI6MjA5OTU2ODk3Mn0.k3VxGuCuv0n07-Cl7ZDF50NnxefMBXarjWa9TKwqzEw',
     bypassAuth: true // DEBUG: Skip login for testing
   };
-  console.log('✅ APP_CONFIG loaded - bypassAuth is:', window.APP_CONFIG.bypassAuth);
+  console.log('✅ APP_CONFIG loaded:', {
+    supabaseUrl: window.APP_CONFIG.supabaseUrl ? 'SET' : 'EMPTY',
+    supabaseKey: window.APP_CONFIG.supabaseKey ? 'SET' : 'EMPTY',
+    bypassAuth: window.APP_CONFIG.bypassAuth
+  });
 </script>
 
 <!-- Supabase Client Library -->
@@ -272,9 +301,9 @@
     s.onload = onload;
     document.head.appendChild(s);
   }
-  loadScript('supabase-service.js?v=25', function() {
-    loadScript('app.js?v=58', function() {
-      loadScript('supabase-app.js?v=76', function() {
+  loadScript('supabase-service.js?v=27', function() {
+    loadScript('app.js?v=60', function() {
+      loadScript('supabase-app.js?v=78', function() {
         console.log('All scripts loaded dynamically');
       });
     });

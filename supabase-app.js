@@ -119,8 +119,10 @@ function arraysDiffer(a, b) {
 const IS_DEMO_MODE = !window.APP_CONFIG?.supabaseUrl;
 const BYPASS_AUTH = true; // Hardcoded bypass for testing
 console.log('🔧 Init params - APP_CONFIG:', window.APP_CONFIG);
+console.log('🔧 Init params - IS_DEMO_MODE:', IS_DEMO_MODE);
 console.log('🔧 Init params - bypassAuth raw:', window.APP_CONFIG?.bypassAuth);
 console.log('🔧 Init params - BYPASS_AUTH:', BYPASS_AUTH);
+console.log('🔧 Init params - SupabaseService.isConfigured():', window.SupabaseService?.isConfigured());
 
 // ============================================================
 // AUTH UI
@@ -339,8 +341,13 @@ async function loadFromSupabase(force = false) {
       if (p._dbId) supAccessories[p._dbId] = p;
       if (p.Ma_PK) supAccessories[p.Ma_PK] = p;
     });
+    // CRITICAL: Filter out deleted orders FIRST - before building any maps
+    // This prevents deleted orders from appearing after hard reset
+    const activeOrders = (orders || []).filter(o => !o.deleted_at);
+    console.log('[loadFromSupabase] Total orders:', (orders || []).length, 'Active:', activeOrders.length, 'Deleted:', (orders || []).length - activeOrders.length);
+
     const supOrders = {};
-    (orders || []).forEach(o => { if (o._dbId) supOrders[o._dbId] = o; });
+    (activeOrders || []).forEach(o => { if (o._dbId) supOrders[o._dbId] = o; });
 
     // Merge: Keep local data, update from Supabase if Supabase has newer data
     // Prefer Supabase for records that exist in both (it's the source of truth)
@@ -430,20 +437,19 @@ async function loadFromSupabase(force = false) {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
       });
     }
-    // Also check persistent tombstone AND filter out orders with deleted_at from Supabase
+    // Also check persistent tombstone - filter out orders marked as recently deleted locally
     if (typeof window.isRecentlyDeleted === 'function') {
-      (orders || []).forEach(o => {
+      (activeOrders || []).forEach(o => {
         if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
       });
     }
-    // CRITICAL: Filter out orders that are soft-deleted in Supabase
-    const supOrdersFiltered = (orders || []).filter(o => !o.deleted_at);
+    // supOrdersFiltered already contains only active orders (filtered above)
     // Record local versions
     const orderVersions = {};
     (db.don || []).forEach(o => { if (o._version) orderVersions[o._dbId] = o._version; });
 
-    // Use filtered orders (exclude soft-deleted from Supabase)
-    supOrdersFiltered.forEach(o => {
+    // Use active orders (already excludes soft-deleted from Supabase)
+    activeOrders.forEach(o => {
       if (recentlyDeleted.has(o._dbId)) return; // skip locally-deleted orders
       if (pendingCreateIds.has(o.Ma_Don)) return; // pending create — keep local copy
       const local = db.don.find(x => x._dbId === o._dbId);
@@ -473,8 +479,8 @@ async function loadFromSupabase(force = false) {
       }
     });
     // Add local-only orders (not in Supabase yet) — includes pending creates
-    // Also check if order exists in filtered (non-deleted) Supabase orders
-    const supOrderDbIds = new Set(supOrdersFiltered.map(o => o._dbId));
+    // Also check if order exists in active Supabase orders
+    const supOrderDbIds = new Set(activeOrders.map(o => o._dbId));
     (db.don || []).forEach(o => {
       if (!o._dbId || !supOrderDbIds.has(o._dbId)) {
         mergedOrders.push(o);
@@ -1639,6 +1645,18 @@ async function initWithSupabase() {
       return;
     }
 
+    // Bypass auth mode - never show login modal
+    if (BYPASS_AUTH && window.SupabaseService.isConfigured()) {
+      console.log('🔓 BYPASS_AUTH mode - loading data without login');
+      setupRealtime();
+      syncBookingsToLocal();
+      await loadFromSupabase();
+      syncStateAndRender();
+      go('v-cal');
+      document.body.classList.remove('auth-locked');
+      return;
+    }
+
     const user = await window.SupabaseService.init();
 
     if (window.SupabaseService.isConfigured()) {
@@ -1651,8 +1669,15 @@ async function initWithSupabase() {
       await loadFromSupabase();
       go('v-cal');
       document.body.classList.remove('auth-locked');
+    } else if (window.SupabaseService.isConfigured()) {
+      // Supabase is configured but not logged in - still load data (anon access)
+      console.log('🔓 Supabase configured but not logged in - loading as anonymous');
+      await loadFromSupabase();
+      go('v-cal');
+      document.body.classList.remove('auth-locked');
     } else {
-      console.log('🔐 Not authenticated');
+      // No Supabase - show login modal
+      console.log('🔐 Not authenticated and no Supabase');
       loadFromLocalStorage();
       importBookingsFromLocalStorage();
       syncStateAndRender();

@@ -22,14 +22,27 @@
 const SUPABASE_URL = window.APP_CONFIG?.supabaseUrl || '';
 const SUPABASE_ANON_KEY = window.APP_CONFIG?.supabaseKey || '';
 
+console.log('🔧 supabase-service.js loaded');
+console.log('  - SUPABASE_URL:', SUPABASE_URL ? 'SET' : 'EMPTY');
+console.log('  - SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'SET' : 'EMPTY');
+console.log('  - window.supabase:', typeof window.supabase);
+
 // Create Supabase client
 if (typeof window._supabaseClient === 'undefined') {
   window._supabaseClient = null;
   if (SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase) {
+    console.log('  - Creating Supabase client...');
     window._supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('  - Client created:', !!window._supabaseClient);
+  } else {
+    console.log('  - Could NOT create client. Missing:',
+      !SUPABASE_URL ? 'URL' : '',
+      !SUPABASE_ANON_KEY ? 'KEY' : '',
+      !window.supabase ? 'SUPABASE_LIB' : '');
   }
 }
 var supabase = window._supabaseClient;
+console.log('  - supabase variable:', !!supabase);
 
 // ============================================================
 // AUTH STATE

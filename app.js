@@ -1643,6 +1643,205 @@ $$('#order-type-chips button').forEach(b => b.onclick = () => {
 });
 
 /* ============================================================
+ *  ORDERS TABLE VIEW (Excel-like)
+ * ============================================================ */
+let curOrderTableDate = null;
+
+function renderOrdersTable() {
+  const search = ($('#search-orders-table') || {}).value?.toLowerCase().trim() || '';
+  let arr = (db.don || []).slice();
+
+  // Filter by date
+  if (curOrderTableDate) {
+    arr = arr.filter(o => o.Ngay_Lay === curOrderTableDate);
+  }
+
+  // Filter by search
+  if (search) {
+    arr = arr.filter(o =>
+      (o.Ten_KH || o.ten_kh || '').toLowerCase().includes(search) ||
+      (o.Ma_Don || o.ma_don || '').toLowerCase().includes(search) ||
+      (o.SDT || o.sdt || '').includes(search)
+    );
+  }
+
+  // Sort by date descending
+  arr.sort((a, b) => {
+    const dateA = a.Ngay_Lay || a.ngay_lay || '';
+    const dateB = b.Ngay_Lay || b.ngay_lay || '';
+    return dateB.localeCompare(dateA);
+  });
+
+  // Update count
+  const countEl = $('#orders-table-count');
+  if (countEl) countEl.textContent = `${arr.length} đơn`;
+
+  // Build table
+  const thead = $('#orders-table thead');
+  const tbody = $('#orders-table tbody');
+  if (!thead || !tbody) return;
+
+  thead.innerHTML = `<tr>
+    <th>Ngày lấy</th>
+    <th>Mã đơn</th>
+    <th>Tên KH</th>
+    <th>SĐT</th>
+    <th>Loại</th>
+    <th>Váy</th>
+    <th>Ngày trả</th>
+    <th>Tiền</th>
+    <th>Đặt cọc</th>
+    <th>Trạng thái</th>
+  </tr>`;
+
+  tbody.innerHTML = arr.map(o => {
+    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
+    const dressNames = dresses.map(d => {
+      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
+      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    }).filter(Boolean).join(', ');
+
+    const total = o.Tong_Tien || o.tong || 0;
+    const deposit = o.Dat_Coc || o.coc || 0;
+    const status = o.Trang_Thai || o.trang_thai || '';
+
+    return `<tr onclick="openOrderDetail('${o.Ma_Don || o.id}')">
+      <td>${o.Ngay_Lay || o.ngay_lay || ''}</td>
+      <td>${o.Ma_Don || o.ma_don || ''}</td>
+      <td>${o.Ten_KH || o.ten_kh || ''}</td>
+      <td>${o.SDT || o.sdt || ''}</td>
+      <td>${o.Loai || o.loai || ''}</td>
+      <td>${dressNames}</td>
+      <td>${o.Ngay_Tra || o.ngay_tra || ''}</td>
+      <td>${fmtVND(total)}</td>
+      <td>${fmtVND(deposit)}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Search handler
+$('#search-orders-table').oninput = renderOrdersTable;
+
+// Date filter
+$('#order-table-date').onchange = (e) => {
+  const v = e.target.value;
+  curOrderTableDate = v || null;
+  renderOrdersTable();
+};
+
+// Table chips
+$$('#orders-table-chips button').forEach(b => b.onclick = () => {
+  $$('#orders-table-chips button').forEach(x => x.classList.toggle('on', x === b));
+  const f = b.dataset.f;
+  if (f === 'all') {
+    curOrderTableDate = null;
+    $('#order-table-date').value = '';
+  } else if (f === 'today') {
+    curOrderTableDate = isoOf(new Date());
+    $('#order-table-date').value = curOrderTableDate;
+  } else if (f === 'tomorrow') {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    curOrderTableDate = isoOf(d);
+    $('#order-table-date').value = curOrderTableDate;
+  } else if (f === 'yesterday') {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    curOrderTableDate = isoOf(d);
+    $('#order-table-date').value = curOrderTableDate;
+  }
+  renderOrdersTable();
+});
+
+// Copy table to clipboard
+function copyOrdersTable() {
+  const rows = [];
+  rows.push(['Ngày lấy', 'Mã đơn', 'Tên KH', 'SĐT', 'Loại', 'Váy', 'Ngày trả', 'Tiền', 'Đặt cọc', 'Trạng thái']);
+
+  const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
+
+  arr.forEach(o => {
+    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
+    const dressNames = dresses.map(d => {
+      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
+      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    }).filter(Boolean).join(', ');
+
+    rows.push([
+      o.Ngay_Lay || o.ngay_lay || '',
+      o.Ma_Don || o.ma_don || '',
+      o.Ten_KH || o.ten_kh || '',
+      o.SDT || o.sdt || '',
+      o.Loai || o.loai || '',
+      dressNames,
+      o.Ngay_Tra || o.ngay_tra || '',
+      (o.Tong_Tien || o.tong || 0).toString(),
+      (o.Dat_Coc || o.coc || 0).toString(),
+      o.Trang_Thai || o.trang_thai || ''
+    ]);
+  });
+
+  const text = rows.map(r => r.join('\t')).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Đã copy bảng vào clipboard!', 'success');
+  }).catch(() => {
+    toast('Lỗi copy', 'error');
+  });
+}
+
+// Export to Excel
+function exportOrdersToExcel() {
+  if (typeof XLSX === 'undefined') {
+    toast('SheetJS chưa load, thử lại sau', 'warn');
+    return;
+  }
+
+  const rows = [];
+  rows.push(['Ngày lấy', 'Mã đơn', 'Tên KH', 'SĐT', 'Loại', 'Váy', 'Phụ kiện', 'Ngày trả', 'Tiền', 'Đặt cọc', 'Còn lại', 'Trạng thái', 'Ghi chú']);
+
+  const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
+
+  arr.forEach(o => {
+    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
+    const dressNames = dresses.map(d => {
+      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
+      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    }).filter(Boolean).join(', ');
+
+    const accessories = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don) && d.Ma_PK);
+    const accNames = accessories.map(d => {
+      const p = (db.pk || []).find(p => (p.Ma_PK || p.ma_pk) === d.Ma_PK);
+      return p?.Ten_PK || p?.ten || d.Ma_PK || '';
+    }).filter(Boolean).join(', ');
+
+    const total = o.Tong_Tien || o.tong || 0;
+    const deposit = o.Dat_Coc || o.coc || 0;
+    const remaining = total - deposit;
+
+    rows.push([
+      o.Ngay_Lay || o.ngay_lay || '',
+      o.Ma_Don || o.ma_don || '',
+      o.Ten_KH || o.ten_kh || '',
+      o.SDT || o.sdt || '',
+      o.Loai || o.loai || '',
+      dressNames,
+      accNames,
+      o.Ngay_Tra || o.ngay_tra || '',
+      total,
+      deposit,
+      remaining,
+      o.Trang_Thai || o.trang_thai || '',
+      o.Ghi_Chu || o.ghi_chu || ''
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Đơn hàng');
+  XLSX.writeFile(wb, `aura_don_hang_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('Đã xuất Excel!', 'success');
+}
+
+/* ============================================================
  *  KHO VÁY (DRESSES) — gallery + CRUD
  * ============================================================ */
 let curSizeFilter = '';
