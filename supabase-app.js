@@ -440,7 +440,9 @@ async function loadFromSupabase(force = false) {
     // Also check persistent tombstone - filter out orders marked as recently deleted locally
     if (typeof window.isRecentlyDeleted === 'function') {
       (activeOrders || []).forEach(o => {
-        if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
+        if (o._dbId && window.isRecentlyDeleted('orders', o._dbId)) {
+          recentlyDeleted.add(o._dbId);
+        }
       });
     }
     // supOrdersFiltered already contains only active orders (filtered above)
@@ -574,10 +576,31 @@ function isRecentRemote(table, dbId) {
 window.markRemoteInsert = markRemoteInsert;
 window.isRecentRemote = isRecentRemote;
 
+// Track current order being edited for presence detection
+let _currentEditingOrderId = null;
+let _presenceWarningDismissed = false;
+
 function setupRealtime() {
   if (!window.SupabaseService.isConfigured()) return;
 
   window.SupabaseService.unsubscribeAll();
+
+  // Setup presence tracking for conflict detection
+  window.SupabaseService.setupPresence(
+    // onJoin: someone started editing an order
+    (userInfo, orderId) => {
+      console.log('[Presence] User joined:', userInfo.name, 'is editing order', orderId);
+      // Show warning if another user is editing the same order we're viewing
+      if (_currentEditingOrderId === orderId && userInfo.name !== _currentUserName) {
+        showPresenceWarning(userInfo.name, orderId);
+      }
+    },
+    // onLeave: someone stopped editing an order
+    (userInfo, orderId) => {
+      console.log('[Presence] User left:', userInfo.name, 'stopped editing order', orderId);
+      hidePresenceWarning(orderId);
+    }
+  );
 
   _realtimeStatus = 'connecting';
   SyncBanner.show('Đang kết nối realtime...', '🔄');
@@ -641,6 +664,75 @@ function setupRealtime() {
 
   console.log('🚀 Realtime setup initiated for', tables.join(', '));
 }
+
+// ============================================================
+// PRESENCE WARNING UI
+// ============================================================
+
+function showPresenceWarning(otherUserName, orderId) {
+  // Remove existing warning first
+  hidePresenceWarning(orderId);
+
+  const warning = document.createElement('div');
+  warning.id = 'presence-warning';
+  warning.style.cssText = `
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10000;
+    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: slideDown 0.3s ease;
+  `;
+  warning.innerHTML = `
+    <span style="font-size: 18px">👀</span>
+    <span><b>${escapeHtml(otherUserName)}</b> đang sửa đơn này!</span>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:white;cursor:pointer;font-size:18px;padding:0 0 0 10px">×</button>
+  `;
+  document.body.appendChild(warning);
+
+  // Auto-dismiss after 10 seconds
+  setTimeout(() => {
+    if (warning.parentElement) warning.remove();
+  }, 10000);
+}
+
+function hidePresenceWarning(orderId) {
+  const existing = document.getElementById('presence-warning');
+  if (existing) existing.remove();
+}
+
+// Track current user name for presence
+let _currentUserName = 'User';
+
+function setCurrentUserName(name) {
+  _currentUserName = name;
+}
+
+// Export for app.js
+window.setCurrentUserName = setCurrentUserName;
+window.trackOrderEditingPresence = function(orderId) {
+  _currentEditingOrderId = orderId;
+  if (window.SupabaseService?.isConfigured?.()) {
+    window.SupabaseService.trackOrderEditing(orderId, { name: _currentUserName });
+  }
+};
+
+window.untrackOrderEditingPresence = function(orderId) {
+  _currentEditingOrderId = null;
+  if (window.SupabaseService?.isConfigured?.()) {
+    window.SupabaseService.untrackOrderEditing(orderId);
+  }
+};
 
 async function handleRealtimeChange(table, payload) {
   console.log(`[Realtime] ${table} changed:`, payload.eventType);
@@ -1629,6 +1721,7 @@ async function initWithSupabase() {
       }
       await loadFromSupabase();
       syncStateAndRender();
+      setCurrentUserName('Admin'); // Set user name for presence tracking
       go('v-cal');
       return;
     }
@@ -1641,6 +1734,7 @@ async function initWithSupabase() {
       syncBookingsToLocal();
       await loadFromSupabase();
       syncStateAndRender();
+      setCurrentUserName('Admin');
       go('v-cal');
       return;
     }
@@ -1652,6 +1746,7 @@ async function initWithSupabase() {
       syncBookingsToLocal();
       await loadFromSupabase();
       syncStateAndRender();
+      setCurrentUserName('Admin');
       go('v-cal');
       document.body.classList.remove('auth-locked');
       return;

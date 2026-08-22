@@ -318,6 +318,17 @@ header .pill {
   to { transform: rotate(360deg); }
 }
 
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 /* Sync badge */
 .pending-sync-badge {
   font-size: var(--text-xs);

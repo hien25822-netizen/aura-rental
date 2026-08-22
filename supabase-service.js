@@ -948,6 +948,87 @@ function unsubscribeAll() {
 }
 
 // ============================================================
+// PRESENCE TRACKING - Biết ai đang sửa đơn
+// ============================================================
+
+let presenceChannel = null;
+let presenceState = {}; // { orderId: { userId: { name, avatar, timestamp } } }
+
+/**
+ * Track presence of current user on an order
+ * @param {string} orderId - Order _dbId
+ * @param {Object} userInfo - { name, avatar }
+ */
+function trackOrderEditing(orderId, userInfo) {
+  if (!presenceChannel) return;
+  presenceChannel.track({
+    order_id: orderId,
+    user: userInfo,
+    online_at: new Date().toISOString()
+  });
+}
+
+/**
+ * Untrack presence when closing order modal
+ * @param {string} orderId - Order _dbId
+ */
+function untrackOrderEditing(orderId) {
+  if (!presenceChannel) return;
+  presenceChannel.untrack({
+    order_id: orderId
+  });
+}
+
+/**
+ * Get all users currently viewing an order
+ * @param {string} orderId - Order _dbId
+ * @returns {Array} Array of user info objects
+ */
+function getOrderEditors(orderId) {
+  const state = presenceChannel?.presenceState() || {};
+  const orderStates = state[`order:${orderId}`] || [];
+  return orderStates.map(s => s.user).filter(u => u);
+}
+
+/**
+ * Setup presence channel for order editing awareness
+ * @param {Function} onJoin - Callback when user joins (userInfo, orderId)
+ * @param {Function} onLeave - Callback when user leaves (userInfo, orderId)
+ */
+function setupPresence(onJoin, onLeave) {
+  if (!supabase) return;
+
+  presenceChannel = supabase.channel('presence', {
+    config: {
+      presence: { key: 'user' }
+    }
+  });
+
+  presenceChannel
+    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+      console.log('[Presence] Join:', key, newPresences);
+      newPresences.forEach(p => {
+        if (p.user && p.user.order_id && onJoin) {
+          onJoin(p.user, p.user.order_id);
+        }
+      });
+    })
+    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+      console.log('[Presence] Leave:', key, leftPresences);
+      leftPresences.forEach(p => {
+        if (p.user && p.user.order_id && onLeave) {
+          onLeave(p.user, p.user.order_id);
+        }
+      });
+    })
+    .on('presence', { event: 'sync' }, () => {
+      const state = presenceChannel.presenceState();
+      console.log('[Presence] Sync:', Object.keys(state).length, 'channels');
+    })
+    .subscribe();
+}
+
+// ============================================================
 // DATA NORMALIZATION
 // Convert Supabase format → app.js expected format
 // ============================================================
@@ -1128,6 +1209,12 @@ window.SupabaseService = {
   subscribeToChanges,
   subscribeToAll,
   unsubscribeAll,
+
+  // Presence
+  setupPresence,
+  trackOrderEditing,
+  untrackOrderEditing,
+  getOrderEditors,
 
   // Normalization
   normalizeDress,

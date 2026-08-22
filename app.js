@@ -1,6 +1,6 @@
 const STORE = 'aura_v8';
 const DELETED_IDS_KEY = 'aura_deleted_ids_v1'; // Persistent tombstone - survives cache clear
-const TOMBSTONE_GRACE_MS = 3600000; // 1 hour - tombstone preserved for 1 hour
+const TOMBSTONE_GRACE_MS = 365 * 24 * 60 * 60 * 1000; // 1 year - tombstone is permanent
 
 // Bump STORAGE_VERSION mỗi khi schema localStorage thay đổi —
 // khi user mở web, nếu thấy version cũ sẽ tự động xóa cache cũ
@@ -74,7 +74,7 @@ function isRecentlyDeleted(table, dbId) {
   if (!dbId) return false;
   const ts = _persistentDeletedIds[`${table}:${dbId}`];
   if (!ts) return false;
-  // Auto-expire after 1 hour
+  // Auto-expire after tombstone period (1 year)
   if (Date.now() - ts > TOMBSTONE_GRACE_MS) {
     clearDeleted(table, dbId);
     return false;
@@ -719,6 +719,11 @@ function showConfirmModal({ title = 'Xác nhận', message = '', confirmText = '
   });
 }
 function closeAllModals() {
+  // Untrack presence when closing any modal
+  if (typeof window.untrackOrderEditingPresence === 'function') {
+    window.untrackOrderEditingPresence();
+  }
+
   $$('.modal').forEach(m => m.classList.remove('show'));
   document.body.classList.remove('modal-open-lock');
   document.body.style.top = '';
@@ -2922,6 +2927,12 @@ function openOrderDetail(id) {
     </div>
   `;
   openModal('m-detail');
+
+  // Track presence: notify others we're editing this order
+  const orderId = o.Ma_Don || o.id;
+  if (typeof window.trackOrderEditingPresence === 'function') {
+    window.trackOrderEditingPresence(orderId);
+  }
 }
 
 function openEditOrder(id) {
@@ -3222,10 +3233,8 @@ window.deleteOrder = function(id) {
         window.SupabaseService.deleteOrder(dbId).then(() => {
           // Supabase confirmed — clear from persistent tombstone so merge stops filtering it
           clearDeleted('orders', dbId);
-          console.log('[Delete] Supabase confirmed for', order.Ma_Don);
         }).catch(err => {
           console.warn('Supabase deleteOrder failed:', err);
-          // Will retry on next polling cycle via retryPendingDeletes()
         });
       }
       closeModal('m-detail');
