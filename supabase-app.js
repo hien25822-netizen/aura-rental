@@ -351,7 +351,8 @@ async function loadFromSupabase(force = false) {
 
     // Merge: Keep local data, update from Supabase if Supabase has newer data
     // Prefer Supabase for records that exist in both (it's the source of truth)
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace (same as app.js TOMBSTONE_GRACE_MS)
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const nowItem = Date.now();
     // Use persistent tombstone - check both db._deletedItemIds and window.isRecentlyDeleted
     const recentlyDeletedItems = new Set();
@@ -432,9 +433,16 @@ async function loadFromSupabase(force = false) {
     // Also skip orders deleted locally within grace period (Supabase delete may not have landed yet)
     // Also skip orders with locally-pending Ma_Don (waiting for _dbId assignment)
     const recentlyDeleted = new Set();
+    const recentlyDeletedMaDon = new Set();
     if (db._deletedOrderIds) {
       Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    // Also check Ma_Don-based deletion tracking
+    if (db._deletedOrderMaDon) {
+      Object.entries(db._deletedOrderMaDon).forEach(([maDon, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeletedMaDon.add(maDon);
       });
     }
     // Also check persistent tombstone - filter out orders marked as recently deleted locally
@@ -453,6 +461,7 @@ async function loadFromSupabase(force = false) {
     // Use active orders (already excludes soft-deleted from Supabase)
     activeOrders.forEach(o => {
       if (recentlyDeleted.has(o._dbId)) return; // skip locally-deleted orders
+      if (recentlyDeletedMaDon.has(o.Ma_Don)) return; // skip by Ma_Don
       if (pendingCreateIds.has(o.Ma_Don)) return; // pending create — keep local copy
       const local = db.don.find(x => x._dbId === o._dbId);
       const localTs = orderTimestamps[o._dbId];
@@ -768,7 +777,8 @@ function startFastPolling() {
 async function handleRealtimeDressChange(payload) {
   if (!db) return;
   try {
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const recentlyDeleted = new Set();
     if (db._deletedItemIds) {
@@ -846,7 +856,8 @@ async function handleRealtimeDressChange(payload) {
 async function handleRealtimeAccessoryChange(payload) {
   if (!db) return;
   try {
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const recentlyDeleted = new Set();
     if (db._deletedItemIds) {
@@ -924,14 +935,26 @@ async function handleRealtimeAccessoryChange(payload) {
 async function handleRealtimeOrderChange(payload) {
   if (!db) return;
   try {
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const localByDbId = {};
+    const localByMaDon = {};
     const recentlyDeleted = new Set();
-    (db.don || []).forEach(o => { if (o._dbId) localByDbId[o._dbId] = o; });
+    const recentlyDeletedMaDon = new Set();
+    (db.don || []).forEach(o => {
+      if (o._dbId) localByDbId[o._dbId] = o;
+      if (o.Ma_Don) localByMaDon[o.Ma_Don] = o;
+    });
     if (db._deletedOrderIds) {
       Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    // Also check Ma_Don-based deletion tracking
+    if (db._deletedOrderMaDon) {
+      Object.entries(db._deletedOrderMaDon).forEach(([maDon, ts]) => {
+        if (now - ts < GRACE_MS) recentlyDeletedMaDon.add(maDon);
       });
     }
     // Also check persistent tombstone (survives cache clear) - check ALL orders
@@ -973,6 +996,7 @@ async function handleRealtimeOrderChange(payload) {
         return;
       }
       if (recentlyDeleted.has(supOrder._dbId)) return;
+      if (recentlyDeletedMaDon.has(supOrder.Ma_Don)) return;
       // Persisted delete (30 days) — user explicitly deleted this order, don't resurrect
       if (db._deletedOrderIds && db._deletedOrderIds[supOrder._dbId] &&
           now - db._deletedOrderIds[supOrder._dbId] < 30 * 24 * 60 * 60 * 1000) return;
@@ -1078,7 +1102,8 @@ async function handleRealtimeOrderDressChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_dresses changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const recentlyDeleted = new Set();
     if (db._deletedOrderIds) {
@@ -1136,7 +1161,8 @@ async function handleRealtimeOrderAccessoryChange(payload) {
   if (!db) return;
   console.log('[Realtime] order_accessories changed:', payload.eventType, payload.new?.id || payload.old?.id);
   try {
-    const GRACE_MS = 30000;
+    // Use 365 days for tombstone grace
+    const GRACE_MS = 365 * 24 * 60 * 60 * 1000;
     const now = Date.now();
     const recentlyDeleted = new Set();
     if (db._deletedOrderIds) {

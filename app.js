@@ -3220,10 +3220,19 @@ window.deleteOrder = function(id) {
       const dbId = order?._dbId;
       const delBtn = document.querySelector('#m-detail .btn-danger');
       if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
-      // Track _dbId in persistent tombstone so it survives cache clear
-      // until Supabase confirms the soft delete (avoids reappearance on next fetch)
+      // Track _dbId in BOTH in-memory and persistent tombstone
+      // This ensures the order is filtered out even if Supabase delete fails
       if (dbId) {
         markDeleted('orders', dbId);
+        // Also track in-memory for instant filtering
+        if (!db._deletedOrderIds) db._deletedOrderIds = {};
+        db._deletedOrderIds[dbId] = Date.now();
+      }
+      // Also track by Ma_Don for extra safety
+      const maDon = order?.Ma_Don || order?.id;
+      if (maDon) {
+        if (!db._deletedOrderMaDon) db._deletedOrderMaDon = {};
+        db._deletedOrderMaDon[maDon] = Date.now();
       }
       db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
       db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
