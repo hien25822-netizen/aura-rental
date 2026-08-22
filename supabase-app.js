@@ -157,6 +157,13 @@ window.handleSupabaseLogin = async function(e) {
     closeModal('m-login');
     document.body.classList.remove('auth-locked');
     toast('Đăng nhập thành công!', 'success');
+
+    // Disable Google Sheets sync when Supabase is active - avoid conflicts between two sync systems
+    if (typeof SYNC !== 'undefined') {
+      SYNC.ENABLED = false;
+      console.log('[Sync] Disabled Google Sheets sync - using Supabase only');
+    }
+
     await loadFromSupabase();
     setupRealtime();
     refreshCurView();
@@ -335,10 +342,20 @@ async function loadFromSupabase(force = false) {
     // Prefer Supabase for records that exist in both (it's the source of truth)
     const GRACE_MS = 30000;
     const nowItem = Date.now();
+    // Use persistent tombstone - check both db._deletedItemIds and window.isRecentlyDeleted
     const recentlyDeletedItems = new Set();
     if (db._deletedItemIds) {
       Object.entries(db._deletedItemIds).forEach(([dbId, ts]) => {
         if (nowItem - ts < GRACE_MS) recentlyDeletedItems.add(dbId);
+      });
+    }
+    // Also check persistent tombstone (survives cache clear)
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (dresses || []).forEach(v => {
+        if (window.isRecentlyDeleted('dresses', v._dbId)) recentlyDeletedItems.add(v._dbId);
+      });
+      (accessories || []).forEach(p => {
+        if (window.isRecentlyDeleted('accessories', p._dbId)) recentlyDeletedItems.add(p._dbId);
       });
     }
     const mergedDresses = [];
@@ -409,21 +426,43 @@ async function loadFromSupabase(force = false) {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
       });
     }
+    // Also check persistent tombstone
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (orders || []).forEach(o => {
+        if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
+      });
+    }
+    // Record local versions
+    const orderVersions = {};
+    (db.don || []).forEach(o => { if (o._version) orderVersions[o._dbId] = o._version; });
+
     (orders || []).forEach(o => {
       if (recentlyDeleted.has(o._dbId)) return; // skip locally-deleted orders
       if (pendingCreateIds.has(o.Ma_Don)) return; // pending create — keep local copy
+      const local = db.don.find(x => x._dbId === o._dbId);
       const localTs = orderTimestamps[o._dbId];
       const remoteTs = o._ts;
-      const local = db.don.find(x => x._dbId === o._dbId);
+      const localVersion = orderVersions[o._dbId] || 0;
+      const remoteVersion = o._version || 0;
       const isRecent = localTs && (now - localTs) < GRACE_MS;
-      if (isRecent && local) {
-        // Within grace period — keep local (user just edited this order)
+
+      // Priority: 1) local has higher version → keep local
+      //          2) within grace period → keep local
+      //          3) local timestamp newer → keep local
+      //          4) otherwise → use remote
+      if (local && localVersion > remoteVersion) {
+        mergedOrders.push(local);
+      } else if (isRecent && local) {
         mergedOrders.push(local);
       } else if (localTs && remoteTs && localTs > remoteTs) {
-        // Local is older but still newer than remote
         mergedOrders.push(local);
       } else {
-        mergedOrders.push(o);
+        // Use remote, but preserve local _version if higher
+        if (local && localVersion > remoteVersion) {
+          mergedOrders.push({ ...o, _version: localVersion });
+        } else {
+          mergedOrders.push(o);
+        }
       }
     });
     // Add local-only orders (not in Supabase yet) — includes pending creates
@@ -668,11 +707,23 @@ async function handleRealtimeDressChange(payload) {
     const dresses = await window.SupabaseService.fetchDresses();
     const localByDbId = {};
     (db.vay || []).forEach(v => { if (v._dbId) localByDbId[v._dbId] = v; });
+    // Also check persistent tombstone
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (dresses || []).forEach(v => {
+        if (window.isRecentlyDeleted('dresses', v._dbId)) recentlyDeleted.add(v._dbId);
+      });
+    }
     const merged = (dresses || [])
       .filter(v => !recentlyDeleted.has(v._dbId))
       .map(sup => {
         const local = localByDbId[sup._dbId];
-        return local ? { ...sup, So_Lan_Thue: local.So_Lan_Thue } : sup;
+        // Preserve local _version if higher
+        if (local) {
+          const localVersion = local._version || 0;
+          const remoteVersion = sup._version || 0;
+          return { ...sup, So_Lan_Thue: local.So_Lan_Thue, _version: Math.max(localVersion, remoteVersion) };
+        }
+        return sup;
       });
     const prev = db.vay || [];
     db.vay = merged;
@@ -734,11 +785,23 @@ async function handleRealtimeAccessoryChange(payload) {
     const accessories = await window.SupabaseService.fetchAccessories();
     const localByDbId = {};
     (db.pk || []).forEach(p => { if (p._dbId) localByDbId[p._dbId] = p; });
+    // Also check persistent tombstone
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (accessories || []).forEach(p => {
+        if (window.isRecentlyDeleted('accessories', p._dbId)) recentlyDeleted.add(p._dbId);
+      });
+    }
     const merged = (accessories || [])
       .filter(p => !recentlyDeleted.has(p._dbId))
       .map(sup => {
         const local = localByDbId[sup._dbId];
-        return local ? { ...sup, So_Luong_Tong: local.So_Luong_Tong } : sup;
+        // Preserve local _version if higher
+        if (local) {
+          const localVersion = local._version || 0;
+          const remoteVersion = sup._version || 0;
+          return { ...sup, So_Luong_Tong: local.So_Luong_Tong, _version: Math.max(localVersion, remoteVersion) };
+        }
+        return sup;
       });
     const prev = db.pk || [];
     db.pk = merged;
@@ -762,6 +825,12 @@ async function handleRealtimeOrderChange(payload) {
     if (db._deletedOrderIds) {
       Object.entries(db._deletedOrderIds).forEach(([dbId, ts]) => {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
+      });
+    }
+    // Also check persistent tombstone (survives cache clear)
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (orders || []).forEach(o => {
+        if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
       });
     }
     // Pending creates (orders awaiting _dbId assignment) — keep local copy untouched
@@ -798,12 +867,14 @@ async function handleRealtimeOrderChange(payload) {
           now - db._deletedOrderMaDon[supOrder.Ma_Don] < 30 * 24 * 60 * 60 * 1000) return;
       const idx = (db.don || []).findIndex(o => o._dbId === supOrder._dbId);
       const local = idx !== -1 ? db.don[idx] : null;
-      // Preserve local edit if within grace period
+      // Preserve local edit if within grace period OR if local has higher version
       const localTs = local?._ts || 0;
+      const localVersion = local?._version || 0;
+      const remoteVersion = supOrder._version || 0;
       const isRecent = localTs && (now - localTs) < GRACE_MS;
-      const merged = (local && isRecent)
+      const merged = (local && (isRecent || localVersion > remoteVersion))
         ? local
-        : (local ? { ...supOrder, _fromBooking: local._fromBooking } : supOrder);
+        : (local ? { ...supOrder, _fromBooking: local._fromBooking, _version: Math.max(localVersion, remoteVersion) } : supOrder);
       if (idx !== -1) db.don[idx] = merged;
       else {
         db.don.push(merged);
@@ -824,6 +895,15 @@ async function handleRealtimeOrderChange(payload) {
         if (now - ts < 30 * 24 * 60 * 60 * 1000) persistedDeleted.add(dbId);
       });
     }
+    // Also check persistent tombstone for orders
+    if (typeof window.isRecentlyDeleted === 'function') {
+      (orders || []).forEach(o => {
+        if (window.isRecentlyDeleted('orders', o._dbId)) {
+          recentlyDeleted.add(o._dbId);
+          persistedDeleted.add(o._dbId);
+        }
+      });
+    }
     const persistedDeletedByMaDon = new Set();
     if (db._deletedOrderMaDon) {
       Object.entries(db._deletedOrderMaDon).forEach(([maDon, ts]) => {
@@ -839,11 +919,15 @@ async function handleRealtimeOrderChange(payload) {
       const local = localByDbId[supOrder._dbId];
       if (!local) return supOrder;
       const localTs = local._ts || 0;
+      const localVersion = local._version || 0;
+      const remoteVersion = supOrder._version || 0;
       const isRecent = localTs && (now - localTs) < GRACE_MS;
-      if (isRecent) return local; // preserve local edit
+      // Preserve local if: recent edit OR higher version
+      if (isRecent || localVersion > remoteVersion) return local;
       return {
         ...supOrder,
         _fromBooking: local._fromBooking,
+        _version: Math.max(localVersion, remoteVersion),
         // supOrder.dhvs/Ma_PK come from fetchOrders which reads junction tables — use them
       };
     });

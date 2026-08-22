@@ -1,4 +1,6 @@
 const STORE = 'aura_v8';
+const DELETED_IDS_KEY = 'aura_deleted_ids_v1'; // Persistent tombstone - survives cache clear
+const TOMBSTONE_GRACE_MS = 3600000; // 1 hour - tombstone preserved for 1 hour
 
 // Bump STORAGE_VERSION mỗi khi schema localStorage thay đổi —
 // khi user mở web, nếu thấy version cũ sẽ tự động xóa cache cũ
@@ -6,9 +8,30 @@ const STORE = 'aura_v8';
 const STORAGE_VERSION = 8;
 const STORAGE_VERSION_KEY = 'aura_storage_version';
 const _storedVersion = parseInt(localStorage.getItem(STORAGE_VERSION_KEY) || '0', 10);
+
+// Load persistent tombstone BEFORE clearing cache
+let _persistentDeletedIds = {};
+try {
+  _persistentDeletedIds = JSON.parse(localStorage.getItem(DELETED_IDS_KEY) || '{}');
+} catch (e) { _persistentDeletedIds = {}; }
+
+// Cleanup old tombstones (older than 1 hour)
+const now = Date.now();
+let tombstoneCleaned = false;
+Object.keys(_persistentDeletedIds).forEach(key => {
+  if (now - _persistentDeletedIds[key] > TOMBSTONE_GRACE_MS) {
+    delete _persistentDeletedIds[key];
+    tombstoneCleaned = true;
+  }
+});
+if (tombstoneCleaned) {
+  localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(_persistentDeletedIds));
+}
+
 if (_storedVersion < STORAGE_VERSION) {
+  // PRESERVE deleted IDs across version bumps - DON'T clear DELETED_IDS_KEY
   Object.keys(localStorage).forEach(k => {
-    if (k.startsWith('aura_') && k !== STORAGE_VERSION_KEY) localStorage.removeItem(k);
+    if (k.startsWith('aura_') && k !== STORAGE_VERSION_KEY && k !== DELETED_IDS_KEY) localStorage.removeItem(k);
   });
   localStorage.setItem(STORAGE_VERSION_KEY, String(STORAGE_VERSION));
   // Reload để RAM cũng được refresh (tránh hiện data cũ trong bộ nhớ tạm)
@@ -34,6 +57,36 @@ const SYNC = {
 
 window.addEventListener('online',  () => { SYNC.online = true;  Sync.flushQueue(); });
 window.addEventListener('offline', () => { SYNC.online = false; });
+
+// === Persistent Tombstone Functions ===
+// Track deleted IDs in separate localStorage key that survives cache clear
+function markDeleted(table, dbId) {
+  if (!dbId) return;
+  _persistentDeletedIds[`${table}:${dbId}`] = Date.now();
+  localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(_persistentDeletedIds));
+}
+function clearDeleted(table, dbId) {
+  if (!dbId) return;
+  delete _persistentDeletedIds[`${table}:${dbId}`];
+  localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(_persistentDeletedIds));
+}
+function isRecentlyDeleted(table, dbId) {
+  if (!dbId) return false;
+  const ts = _persistentDeletedIds[`${table}:${dbId}`];
+  if (!ts) return false;
+  // Auto-expire after 1 hour
+  if (Date.now() - ts > TOMBSTONE_GRACE_MS) {
+    clearDeleted(table, dbId);
+    return false;
+  }
+  return true;
+}
+// Expose to global scope for supabase-app.js
+window.markDeleted = markDeleted;
+window.clearDeleted = clearDeleted;
+window.isRecentlyDeleted = isRecentlyDeleted;
+// === End Persistent Tombstone ===
+
 const fmtVND = n => (n||0).toLocaleString('vi-VN') + 'd';
 const parseD = s => { const x=new Date(s); x.setHours(0,0,0,0); return x; };
 const today = () => { const x=new Date(); x.setHours(0,0,0,0); return x; };
@@ -1241,6 +1294,7 @@ window.setOrderType = async (id, type) => {
     o.Hinh_Thuc_Nhan = o.Hinh_Thuc_Nhan || 'Đặt ship';
   }
   o._ts = Date.now();
+  o._version = (o._version || 0) + 1;
 
   // Sync to Supabase BEFORE close modal (blocking)
   if (typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
@@ -1279,6 +1333,7 @@ window.toggleChuanBi = async (id) => {
   if (!o) return;
   o.Da_Chuan_Bi = !o.Da_Chuan_Bi;
   o._ts = Date.now();
+  o._version = (o._version || 0) + 1;
   save();
   syncOrderToSupabase(o);
   refreshCurView();
@@ -1311,6 +1366,7 @@ window.saveQuickNote = (id) => {
   const note = $('#qn-textarea')?.value || '';
   o.Ghi_Chu = note;
   o._ts = Date.now();
+  o._version = (o._version || 0) + 1;
   save();
   syncOrderToSupabase(o);
   closeAllModals();
@@ -2088,21 +2144,21 @@ window.deleteItem = function(kind, id) {
     onConfirm: () => {
       const delBtn = document.querySelector('#m-edit-item .btn-delete') || document.querySelector('#m-edit-item .btn-danger');
       if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
-      // Track tombstone BEFORE removing — prevents realtime/polling from resurrecting the item
+      // Track tombstone in persistent storage BEFORE removing — prevents resurrection after cache clear
       const dbId = item?._dbId;
-      if (dbId && window.SupabaseService?.isConfigured?.()) {
-        db._deletedItemIds = db._deletedItemIds || {};
-        db._deletedItemIds[dbId] = Date.now();
+      if (dbId) {
+        const tableName = kind === 'vay' ? 'dresses' : 'accessories';
+        markDeleted(tableName, dbId);
       }
       db[table] = db[table].filter(x => (kind === 'vay' ? x.Ma_Vay || x.ma : x.Ma_PK || x.ma) !== id);
       save();
       // Sync delete to Supabase
       if (item?._dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
         const deleteFn = kind === 'vay' ? window.SupabaseService.deleteDress : window.SupabaseService.deleteAccessory;
+        const tableName = kind === 'vay' ? 'dresses' : 'accessories';
         deleteFn(item._dbId).then(() => {
-          // Supabase confirmed — clear tombstone so merge stops filtering it
-          if (db._deletedItemIds) delete db._deletedItemIds[dbId];
-          localStorage.setItem(STORE, JSON.stringify(db));
+          // Supabase confirmed — clear persistent tombstone so merge stops filtering it
+          clearDeleted(tableName, item._dbId);
           if (typeof rebuildIndexes === 'function') rebuildIndexes();
           console.log('[Delete] Item Supabase confirmed for', dbId);
         }).catch(err => {
@@ -2852,6 +2908,7 @@ window.saveEditOrder = async function(id) {
   o.Su_Kien = fd.get('sukien') || '';
   o.Ghi_Chu = fd.get('ghichu') || '';
   o._ts = Date.now();
+  o._version = (o._version || 0) + 1;
   // Dresses
   const vayIds = $$('#eo-vays .eo-pill.selected').map(p => p.dataset.vay);
   o.dhvs = vayIds.map(v => ({ vay: v }));
@@ -2905,11 +2962,10 @@ window.deleteOrder = function(id) {
       const dbId = order?._dbId;
       const delBtn = document.querySelector('#m-detail .btn-danger');
       if (delBtn) { delBtn.disabled = true; delBtn.classList.add('loading'); }
-      // Track _dbId in db._deletedOrderIds so realtime/polling merge filters it out
+      // Track _dbId in persistent tombstone so it survives cache clear
       // until Supabase confirms the soft delete (avoids reappearance on next fetch)
-      if (dbId && window.SupabaseService?.isConfigured?.()) {
-        db._deletedOrderIds = db._deletedOrderIds || {};
-        db._deletedOrderIds[dbId] = Date.now();
+      if (dbId) {
+        markDeleted('orders', dbId);
       }
       db.don = db.don.filter(x => (x.Ma_Don || x.id) !== id);
       db.dhv = (db.dhv || []).filter(x => (x.Ma_Don || x.id) !== id);
@@ -2917,9 +2973,8 @@ window.deleteOrder = function(id) {
       // Sync deletion to Supabase
       if (dbId && typeof window.SupabaseService !== 'undefined' && window.SupabaseService.isConfigured?.()) {
         window.SupabaseService.deleteOrder(dbId).then(() => {
-          // Supabase confirmed — clear from deleted tracker so merge stops filtering it
-          if (db._deletedOrderIds) delete db._deletedOrderIds[dbId];
-          localStorage.setItem(STORE, JSON.stringify(db));
+          // Supabase confirmed — clear from persistent tombstone so merge stops filtering it
+          clearDeleted('orders', dbId);
           console.log('[Delete] Supabase confirmed for', order.Ma_Don);
         }).catch(err => {
           console.warn('Supabase deleteOrder failed:', err);
