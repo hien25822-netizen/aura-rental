@@ -934,9 +934,18 @@ async function handleRealtimeOrderChange(payload) {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
       });
     }
-    // Also check persistent tombstone (survives cache clear) - using payload data
-    if (typeof window.isRecentlyDeleted === 'function' && payload?.new) {
-      if (window.isRecentlyDeleted('orders', payload.new._dbId)) recentlyDeleted.add(payload.new._dbId);
+    // Also check persistent tombstone (survives cache clear) - check ALL orders
+    if (typeof window.isRecentlyDeleted === 'function') {
+      // Check all local orders against persistent tombstone
+      Object.keys(localByDbId).forEach(dbId => {
+        if (window.isRecentlyDeleted('orders', dbId)) {
+          recentlyDeleted.add(dbId);
+        }
+      });
+      // Also check payload specific order
+      if (payload?.new?._dbId && window.isRecentlyDeleted('orders', payload.new._dbId)) {
+        recentlyDeleted.add(payload.new._dbId);
+      }
     }
     // Pending creates (orders awaiting _dbId assignment) — keep local copy untouched
     const pendingCreateMaDon = new Set();
