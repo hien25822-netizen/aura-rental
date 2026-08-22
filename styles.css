@@ -5747,3 +5747,22 @@ h1, h2, h3, h4 {
   max-height: calc(100vh - 200px);
   overflow: auto;
 }
+
+/* ===== VERSION BADGE ===== */
+.version-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-family: var(--font-mono);
+  cursor: default;
+  opacity: 0.9;
+  transition: opacity 0.2s;
+  margin-right: 6px;
+}
+
+.version-badge:hover {
+  opacity: 1;
+}

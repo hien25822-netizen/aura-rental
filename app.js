@@ -1752,7 +1752,7 @@ $$('#orders-table-chips button').forEach(b => b.onclick = () => {
   renderOrdersTable();
 });
 
-// Copy table to clipboard
+// Copy table to clipboard (tab-separated for Excel)
 function copyOrdersTable() {
   const rows = [];
   rows.push(['Ngày lấy', 'Mã đơn', 'Tên KH', 'SĐT', 'Loại', 'Váy', 'Ngày trả', 'Tiền', 'Đặt cọc', 'Trạng thái']);
@@ -1783,6 +1783,54 @@ function copyOrdersTable() {
   const text = rows.map(r => r.join('\t')).join('\n');
   navigator.clipboard.writeText(text).then(() => {
     toast('Đã copy bảng vào clipboard!', 'success');
+  }).catch(() => {
+    toast('Lỗi copy', 'error');
+  });
+}
+
+// Copy all data for AI analysis (structured text format for Claude)
+function copyAllDataForAI() {
+  const lines = [];
+  lines.push('# AURA RENTAL - DỮ LIỆU TỔNG HỢP');
+  lines.push(`# Ngày xuất: ${new Date().toLocaleString('vi-VN')}`);
+  lines.push('');
+
+  // Orders
+  lines.push('## ĐƠN HÀNG');
+  lines.push('| Ngày lấy | Mã đơn | Tên KH | SĐT | Loại | Váy | Ngày trả | Tiền | Đặt cọc | Trạng thái |');
+
+  const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
+
+  arr.forEach(o => {
+    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
+    const dressNames = dresses.map(d => {
+      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
+      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    }).filter(Boolean).join(', ');
+
+    lines.push(`| ${o.Ngay_Lay || o.ngay_lay || ''} | ${o.Ma_Don || o.ma_don || ''} | ${o.Ten_KH || o.ten_kh || ''} | ${o.SDT || o.sdt || ''} | ${o.Loai || o.loai || ''} | ${dressNames} | ${o.Ngay_Tra || o.ngay_tra || ''} | ${fmtVND(o.Tong_Tien || o.tong || 0)} | ${fmtVND(o.Dat_Coc || o.coc || 0)} | ${o.Trang_Thai || o.trang_thai || ''} |`);
+  });
+
+  lines.push('');
+  lines.push(`**Tổng số đơn: ${arr.length}**`);
+
+  // Summary stats
+  const today = new Date().toISOString().slice(0, 10);
+  const todayOrders = arr.filter(o => (o.Ngay_Lay || o.ngay_lay) === today);
+  const totalRevenue = arr.reduce((sum, o) => sum + (o.Tong_Tien || o.tong || 0), 0);
+  const totalDeposit = arr.reduce((sum, o) => sum + (o.Dat_Coc || o.coc || 0), 0);
+
+  lines.push('');
+  lines.push('## THỐNG KÊ');
+  lines.push(`- Đơn hôm nay: ${todayOrders.length}`);
+  lines.push(`- Tổng doanh thu: ${fmtVND(totalRevenue)}`);
+  lines.push(`- Tổng đặt cọc: ${fmtVND(totalDeposit)}`);
+  lines.push(`- Số váy: ${(db.vay || []).length}`);
+  lines.push(`- Số phụ kiện: ${(db.pk || []).length}`);
+
+  const text = lines.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Đã copy toàn bộ dữ liệu cho Claude!', 'success');
   }).catch(() => {
     toast('Lỗi copy', 'error');
   });
