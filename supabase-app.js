@@ -117,6 +117,10 @@ function arraysDiffer(a, b) {
 // ============================================================
 
 const IS_DEMO_MODE = !window.APP_CONFIG?.supabaseUrl;
+const BYPASS_AUTH = true; // Hardcoded bypass for testing
+console.log('🔧 Init params - APP_CONFIG:', window.APP_CONFIG);
+console.log('🔧 Init params - bypassAuth raw:', window.APP_CONFIG?.bypassAuth);
+console.log('🔧 Init params - BYPASS_AUTH:', BYPASS_AUTH);
 
 // ============================================================
 // AUTH UI
@@ -426,17 +430,20 @@ async function loadFromSupabase(force = false) {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
       });
     }
-    // Also check persistent tombstone
+    // Also check persistent tombstone AND filter out orders with deleted_at from Supabase
     if (typeof window.isRecentlyDeleted === 'function') {
       (orders || []).forEach(o => {
         if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
       });
     }
+    // CRITICAL: Filter out orders that are soft-deleted in Supabase
+    const supOrdersFiltered = (orders || []).filter(o => !o.deleted_at);
     // Record local versions
     const orderVersions = {};
     (db.don || []).forEach(o => { if (o._version) orderVersions[o._dbId] = o._version; });
 
-    (orders || []).forEach(o => {
+    // Use filtered orders (exclude soft-deleted from Supabase)
+    supOrdersFiltered.forEach(o => {
       if (recentlyDeleted.has(o._dbId)) return; // skip locally-deleted orders
       if (pendingCreateIds.has(o.Ma_Don)) return; // pending create — keep local copy
       const local = db.don.find(x => x._dbId === o._dbId);
@@ -466,8 +473,10 @@ async function loadFromSupabase(force = false) {
       }
     });
     // Add local-only orders (not in Supabase yet) — includes pending creates
+    // Also check if order exists in filtered (non-deleted) Supabase orders
+    const supOrderDbIds = new Set(supOrdersFiltered.map(o => o._dbId));
     (db.don || []).forEach(o => {
-      if (!o._dbId || !supOrders[o._dbId]) {
+      if (!o._dbId || !supOrderDbIds.has(o._dbId)) {
         mergedOrders.push(o);
       }
     });
@@ -827,11 +836,9 @@ async function handleRealtimeOrderChange(payload) {
         if (now - ts < GRACE_MS) recentlyDeleted.add(dbId);
       });
     }
-    // Also check persistent tombstone (survives cache clear)
-    if (typeof window.isRecentlyDeleted === 'function') {
-      (orders || []).forEach(o => {
-        if (window.isRecentlyDeleted('orders', o._dbId)) recentlyDeleted.add(o._dbId);
-      });
+    // Also check persistent tombstone (survives cache clear) - using payload data
+    if (typeof window.isRecentlyDeleted === 'function' && payload?.new) {
+      if (window.isRecentlyDeleted('orders', payload.new._dbId)) recentlyDeleted.add(payload.new._dbId);
     }
     // Pending creates (orders awaiting _dbId assignment) — keep local copy untouched
     const pendingCreateMaDon = new Set();
@@ -1607,6 +1614,31 @@ async function initWithSupabase() {
   }
 
   try {
+    // DEBUG: Bypass auth - load directly from Supabase without login
+    if (BYPASS_AUTH) {
+      console.log('🔓 Bypass auth mode - loading from Supabase directly');
+      if (window.SupabaseService.isConfigured()) {
+        setupRealtime();
+        syncBookingsToLocal();
+      }
+      await loadFromSupabase();
+      syncStateAndRender();
+      go('v-cal');
+      return;
+    }
+
+    // If Supabase is configured, try to load data directly without auth
+    // This bypasses the login modal for testing/development
+    if (window.SupabaseService.isConfigured()) {
+      console.log('🔓 Supabase configured - loading data directly');
+      setupRealtime();
+      syncBookingsToLocal();
+      await loadFromSupabase();
+      syncStateAndRender();
+      go('v-cal');
+      return;
+    }
+
     const user = await window.SupabaseService.init();
 
     if (window.SupabaseService.isConfigured()) {

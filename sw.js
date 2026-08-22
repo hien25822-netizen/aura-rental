@@ -5,7 +5,7 @@
    - Anti-skew: chỉ activate version mới khi không còn tab nào đang chạy version cũ
 */
 
-const CACHE = 'aura-v15';
+const CACHE = 'aura-v16';
 const ASSETS = [
   './',
   './index.html',
