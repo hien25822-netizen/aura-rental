@@ -1942,7 +1942,7 @@ function renderRawTable() {
   const sel = $('#raw-month-select');
   const monthFilter = sel ? sel.value : '';
 
-  let arr = (db.don || []).slice();
+  let arr = (db.don || []).filter(isHoanOrder);
 
   // Filter by month
   if (monthFilter) {
