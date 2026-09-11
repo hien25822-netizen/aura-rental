@@ -777,12 +777,11 @@ function go(view) {
     const v = b.getAttribute('onclick')?.match(/go\('([^']+)'\)/)?.[1];
     b.classList.toggle('active', v === view);
   });
-  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-orders-table': 'Bảng đơn', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!', 'v-dashboard': 'Dashboard' };
+  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-raw': 'RAW', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!', 'v-dashboard': 'Dashboard' };
   $('#title').textContent = titleMap[view] || '';
   $('#fab-add').style.display = (view === 'v-kho' || view === 'v-pk') ? 'flex' : 'none';
   if (view === 'v-cal') renderCal();
   else if (view === 'v-orders') renderOrders();
-  else if (view === 'v-orders-table') renderOrdersTable();
   else if (view === 'v-raw') renderRawTable();
   else if (view === 'v-kho') renderKho();
   else if (view === 'v-pk') renderPk();
@@ -1751,193 +1750,8 @@ $$('#order-type-chips button').forEach(b => b.onclick = () => {
 });
 
 /* ============================================================
- *  ORDERS TABLE VIEW (Excel-like)
+ *  RAW DATA VIEW
  * ============================================================ */
-let curOrderTableDate = null;
-
-function renderOrdersTable() {
-  const search = ($('#search-orders-table') || {}).value?.toLowerCase().trim() || '';
-  let arr = (db.don || []).slice();
-
-  // Filter by date
-  if (curOrderTableDate) {
-    arr = arr.filter(o => o.Ngay_Lay === curOrderTableDate);
-  }
-
-  // Filter by search
-  if (search) {
-    arr = arr.filter(o =>
-      (o.Ten_KH || o.ten_kh || '').toLowerCase().includes(search) ||
-      (o.Ma_Don || o.ma_don || '').toLowerCase().includes(search) ||
-      (o.SDT || o.sdt || '').includes(search)
-    );
-  }
-
-  // Sort by date descending
-  arr.sort((a, b) => {
-    const dateA = a.Ngay_Lay || a.ngay_lay || '';
-    const dateB = b.Ngay_Lay || b.ngay_lay || '';
-    return dateB.localeCompare(dateA);
-  });
-
-  // Update count
-  const countEl = $('#orders-table-count');
-  if (countEl) countEl.textContent = `${arr.length} đơn`;
-
-  // Build table
-  const thead = $('#orders-table thead');
-  const tbody = $('#orders-table tbody');
-  if (!thead || !tbody) return;
-
-  thead.innerHTML = `<tr>
-    <th>Ngày lấy</th>
-    <th>Mã đơn</th>
-    <th>Loại đơn</th>
-    <th>Khách hàng</th>
-    <th>SĐT</th>
-    <th>Váy</th>
-    <th>PK</th>
-    <th>Gói thuê</th>
-    <th>Giờ lấy</th>
-    <th>Ngày trả</th>
-    <th>Nhận đồ</th>
-    <th>Địa chỉ</th>
-    <th>Tiền váy</th>
-    <th>Tiền PK</th>
-    <th>Tổng tiền</th>
-    <th>Đặt cọc</th>
-    <th>Ghi chú</th>
-    <th>Hoàn cọc</th>
-  </tr>`;
-
-  tbody.innerHTML = arr.map(o => {
-    const tenVay = donTenVay(o).join(' + ') || '—';
-    const pkKeys = (o.Ma_PK || o.pks || []);
-    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
-      const p = pkById.get(pk);
-      return p ? (p.Ten_PK || p.ten) : '';
-    }).filter(Boolean).join(', ') || '—';
-    const goi = o.Goi_Thue || o.goi || '';
-    const lay = o.Ngay_Lay || o.lay || '';
-    const ngayTra = ngayTraThuc(goi, lay);
-    const ngayTraStr = ngayTra ? isoToVN(ngayTra) : '—';
-    const tienVay = donTienThueVay(o);
-    const tienPK = donTienThuePK(o);
-    const tong = tienVay + tienPK;
-    const coc = donCocGoiY(o);
-    const ghichu = o.Ghi_Chu || o.ghichu || '';
-    const hoan = isHoanOrder(o);
-
-    return `<tr onclick="openOrderDetail('${o.Ma_Don || o.id}')">
-      <td>${isoToVN(lay)}</td>
-      <td><b>${o.Ma_Don || o.id || ''}</b></td>
-      <td>${o.Trang_Thai_Don || o.type || '—'}</td>
-      <td>${escapeHtml(o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || '—')}</td>
-      <td>${o.SDT || o.sdt || ''}</td>
-      <td>${escapeHtml(tenVay)}</td>
-      <td>${escapeHtml(tenPK)}</td>
-      <td>${goi}</td>
-      <td>${o.Gio_Lay || o.gio || ''}</td>
-      <td>${ngayTraStr}</td>
-      <td>${escapeHtml(o.Hinh_Thuc_Nhan || o.nhan || '')}</td>
-      <td>${escapeHtml(o.Dia_Chi || o.dc || '')}</td>
-      <td>${fmtVND(tienVay)}</td>
-      <td>${fmtVND(tienPK)}</td>
-      <td>${fmtVND(tong)}</td>
-      <td>${fmtVND(coc)}</td>
-      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(ghichu)}">${escapeHtml(ghichu)}</td>
-      <td>${hoan ? '<span style="color:var(--text-muted)">Đã hoàn</span>' : '—'}</td>
-    </tr>`;
-  }).join('');
-}
-
-// Search handler
-$('#search-orders-table').oninput = renderOrdersTable;
-
-// Date filter
-$('#order-table-date').onchange = (e) => {
-  const v = e.target.value;
-  curOrderTableDate = v || null;
-  renderOrdersTable();
-};
-
-// Table chips
-$$('#orders-table-chips button').forEach(b => b.onclick = () => {
-  $$('#orders-table-chips button').forEach(x => x.classList.toggle('on', x === b));
-  const f = b.dataset.f;
-  if (f === 'all') {
-    curOrderTableDate = null;
-    $('#order-table-date').value = '';
-  } else if (f === 'today') {
-    curOrderTableDate = isoOf(new Date());
-    $('#order-table-date').value = curOrderTableDate;
-  } else if (f === 'tomorrow') {
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    curOrderTableDate = isoOf(d);
-    $('#order-table-date').value = curOrderTableDate;
-  } else if (f === 'yesterday') {
-    const d = new Date(); d.setDate(d.getDate() - 1);
-    curOrderTableDate = isoOf(d);
-    $('#order-table-date').value = curOrderTableDate;
-  }
-  renderOrdersTable();
-});
-
-// Copy table to clipboard (tab-separated for Excel)
-function copyOrdersTable() {
-  const rows = [];
-  rows.push(['Ngày lấy', 'Mã đơn', 'Loại đơn', 'Khách hàng', 'SĐT', 'Váy', 'PK', 'Gói thuê', 'Giờ lấy', 'Ngày trả', 'Nhận đồ', 'Địa chỉ', 'Tiền váy', 'Tiền PK', 'Tổng tiền', 'Đặt cọc', 'Ghi chú', 'Hoàn cọc']);
-
-  const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
-
-  arr.forEach(o => {
-    const tenVay = donTenVay(o).join(' + ') || '';
-    const pkKeys = (o.Ma_PK || o.pks || []);
-    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
-      const p = pkById.get(pk);
-      return p ? (p.Ten_PK || p.ten) : '';
-    }).filter(Boolean).join(', ');
-    const goi = o.Goi_Thue || o.goi || '';
-    const lay = o.Ngay_Lay || o.lay || '';
-    const ngayTra = ngayTraThuc(goi, lay);
-    const ngayTraStr = ngayTra ? isoOf(ngayTra) : '';
-    const tienVay = donTienThueVay(o);
-    const tienPK = donTienThuePK(o);
-    const tong = tienVay + tienPK;
-    const coc = donCocGoiY(o);
-    const ghichu = o.Ghi_Chu || o.ghichu || '';
-    const hoan = isHoanOrder(o) ? 'Đã hoàn' : '';
-
-    rows.push([
-      isoToVN(lay),
-      o.Ma_Don || o.id || '',
-      o.Trang_Thai_Don || o.type || '',
-      o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || '',
-      o.SDT || o.sdt || '',
-      tenVay,
-      tenPK,
-      goi,
-      o.Gio_Lay || o.gio || '',
-      ngayTraStr,
-      o.Hinh_Thuc_Nhan || o.nhan || '',
-      o.Dia_Chi || o.dc || '',
-      tienVay.toString(),
-      tienPK.toString(),
-      tong.toString(),
-      coc.toString(),
-      ghichu,
-      hoan
-    ]);
-  });
-
-  const text = rows.map(r => r.join('\t')).join('\n');
-  navigator.clipboard.writeText(text).then(() => {
-    toast('Đã copy bảng vào clipboard!', 'success');
-  }).catch(() => {
-    toast('Lỗi copy', 'error');
-  });
-}
-
 function renderRawTable() {
   const sel = $('#raw-month-select');
   const monthFilter = sel ? sel.value : '';
@@ -3618,7 +3432,6 @@ function refreshCurView() {
   const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
   if (curView === 'v-cal') renderCal();
   else if (curView === 'v-orders') renderOrders();
-  else if (curView === 'v-orders-table') renderOrdersTable();
   else if (curView === 'v-raw') renderRawTable();
   else if (curView === 'v-kho') renderKho();
   else if (curView === 'v-pk') renderPk();
@@ -4502,7 +4315,6 @@ function renderRefundOrdersFull() {
         const view = document.querySelector('section.view.active')?.id;
         if (view === 'v-cal') renderCal();
         else if (view === 'v-orders') renderOrders();
-        else if (view === 'v-orders-table') renderOrdersTable();
         else if (view === 'v-raw') renderRawTable();
         else if (view === 'v-kho') renderKho();
         else if (view === 'v-pk') renderPk();
@@ -6234,61 +6046,411 @@ function calculateDashboardData(month, year) {
   return result;
 }
 
+// ===== Dashboard v2 - Single Scroll =====
+let dashChartMode = 'day'; // 'day' | 'hour' | 'weekday'
+
+function setDashChartMode(mode) {
+  dashChartMode = mode;
+  renderDashboard();
+}
+
+function changeDashTab(tab) { dashState.dashTab = tab; renderDashboard(); }
 function renderDashboard() {
-  const { month, year } = dashState;
+  const { month, year, dashTab } = dashState;
   const s = $('#v-dashboard');
 
-  // Default to tongquan tab
-  if (!dashState.dashTab) dashState.dashTab = 'tongquan';
+  // Calculate data
+  const todayStats = dashTodayStats(month, year);
+  const monthStats = calculateDashboardData(month, year);
 
-  const tabMeta = {
-    tongquan:   { icon: '📊', label: 'Tổng quan' },
-    khovaypk:   { icon: '👗', label: 'Kho váy & PK' },
-    soquy:      { icon: '💰', label: 'Sổ quỹ' },
-    baocao:     { icon: '📋', label: 'Báo cáo' },
-    phantich:   { icon: '🔍', label: 'Phân tích' },
-  };
+  // Tab content
+  let tabContent = '';
+  if (dashTab === 'tongquan') tabContent = renderDashTongQuan(monthStats);
+  else if (dashTab === 'khovaypk') tabContent = renderDashKhoVayPK(monthStats);
+  else if (dashTab === 'soquy') tabContent = renderDashSoQuy(monthStats);
+  else if (dashTab === 'baocao') tabContent = renderDashBaoCao(monthStats);
+  else if (dashTab === 'phantich') tabContent = renderDashPhanTich(monthStats);
 
+  // Build HTML
   s.innerHTML = `
-<div class="dash-header">
-  <div class="dash-nav">
-    <button class="dash-nav-btn" onclick="dashChangePeriod(-1)">‹</button>
-    <span class="dash-month-label">Tháng ${month}/${year}</span>
-    <button class="dash-nav-btn" onclick="dashChangePeriod(1)">›</button>
+<div class="dash-new-header">
+  <div class="dash-new-title">
+    <h2>Dashboard</h2>
+    <span class="dash-period-label">Tháng ${month}/${year}</span>
   </div>
-  <div class="dash-header-right">
-    <span class="dash-refresh-info" id="dash-refresh-info"></span>
-    <button class="dash-export-btn" onclick="exportDashboardCSV()">📥 Export</button>
+  <div class="dash-new-nav">
+    <button onclick="dashChangePeriod(-1)">‹</button>
+    <button onclick="dashChangePeriod(1)">›</button>
   </div>
 </div>
 
-<div class="dash-tabs">
-  ${Object.entries(tabMeta).map(([key, m]) =>
-    `<button class="dash-tab ${dashState.dashTab===key?'active':''}" onclick="setDashTab('${key}')">${m.icon} ${m.label}</button>`
-  ).join('')}
+<!-- Dashboard Tabs Navigation -->
+<div class="dash-tabs-nav">
+  <button class="${dashTab==='tongquan'?'active':''}" onclick="changeDashTab('tongquan')">📊 Tổng quan</button>
+  <button class="${dashTab==='khovaypk'?'active':''}" onclick="changeDashTab('khovaypk')">👗 Kho V&PK</button>
+  <button class="${dashTab==='soquy'?'active':''}" onclick="changeDashTab('soquy')">💰 Sổ quỹ</button>
+  <button class="${dashTab==='baocao'?'active':''}" onclick="changeDashTab('baocao')">📋 Báo cáo</button>
+  <button class="${dashTab==='phantich'?'active':''}" onclick="changeDashTab('phantich')">🔍 Phân tích</button>
 </div>
 
-<div class="dash-content" id="dash-content">
-  <div class="dash-loading">
-    <div class="dash-spinner"></div>
-    <p>Đang tải dữ liệu...</p>
-  </div>
+<div id="dash-content">
+  ${tabContent}
 </div>`;
 
-  // Wrapper for expense modal button — stops propagation to avoid parent click handler conflicts
-  window.openExpenseBtn = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } window.openExpenseModal(e); };
-
-  // Use setTimeout(0) to defer calculation until after DOM paint, then render
-  setTimeout(function() {
-    try {
-      const d = calculateDashboardData(month, year);
-      renderDashTab(d);
-    } catch(e) {
-      console.error('Dashboard error:', e);
-      const content = $('#dash-content');
-      if (content) content.innerHTML = '<div class="dash-loading"><p style="color:var(--red);padding:20px">Lỗi tải Dashboard. Thử tải lại trang.</p></div>';
+  // Init chart after DOM paint
+  setTimeout(() => {
+    if (dashTab === 'tongquan') { initDashRevenueChart(); renderDashBarChart(); }
+    if (dashTab === 'khovaypk') { renderDashKhoVayDonut(); }
+    if (dashTab === 'soquy') { renderDashSoQuyChart(); }
+    if (dashTab === 'baocao') { renderDashBaoCaoChart(); }
+    if (dashTab === 'phantich') {
+      const d = monthStats;
+      const pct = d.avgBusy || 0;
+      drawGaugeChart(pct);
     }
   }, 0);
+}
+
+function renderDashHero(todayStats, monthStats) {
+  const { month, year } = dashState;
+  const pctY = todayStats.pctVsYesterday;
+  const pctLM = todayStats.pctVsLastMonth;
+  const cntDiff = todayStats.today.count - todayStats.yesterday.count;
+
+  return `
+<div class="dash-hero-section">
+  <div class="dash-hero-title">Kết quả bán hàng hôm nay</div>
+  <div class="dash-hero-grid">
+    <div class="dash-hero-card">
+      <div class="dash-hero-label">Doanh thu</div>
+      <div class="dash-hero-value">${fmtVND(todayStats.today.rev)}</div>
+      <div class="dash-hero-compare">
+        <span class="dash-badge ${pctY>=0?'pos':'neg'}">${pctY>=0?'▲':'▼'} ${Math.abs(pctY)}%</span>
+        <span class="dash-compare-abs">vs ${fmtVND(todayStats.yesterday.rev)} hôm qua</span>
+      </div>
+    </div>
+    <div class="dash-hero-card">
+      <div class="dash-hero-label">Số đơn</div>
+      <div class="dash-hero-value">${todayStats.today.count}</div>
+      <div class="dash-hero-compare">
+        <span class="dash-badge ${cntDiff>=0?'pos':'neg'}">${cntDiff>=0?'+':''}${cntDiff} đơn</span>
+        <span class="dash-compare-abs">vs ${todayStats.yesterday.count} hôm qua</span>
+      </div>
+    </div>
+    <div class="dash-hero-card accent">
+      <div class="dash-hero-label">Doanh thu thuần</div>
+      <div class="dash-hero-value">${fmtVND(todayStats.today.rev)}</div>
+      <div class="dash-hero-compare">
+        <span class="dash-badge ${pctLM>=0?'pos':'neg'}">${pctLM>=0?'▲':'▼'} ${Math.abs(pctLM)}%</span>
+        <span class="dash-compare-abs">vs ${fmtVND(todayStats.sameDayLastMonth.rev)} cùng kỳ</span>
+      </div>
+    </div>
+  </div>
+  <div class="dash-month-summary">
+    Tháng này: <b>${fmtVND(monthStats.totalRevenue)}</b> từ <b>${monthStats.totalOrders}</b> đơn
+  </div>
+</div>`;
+}
+
+function renderDashRevenueChart(month, year) {
+  return `
+<div class="dash-chart-section">
+  <div class="dash-chart-tabs">
+    <button class="dash-chart-tab ${dashChartMode==='day'?'active':''}" onclick="setDashChartMode('day')">Ngày</button>
+    <button class="dash-chart-tab ${dashChartMode==='hour'?'active':''}" onclick="setDashChartMode('hour')">Giờ</button>
+    <button class="dash-chart-tab ${dashChartMode==='weekday'?'active':''}" onclick="setDashChartMode('weekday')">Thứ</button>
+  </div>
+  <div class="dash-chart-container">
+    <canvas id="dash-revenue-canvas" width="600" height="200"></canvas>
+  </div>
+</div>`;
+}
+
+function initDashRevenueChart() {
+  const canvas = document.getElementById('dash-revenue-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { month, year } = dashState;
+
+  let labels = [], data = [];
+
+  if (dashChartMode === 'day') {
+    const { from: dateFrom, to: dateTo } = getDateFilterRange();
+    const d = calculateDashboardData(month, year);
+    const daily = d.dailyRevenue || {};
+    const startDate = parseD(dateFrom);
+    const endDate = parseD(dateTo);
+    // Build labels and data for each day in range
+    let cursor = new Date(startDate);
+    while (cursor <= endDate) {
+      const iso = isoOf(cursor);
+      labels.push(cursor.getDate() + '/' + (cursor.getMonth() + 1));
+      data.push(daily[iso] || 0);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  } else if (dashChartMode === 'hour') {
+    const todayIso = isoOf(new Date());
+    const orders = (db.don || []).filter(o => {
+      if (!isHoanOrder(o)) return false;
+      const d = parseD(o.Ngay_Lay);
+      if (!d) return false;
+      return isoOf(d) === todayIso;
+    });
+    const byHour = {};
+    orders.forEach(o => {
+      const d = parseD(o.Ngay_Lay);
+      const h = d ? d.getHours() : 9;
+      const rev = donTienThueVay(o) + donTienThuePK(o);
+      byHour[h] = (byHour[h] || 0) + rev;
+    });
+    for (let h = 8; h <= 20; h++) {
+      labels.push(h + 'h');
+      data.push(byHour[h] || 0);
+    }
+  } else {
+    const d = calculateDashboardData(month, year);
+    const dow = d.dowRevenue || {};
+    const vnDays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    for (let i = 0; i < 7; i++) {
+      labels.push(vnDays[i]);
+      data.push(dow[i] || 0);
+    }
+  }
+
+  // Setup tooltip div on canvas parent
+  const wrap = canvas.parentElement;
+  let tip = wrap.querySelector('.dash-chart-tooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.className = 'dash-chart-tooltip';
+    tip.style.cssText = 'display:none;position:fixed;background:#1a1d2e;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;pointer-events:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);line-height:1.4';
+    wrap.style.position = 'relative';
+    wrap.appendChild(tip);
+  }
+  canvas._tooltip = tip;
+  drawAreaChart(ctx, canvas.width, canvas.height, labels, data, '#d4af37');
+}
+
+function drawAreaChart(ctx, w, h, labels, data, color) {
+  const pad = { top: 20, right: 16, bottom: 36, left: 52 };
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
+  const maxVal = Math.max(...data, 1);
+  const slotW = chartW / labels.length;
+  const barW = Math.max(3, slotW * 0.5);
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid lines
+  ctx.strokeStyle = '#f3f4f6';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    const val = Math.round(maxVal * (1 - i / 4));
+    ctx.fillStyle = '#86868B';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtVND(val), pad.left - 6, y + 4);
+  }
+
+  // X-axis labels
+  ctx.fillStyle = '#86868B';
+  ctx.font = '10px Plus Jakarta Sans';
+  ctx.textAlign = 'center';
+  labels.forEach((lbl, i) => {
+    const x = pad.left + slotW * i + barW / 2;
+    ctx.fillText(lbl, x, h - 8);
+  });
+
+  // Area fill gradient
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + chartH);
+  grad.addColorStop(0, color + '50');
+  grad.addColorStop(1, color + '00');
+
+  // Build path
+  const pts = data.map((v, i) => ({
+    x: pad.left + slotW * i + barW / 2,
+    y: pad.top + chartH - (v / maxVal) * chartH
+  }));
+
+  // Draw area
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pad.top + chartH);
+  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length - 1].x, pad.top + chartH);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Draw line
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.stroke();
+
+  // Dots
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  // Hover tooltip
+  const canvas = ctx.canvas;
+  const tooltip = canvas._tooltip;
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let found = false;
+    pts.forEach((p, i) => {
+      if (Math.abs(mx - p.x) < slotW / 2) {
+        tooltip.style.display = 'block';
+        tooltip.style.left = (rect.left + mx + 12) + 'px';
+        tooltip.style.top = (rect.top + my - 36) + 'px';
+        tooltip.innerHTML = `<b>${labels[i]}</b><br>${fmtVND(data[i])}`;
+        found = true;
+      }
+    });
+    if (!found) tooltip.style.display = 'none';
+  };
+  canvas.onmouseleave = () => { tooltip.style.display = 'none'; };
+}
+
+function drawBarChart(ctx, w, h, labels, data) {
+  const pad = { top: 20, right: 20, bottom: 40, left: 60 };
+  const chartW = w - pad.left - pad.right;
+  const chartH = h - pad.top - pad.bottom;
+  const maxVal = Math.max(...data, 1);
+  const slotW = chartW / labels.length;
+  const barW = slotW * 0.65;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Y-axis grid lines
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    const val = Math.round(maxVal * (1 - i / 4));
+    ctx.fillStyle = '#86868B';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtVND(val), pad.left - 6, y + 4);
+  }
+
+  // Bars
+  data.forEach((val, i) => {
+    const barH = (val / maxVal) * chartH;
+    const x = pad.left + i * slotW + (slotW - barW) / 2;
+    const y = pad.top + chartH - barH;
+
+    const grad = ctx.createLinearGradient(x, y, x, y + barH);
+    grad.addColorStop(0, '#3AA9F7');
+    grad.addColorStop(1, '#7CC8FC');
+
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    ctx.fill();
+
+    ctx.fillStyle = '#86868B';
+    ctx.font = '11px Plus Jakarta Sans';
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[i], x + barW / 2, h - pad.bottom + 16);
+
+    if (val > 0) {
+      ctx.fillStyle = '#1D1D1F';
+      ctx.font = 'bold 10px Plus Jakarta Sans';
+      ctx.fillText(fmtVND(val), x + barW / 2, y - 5);
+    }
+  });
+}
+
+function renderDashTopVayTable(month, year) {
+  const topVays = dashTopDresses('thismonth', month, year).slice(0, 10);
+
+  // Calculate revenue per dress
+  const vayRevenue = {};
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+
+  orders.forEach(o => {
+    const d = parseD(o.Ngay_Lay);
+    if (!d || d < start || d > end) return;
+    const dhvs = Array.isArray(o.dhvs) ? o.dhvs : [];
+    const totalRev = donTienThueVay(o) + donTienThuePK(o);
+    const dressRev = dhvs.length > 0 ? totalRev / dhvs.length : 0;
+    dhvs.forEach(x => {
+      const key = x.Ma_Vay || x.vay;
+      if (!vayRevenue[key]) vayRevenue[key] = 0;
+      vayRevenue[key] += dressRev;
+    });
+  });
+
+  if (topVays.length === 0) {
+    return `
+<div class="dash-topvay-section">
+  <div class="dash-hero-title">Top 10 váy</div>
+  <div class="dash-table-card">
+    <table class="dash-vay-table">
+      <thead>
+        <tr><th>#</th><th>Tên váy</th><th>Số lần</th><th>Doanh thu</th><th>ROI</th></tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="5" class="dash-empty-row">Chưa có dữ liệu thuê trong tháng</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>`;
+  }
+
+  const rows = topVays.map((v, i) => {
+    const vay = vayById.get(v.key);
+    const giaGoc = vay ? Number(vay.Gia_Goc || 0) : 0;
+    const doanhThu = Math.round(vayRevenue[v.key] || 0);
+    const roi = giaGoc > 0 ? (doanhThu / giaGoc).toFixed(1) + 'x' : '-';
+    const roiClass = roi !== '-' && parseFloat(roi) >= 1 ? 'pos' : 'neg';
+
+    return `
+    <tr class="dash-vay-row" onclick="openOrderByDress('${v.key}')">
+      <td class="dash-rank">${i + 1}</td>
+      <td class="dash-vay-name">${v.ten}</td>
+      <td class="dash-count">${v.count}</td>
+      <td class="dash-money">${fmtVND(doanhThu)}</td>
+      <td class="dash-roi ${roiClass}">${roi}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+<div class="dash-topvay-section">
+  <div class="dash-hero-title">Top 10 váy</div>
+  <div class="dash-table-card">
+    <table class="dash-vay-table">
+      <thead>
+        <tr><th>#</th><th>Tên váy</th><th>Số lần</th><th>Doanh thu</th><th>ROI</th></tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  </div>
+</div>`;
 }
 
 function setDashTab(tab) {
@@ -6473,26 +6635,25 @@ ${renderDashDateFilter()}
 </div>
 
 ${subTab === 'banhang' ? `
-<!-- 1a: Kết quả bán hàng -->
+<!-- 1a: Kết quả bán hàng — KPI 2x2 Grid -->
 <div class="dash-section">
   <div class="dash-section-title">Kết quả bán hàng</div>
-  <div class="dash-today-stats">
-    <div class="dash-today-card main">
-      <div class="dash-today-rev">${fmtVND(todayStats.today.rev)}</div>
-      <div class="dash-today-label">Doanh thu hôm nay</div>
-      <div class="dash-today-count">${todayStats.today.count} đơn</div>
+  <div class="dash-kpi-2x2">
+    <div class="dash-kpi-cell" style="background:rgba(59,130,246,0.08);border-left-color:#3b82f6">
+      <div class="dash-kpi-num">${fmtVND(todayStats.today.rev)}</div>
+      <div class="dash-kpi-lbl">Doanh thu hôm nay</div>
     </div>
-    <div class="dash-today-compare">
-      <div class="dash-compare-row">
-        <span class="dash-compare-label">vs Hôm qua</span>
-        <span class="dash-compare-val ${todayStats.pctVsYesterday>=0?'pos':'neg'}">${todayStats.pctVsYesterday>=0?'▲':'▼'} ${Math.abs(todayStats.pctVsYesterday)}%</span>
-        <span class="dash-compare-amount muted">${fmtVND(todayStats.yesterday.rev)}</span>
-      </div>
-      <div class="dash-compare-row">
-        <span class="dash-compare-label">vs Cùng kỳ tháng trước</span>
-        <span class="dash-compare-val ${todayStats.pctVsLastMonth>=0?'pos':'neg'}">${todayStats.pctVsLastMonth>=0?'▲':'▼'} ${Math.abs(todayStats.pctVsLastMonth)}%</span>
-        <span class="dash-compare-amount muted">${fmtVND(todayStats.sameDayLastMonth.rev)}</span>
-      </div>
+    <div class="dash-kpi-cell" style="background:rgba(16,185,129,0.08);border-left-color:#10b981">
+      <div class="dash-kpi-num">${fmtVND(revThisMonth.rev)}</div>
+      <div class="dash-kpi-lbl">Doanh thu tháng</div>
+    </div>
+    <div class="dash-kpi-cell" style="background:rgba(212,175,55,0.08);border-left-color:#d4af37">
+      <div class="dash-kpi-num">${todayStats.today.count}</div>
+      <div class="dash-kpi-lbl">Đơn hôm nay</div>
+    </div>
+    <div class="dash-kpi-cell" style="background:rgba(139,92,246,0.08);border-left-color:#8b5cf6">
+      <div class="dash-kpi-num">${fmtVND(revThisMonth.count > 0 ? Math.round(revThisMonth.rev / revThisMonth.count) : 0)}</div>
+      <div class="dash-kpi-lbl">AOV tháng</div>
     </div>
   </div>
 </div>
@@ -6526,7 +6687,7 @@ ${subTab === 'doanhthu' ? `
 ` : ''}
 
 ${subTab === 'topvay' ? `
-<!-- 1c: Top 20 váy bán chạy -->
+<!-- 1c: Top 20 váy bán chạy — Grid cards -->
 <div class="dash-section">
   <div class="dash-rev-filter-row">
     <div class="dash-chart-tabs">
@@ -6534,18 +6695,23 @@ ${subTab === 'topvay' ? `
       <button class="dash-chart-tab ${topMode==='thismonth'?'active':''}" onclick="setDashTopMode('thismonth')">Tháng này</button>
     </div>
   </div>
-  <div class="dash-top20-wrap" id="dash-top20-wrap">
+  <div class="dash-top20-grid" id="dash-top20-wrap">
     ${topDresses.length === 0 ? `
     <div class="dash-empty-state">
       <div class="dash-empty-icon">👗</div>
       <div class="dash-empty-title">Chưa có đơn thuê nào</div>
       <div class="dash-empty-desc">Tạo đơn mới để xem top váy bán chạy ${topMode==='7days'?'7 ngày qua':'tháng này'}</div>
       <button class="dash-empty-btn" onclick="openNewOrder()">+ Tạo đơn mới</button>
-    </div>` : topDresses.map((v, i) => `
-    <div class="dash-top20-row" onclick="openOrderByDress('${v.key}')">
-      <span class="dash-rank">${i+1}</span>
-      <span class="dash-top20-name">${v.ten}</span>
-      <span class="dash-top20-count">${v.count} lần</span>
+    </div>` : topDresses.slice(0, 20).map((v, i) => `
+    <div class="dash-top-card" onclick="openOrderByDress('${v.key}')">
+      <div class="dash-top-rank">#${i+1}</div>
+      <div class="dash-top-info">
+        <div class="dash-top-name">${v.ten}</div>
+        <div class="dash-top-bar-wrap">
+          <div class="dash-top-bar-fill" style="width:${Math.round(v.count / topDresses[0].count * 100)}%"></div>
+        </div>
+      </div>
+      <div class="dash-top-count">${v.count} lần</div>
     </div>`).join('')}
   </div>
 </div>
@@ -6614,7 +6780,7 @@ function getDateFilterRange() {
   if (df === 'today') {
     return { from: todayIso, to: todayIso };
   } else if (df === '7days') {
-    const from = addD(todayIso, -6);
+    const from = isoOf(addD(todayIso, -6));
     return { from, to: todayIso };
   } else {
     // thismonth - get first and last day of month
@@ -6816,82 +6982,173 @@ function renderDashSoQuy(d) {
     chiByDate[iso] = (chiByDate[iso] || 0) + Number(e.soTien || 0);
   });
 
+  const soquySubTab = dashState.soquySubTab || 'thu';
+
   return `
 ${renderDashDateFilter()}
 
-<!-- Summary Cards -->
-<div class="dash-summary-cards">
-  <div class="dash-summary-card income">
-    <div class="dash-summary-icon">💰</div>
-    <div class="dash-summary-val">${fmtVND(tongThu)}</div>
-    <div class="dash-summary-label">Tổng thu</div>
-  </div>
-  <div class="dash-summary-card expense">
-    <div class="dash-summary-icon">💸</div>
-    <div class="dash-summary-val">${fmtVND(totalChiPhi)}</div>
-    <div class="dash-summary-label">Tổng chi</div>
-  </div>
-  <div class="dash-summary-card balance">
-    <div class="dash-summary-icon">📊</div>
-    <div class="dash-summary-val">${fmtVND(canBang)}</div>
-    <div class="dash-summary-label">Cân bằng</div>
+<!-- Hero Card: Tổng thu / Tổng chi / Cân bằng -->
+<div class="dash-hero-card" style="margin:0 16px 16px;background:linear-gradient(135deg,var(--primary-100) 0%,var(--primary-200) 100%);box-shadow:0 8px 24px rgba(58,134,191,0.2)">
+  <div class="dash-hero-grid" style="padding:16px">
+    <div style="text-align:center">
+      <div class="dash-hero-label" style="color:var(--green)">💰 Tổng thu</div>
+      <div class="dash-hero-value" style="color:var(--green)">${fmtVND(tongThu)}</div>
+    </div>
+    <div style="text-align:center">
+      <div class="dash-hero-label" style="color:var(--red)">💸 Tổng chi</div>
+      <div class="dash-hero-value" style="color:var(--red)">${fmtVND(totalChiPhi)}</div>
+    </div>
+    <div style="text-align:center">
+      <div class="dash-hero-label" style="color:var(--primary)">📊 Cân bằng</div>
+      <div class="dash-hero-value" style="color:${canBang>=0?'var(--green)':'var(--red)'}">${fmtVND(canBang)}</div>
+    </div>
   </div>
 </div>
 
-<!-- Income vs Expense Chart -->
-<div class="dash-section">
+<!-- Grouped Bar Chart: Thu vs Chi -->
+<div class="dash-section" style="padding:0 16px 16px">
   <div class="dash-section-title">Thu vs Chi theo ngày</div>
-  <div class="dash-chart-wrap" style="height:200px;background:var(--bg-card);border-radius:12px;padding:8px;box-shadow:var(--glass-shadow)">
+  <div class="dash-soquy-legend">
+    <div class="dash-soquy-legend-item">
+      <div style="width:16px;height:3px;background:#34c399;border-radius:2px"></div>
+      <span style="color:var(--text-secondary);font-size:12px">Thu</span>
+    </div>
+    <div class="dash-soquy-legend-item">
+      <div style="width:16px;height:3px;background:#ff6b6b;border-radius:2px"></div>
+      <span style="color:var(--text-secondary);font-size:12px">Chi</span>
+    </div>
+  </div>
+  <div class="dash-chart-wrap" style="height:200px;background:var(--bg-card);border-radius:12px;padding:8px;box-shadow:0 4px 12px rgba(0,0,0,0.08)">
     <canvas id="dash-soquy-chart"></canvas>
   </div>
 </div>
 
-<!-- Quick Actions -->
-<div class="dash-section" style="display:flex;gap:8px">
-  <button class="btn primary" onclick="openAddThuKhacModal()" style="flex:1">💰 Thêm thu khác</button>
-  <button class="btn secondary" onclick="openAddChiPhiModal()" style="flex:1">💸 Thêm chi phí</button>
+<!-- Thu / Chi Tabs -->
+<div class="dash-sub-tabs" style="padding:0 16px;margin-bottom:12px">
+  <button class="${soquySubTab==='thu'?'active':''}" onclick="setDashSoQuySubTab('thu')">💰 Thu khác</button>
+  <button class="${soquySubTab==='chi'?'active':''}" onclick="setDashSoQuySubTab('chi')">💸 Chi phí</button>
 </div>
 
-<!-- Chi phí breakdown -->
-${chiPhi.length > 0 ? `
-<div class="dash-section">
-  <div class="dash-section-title">Chi phí</div>
-  <div class="dash-expense-list">
-    ${Object.entries(chiByLoai).map(([loai, amount]) => `
-    <div class="dash-expense-row">
-      <div class="dash-expense-loai">${loai}</div>
-      <div class="dash-expense-amount">${fmtVND(amount)}</div>
-    </div>`).join('')}
-  </div>
-  <div class="dash-expense-entries">
-    ${chiPhi.map(e => `
-    <div class="dash-expense-entry" onclick="if(confirm('Xóa khoản chi này?')){deleteChiPhiEntry('${e.id}');renderDashboard();}">
-      <span class="dash-expense-date">${e.date}</span>
-      <span class="dash-expense-loai-small">${e.loai}</span>
-      <span class="dash-expense-note">${e.moTa}</span>
-      <span class="dash-expense-amount-small">-${fmtVND(e.soTien)}</span>
-      <span class="dash-expense-del">🗑️</span>
-    </div>`).join('')}
-  </div>
-</div>
-` : '<div class="dash-section"><p class="muted" style="text-align:center;padding:16px">Chưa có chi phí</p></div>'}
-
+${soquySubTab === 'thu' ? `
 <!-- Thu khác -->
-${thuKhac.length > 0 ? `
-<div class="dash-section">
-  <div class="dash-section-title">Thu khác</div>
-  <div class="dash-expense-entries">
-    ${thuKhac.map(e => `
-    <div class="dash-expense-entry" style="border-left:3px solid var(--green)" onclick="if(confirm('Xóa khoản thu này?')){deleteThuKhacEntry('${e.id}');renderDashboard();}">
-      <span class="dash-expense-date">${e.date}</span>
-      <span class="dash-expense-note">${e.moTa}</span>
-      <span class="dash-expense-amount-small" style="color:var(--green)">+${fmtVND(e.soTien)}</span>
-      <span class="dash-expense-del">🗑️</span>
-    </div>`).join('')}
+<div class="dash-section" style="padding:0 16px 16px">
+  <button class="btn primary" onclick="openAddThuKhacModal()" style="width:100%;margin-bottom:12px">💰 Thêm thu khác</button>
+  ${thuKhac.length > 0 ? `
+  <div class="dash-table-card">
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>Ngày</th><th>Mô tả</th><th>Số tiền</th><th></th></tr></thead>
+        <tbody>
+          ${thuKhac.map(e => `
+          <tr>
+            <td style="font-size:12px">${e.date}</td>
+            <td>${e.moTa || '-'}</td>
+            <td style="text-align:right;font-weight:600;color:var(--green)">+${fmtVND(e.soTien)}</td>
+            <td style="text-align:center"><button class="dash-icon-btn" onclick="if(confirm('Xóa?')){deleteThuKhacEntry('${e.id}');renderDashboard();}">🗑️</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
   </div>
+  ` : `
+  <div class="dash-empty-state">
+    <div class="dash-empty-icon">💰</div>
+    <div class="dash-empty-title">Chưa có thu khác</div>
+    <div class="dash-empty-desc">Bấm "Thêm thu khác" để ghi nhận</div>
+  </div>
+  `}
 </div>
-` : ''}
+` : `
+<!-- Chi phí -->
+<div class="dash-section" style="padding:0 16px 16px">
+  <button class="btn secondary" onclick="openAddChiPhiModal()" style="width:100%;margin-bottom:12px">💸 Thêm chi phí</button>
+  ${chiPhi.length > 0 ? `
+  <!-- Chi phí by loại -->
+  <div style="margin-bottom:12px">
+    <div class="dash-section-title">Theo loại</div>
+    <div class="dash-metric-row">
+      ${Object.entries(chiByLoai).map(([loai, amount]) => {
+        const pct = totalChiPhi > 0 ? Math.round(amount/totalChiPhi*100) : 0;
+        return `
+        <div class="dash-metric-item" style="background:var(--bg-card);border-radius:10px;padding:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600">${loai}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--red)">${fmtVND(amount)}</span>
+          </div>
+          <div style="height:4px;background:var(--border);border-radius:2px">
+            <div style="height:100%;width:${pct}%;background:var(--red);border-radius:2px"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">${pct}%</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+  <!-- Chi phí chi tiết -->
+  <div class="dash-table-card">
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>Ngày</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th><th></th></tr></thead>
+        <tbody>
+          ${chiPhi.map(e => `
+          <tr>
+            <td style="font-size:12px">${e.date}</td>
+            <td style="font-size:12px">${e.loai}</td>
+            <td>${e.moTa || '-'}</td>
+            <td style="text-align:right;font-weight:600;color:var(--red)">-${fmtVND(e.soTien)}</td>
+            <td style="text-align:center"><button class="dash-icon-btn" onclick="if(confirm('Xóa?')){deleteChiPhiEntry('${e.id}');renderDashboard();}">🗑️</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  ` : `
+  <div class="dash-empty-state">
+    <div class="dash-empty-icon">💸</div>
+    <div class="dash-empty-title">Chưa có chi phí</div>
+    <div class="dash-empty-desc">Bấm "Thêm chi phí" để ghi nhận</div>
+  </div>
+  `}
+</div>
+`}
 `;
+}
+
+// ============================================================
+// GAUGE CHART (Dress Utilization)
+// ============================================================
+function drawGaugeChart(pct) {
+  const canvas = document.getElementById('dash-gauge-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = 120, H = 70;
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = 60, cy = 60, r = 45;
+  const startAngle = Math.PI; // 180°
+  const endAngle = 2 * Math.PI; // 360°
+  const valueAngle = startAngle + (pct / 100) * Math.PI;
+
+  // Background arc
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startAngle, endAngle);
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 12;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Value arc
+  if (pct > 0) {
+    const grad = ctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, '#34C759');
+    grad.addColorStop(0.5, '#3B82F6');
+    grad.addColorStop(1, pct >= 60 ? '#34C759' : '#F59E0B');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, valueAngle);
+    ctx.strokeStyle = pct >= 60 ? '#10b981' : pct >= 40 ? '#f59e0b' : '#ef4444';
+    ctx.lineWidth = 12;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  }
 }
 
 // ============================================================
@@ -7240,6 +7497,10 @@ function renderDashKhoVayPK(d) {
   const dateFromObj = parseD(dateFrom);
   const dateToObj = parseD(dateTo);
   const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const monthOrders = orders.filter(o => {
+    const lay = parseD(o.Ngay_Lay); if (!lay) return false;
+    return lay >= dateFromObj && lay <= dateToObj;
+  });
 
   // Calculate BCG data for dresses - use date filter range
   const thisStart = dateFromObj;
@@ -7340,104 +7601,212 @@ ${renderDashDateFilter()}
 <!-- SUB-TABS -->
 <div class="dash-sub-tabs">
   <button class="dash-sub-tab ${subTab==='overview'?'active':''}" onclick="setDashKhoSubTab('overview')">📊 Tổng quan</button>
-  <button class="dash-sub-tab ${subTab==='topvay'?'active':''}" onclick="setDashKhoSubTab('topvay')">👗 Top 20 váy</button>
-  <button class="dash-sub-tab ${subTab==='toppk'?'active':''}" onclick="setDashKhoSubTab('toppk')">💍 Top 20 PK</button>
+  <button class="dash-sub-tab ${subTab==='topvay'?'active':''}" onclick="setDashKhoSubTab('topvay')">👗 Top váy</button>
+  <button class="dash-sub-tab ${subTab==='toppk'?'active':''}" onclick="setDashKhoSubTab('toppk')">💍 Top PK</button>
+  <button class="dash-sub-tab ${subTab==='chuathue'?'active':''}" onclick="setDashKhoSubTab('chuathue')">📦 Váy chưa thuê${d.neverRented&&d.neverRented.length>0?' <span class="dash-badge-neg">'+d.neverRented.length+'</span>':''}</button>
 </div>
 
 ${subTab === 'overview' ? `
-<!-- 2a: Overview -->
+<!-- 2a: Overview — 4 metric cards + donut -->
 <div class="dash-section">
-  <div class="dash-inv-hero">
-    <div class="dash-inv-card">
-      <div class="dash-inv-big">${totalVay}</div>
-      <div class="dash-inv-label">Tổng váy</div>
-      <div class="dash-inv-sub">${busyVay} đang thuê · ${totalVay - busyVay} trống</div>
+  <!-- Metric cards: Tổng váy | Đang thuê | Tỷ lệ bận | TB giá -->
+  <div class="dash-hero-grid" style="grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+    <div class="dash-hero-card" style="padding:14px 10px">
+      <div class="dash-hero-label">Tổng váy</div>
+      <div class="dash-hero-value" style="font-size:24px">${totalVay}</div>
     </div>
-    <div class="dash-inv-divider"></div>
-    <div class="dash-inv-card">
-      <div class="dash-inv-big">${totalPk}</div>
-      <div class="dash-inv-label">Tổng phụ kiện</div>
-      <div class="dash-inv-sub">${busyPk.size} đang thuê · ${totalPk - busyPk.size} trống</div>
+    <div class="dash-hero-card" style="padding:14px 10px">
+      <div class="dash-hero-label">Đang thuê</div>
+      <div class="dash-hero-value" style="font-size:24px;color:var(--green)">${busyVay}</div>
+    </div>
+    <div class="dash-hero-card" style="padding:14px 10px">
+      <div class="dash-hero-label">Tỷ lệ bận</div>
+      <div class="dash-hero-value" style="font-size:24px;color:${busyVay/totalVay>=0.5?'var(--green)':'var(--amber)'}">${totalVay>0?Math.round(busyVay/totalVay*100):0}%</div>
+    </div>
+    <div class="dash-hero-card" style="padding:14px 10px">
+      <div class="dash-hero-label">Tổng PK</div>
+      <div class="dash-hero-value" style="font-size:24px">${totalPk}</div>
     </div>
   </div>
-  <div class="dash-chart-wrap" style="height:160px;margin-top:16px">
-    <canvas id="dash-inv-chart"></canvas>
+  <!-- Donut chart -->
+  <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+    <div style="width:140px;height:140px;position:relative;flex-shrink:0">
+      <canvas id="dash-inv-chart" width="140" height="140"></canvas>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none">
+        <div style="font-size:22px;font-weight:700">${totalVay>0?Math.round(busyVay/totalVay*100):0}%</div>
+        <div style="font-size:10px;color:var(--text-secondary)">Đang bận</div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:160px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--green)"></div>
+        <span style="font-size:13px">Đang thuê: <b>${busyVay}</b></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--primary-300)"></div>
+        <span style="font-size:13px">Trống: <b>${totalVay-busyVay}</b></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--amber)"></div>
+        <span style="font-size:13px">PK đang thuê: <b>${busyPk.size}</b></span>
+      </div>
+    </div>
   </div>
 </div>
 ` : ''}
 
 ${subTab === 'topvay' ? `
-<!-- 2b: Top 20 váy + BCG -->
+<!-- 2b: Top váy — Tên + Số lần + Doanh thu + ROI -->
 <div class="dash-section">
-  <div class="dash-section-title">Top 20 váy — Tháng ${month}/${year}</div>
+  <div class="dash-section-title">Top váy — Tháng ${month}/${year}</div>
   <div class="dash-table-card">
     <div class="dash-table-wrap">
       <table class="dash-table">
-        <thead><tr><th>#</th><th>Tên váy</th><th>Lần thuê</th><th>Share</th><th>Growth</th><th>BCG</th></tr></thead>
+        <thead><tr><th>#</th><th>Tên váy</th><th>Số lần</th><th>Doanh thu</th><th>ROI</th></tr></thead>
         <tbody>
           ${topVays.length === 0 ? `
-          <tr><td colspan="6">
+          <tr><td colspan="5">
             <div class="dash-empty-state">
               <div class="dash-empty-icon">📊</div>
               <div class="dash-empty-title">Chưa có dữ liệu thuê tháng này</div>
-              <div class="dash-empty-desc">Top váy sẽ hiển thị khi có đơn thuê trong tháng ${month}/${year}</div>
+              <div class="dash-empty-desc">Top váy sẽ hiển thị khi có đơn thuê</div>
               <button class="dash-empty-btn" onclick="openNewOrder()">+ Tạo đơn mới</button>
             </div>
-          </td></tr>` : topVays.map((v, i) => `
-          <tr>
-            <td class="dash-rank">${i+1}</td>
-            <td class="dash-vay-name">${v.ten}</td>
-            <td><span class="dash-count-badge">${v.count}</span></td>
-            <td class="muted">${Math.round(v.share * 100)}%</td>
-            <td class="${v.growth >= 1 ? 'pos' : 'neg'}">${v.growth >= 1 ? '▲' : '▼'} ${Math.round(Math.abs(v.growth - 1) * 100)}%</td>
-            <td><span class="dash-bcg-badge" style="background:${v.bcgColor}20;color:${v.bcgColor}">${v.bcg} ${v.bcgLabel}</span></td>
-          </tr>`).join('')}
+          </td></tr>` : (() => {
+            // Calculate revenue per dress
+            const vayRev = {};
+            const vayCount = {};
+            monthOrders.forEach(o => {
+              const dhvs = Array.isArray(o.dhvs) ? o.dhvs : [];
+              if (dhvs.length === 0) return;
+              const total = donTienThueVay(o);
+              const each = total / dhvs.length;
+              dhvs.forEach(x => {
+                const k = x.Ma_Vay || x.vay;
+                if (!vayRev[k]) vayRev[k] = 0;
+                if (!vayCount[k]) vayCount[k] = 0;
+                vayRev[k] += each;
+                vayCount[k]++;
+              });
+            });
+            const enriched = topVays.map(v => {
+              const rev = vayRev[v.key] || 0;
+              const vay = vayById.get(v.key);
+              const goc = vay ? Number(vay.Gia_Goc || 0) : 0;
+              const roi = goc > 0 ? rev / goc : 0;
+              return { ...v, rev, roi };
+            });
+            return enriched.map((v, i) => `
+            <tr class="dash-vay-row">
+              <td class="dash-rank">${i+1}</td>
+              <td class="dash-vay-name">${v.ten}</td>
+              <td style="text-align:center;font-weight:600">${v.count}</td>
+              <td style="text-align:right;font-weight:500">${fmtVND(Math.round(v.rev))}</td>
+              <td style="text-align:right;font-weight:600;color:${v.roi>=1?'var(--green)':'var(--red)'}">${v.roi>0?v.roi.toFixed(1)+'x':'-'}</td>
+            </tr>`).join('');
+          })()}
         </tbody>
       </table>
-    </div>
-    <div class="dash-bcg-legend">
-      <span><span style="color:var(--green)">⭐</span> Star</span>
-      <span><span style="color:var(--accent)">💰</span> Cash Cow</span>
-      <span><span style="color:var(--amber)">❓</span> Question</span>
-      <span style="color:var(--text-muted)">🐕 Dog</span>
     </div>
   </div>
 </div>
 ` : ''}
 
 ${subTab === 'toppk' ? `
-<!-- 2c: Top 20 PK -->
+<!-- 2c: Top PK — Tên + Số lần + Doanh thu + ROI -->
 <div class="dash-section">
-  <div class="dash-section-title">Top 20 phụ kiện — Tháng ${month}/${year}</div>
+  <div class="dash-section-title">Top phụ kiện — Tháng ${month}/${year}</div>
   <div class="dash-table-card">
     <div class="dash-table-wrap">
       <table class="dash-table">
-        <thead><tr><th>#</th><th>Tên phụ kiện</th><th>Lần thuê</th><th>Share</th></tr></thead>
+        <thead><tr><th>#</th><th>Tên phụ kiện</th><th>Số lần</th><th>Doanh thu</th><th>ROI</th></tr></thead>
         <tbody>
           ${topPKs.length === 0 ? `
-          <tr><td colspan="4">
+          <tr><td colspan="5">
             <div class="dash-empty-state">
               <div class="dash-empty-icon">💍</div>
               <div class="dash-empty-title">Chưa có dữ liệu</div>
-              <div class="dash-empty-desc">Top phụ kiện sẽ hiển thị khi có đơn thuê trong tháng ${month}/${year}</div>
+              <div class="dash-empty-desc">Top phụ kiện sẽ hiển thị khi có đơn thuê</div>
             </div>
-          </td></tr>` : topPKs.map((p, i) => `
-          <tr>
-            <td class="dash-rank">${i+1}</td>
-            <td>${p.ten}</td>
-            <td><span class="dash-count-badge">${p.count}</span></td>
-            <td class="muted">${Math.round(p.share * 100)}%</td>
-          </tr>`).join('')}
+          </td></tr>` : (() => {
+            const pkRev = {};
+            monthOrders.forEach(o => {
+              const pks = Array.isArray(o.phukiens) ? o.phukiens : [];
+              if (pks.length === 0) return;
+              const total = donTienThuePK(o);
+              const each = total / pks.length;
+              pks.forEach(x => {
+                const k = x.Ma_PK || x.pk;
+                if (!pkRev[k]) pkRev[k] = 0;
+                pkRev[k] += each;
+              });
+            });
+            const enriched = topPKs.map(p => {
+              const rev = pkRev[p.key] || 0;
+              const pk = pkById.get(p.key);
+              const goc = pk ? Number(pk.Gia_Goc || 0) : 0;
+              const roi = goc > 0 ? rev / goc : 0;
+              return { ...p, rev, roi };
+            });
+            return enriched.map((p, i) => `
+            <tr class="dash-vay-row">
+              <td class="dash-rank">${i+1}</td>
+              <td class="dash-vay-name">${p.ten}</td>
+              <td style="text-align:center;font-weight:600">${p.count}</td>
+              <td style="text-align:right;font-weight:500">${fmtVND(Math.round(p.rev))}</td>
+              <td style="text-align:right;font-weight:600;color:${p.roi>=1?'var(--green)':'var(--red)'}">${p.roi>0?p.roi.toFixed(1)+'x':'-'}</td>
+            </tr>`).join('');
+          })()}
         </tbody>
       </table>
     </div>
   </div>
 </div>
 ` : ''}
+
+${subTab === 'chuathue' ? `
+<!-- 2d: Váy chưa được thuê -->
+<div class="dash-section">
+  <div class="dash-section-title">Váy chưa được thuê</div>
+  ${d.neverRented && d.neverRented.length > 0 ? `
+    <div class="dash-table-card">
+      <div class="dash-table-wrap">
+        <table class="dash-table">
+          <thead><tr><th>#</th><th>Tên váy</th><th>Ngày tạo</th><th>Giá gốc</th></tr></thead>
+          <tbody>
+            ${d.neverRented.slice(0, 20).map((v, i) => {
+              const vv = vayById.get(v.key);
+              const ngay = vv && vv.Ngay_Tao ? vv.Ngay_Tao.slice(0, 10) : '-';
+              const goc = vv ? Number(vv.Gia_Goc || 0) : 0;
+              return `
+              <tr class="dash-vay-row">
+                <td class="dash-rank">${i+1}</td>
+                <td class="dash-vay-name">${v.ten}</td>
+                <td style="font-size:12px;color:var(--text-secondary)">${ngay}</td>
+                <td style="text-align:right">${goc>0?fmtVND(goc):'-'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--text-secondary)">
+      Hiển thị ${Math.min(d.neverRented.length, 20)} / ${d.neverRented.length} váy chưa được thuê
+    </div>
+  ` : `
+    <div class="dash-empty-state">
+      <div class="dash-empty-icon">🎉</div>
+      <div class="dash-empty-title">Tất cả váy đã được thuê!</div>
+      <div class="dash-empty-desc">Không có váy nào chưa được thuê trong dữ liệu</div>
+    </div>
+  `}
+</div>
+` : ''}
 `;
 }
 
 function setDashKhoSubTab(tab) { dashState.khoSubTab = tab; renderDashboard(); }
+function setDashSoQuySubTab(tab) { dashState.soquySubTab = tab; renderDashboard(); }
 
 // --- Calculate daily revenue for a month ---
 function calculateDashboardRevenue(month, year) {
@@ -7584,14 +7953,19 @@ function renderDashKhoVayDonut() {
   const { month, year } = dashState;
   const vayList = db.vay || [];
   const pkList = db.pk || [];
-  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Respect date filter
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+  const filterStart = parseD(dateFrom);
+  const filterEnd = parseD(dateTo);
 
   const busyV = new Set(), busyP = new Set();
   (db.don || []).filter(o => {
     if (isHoanOrder(o)) return false;
     const lay = parseD(o.Ngay_Lay); const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
     if (!lay || !tra) return false;
-    return lay <= today && tra >= today;
+    // Check if ANY overlap with date range
+    return lay <= filterEnd && tra >= filterStart;
   }).forEach(o => {
     (Array.isArray(o.dhvs) ? o.dhvs : []).forEach(x => {
       const k = x.Ma_Vay || x.vay; if (k) busyV.add(k);
@@ -7776,8 +8150,38 @@ function renderDashPhanTich(d) {
   if (d.repeatRate < 20 && d.totalOrders > 5) recommendations.push({ icon: '🔄', color: 'var(--amber)', text: `Khách quay lại thấp (${d.repeatRate}%) — tạo chương trình khách hàng thân thiết.` });
   if (d.neverRented && d.neverRented.length > 0) recommendations.push({ icon: '👗', color: 'var(--amber)', text: `${d.neverRented.length} váy chưa từng được thuê — cân nhắc giảm giá hoặc refresh mẫu mã.` });
   if (recommendations.length === 0) recommendations.push({ icon: '✅', color: 'var(--green)', text: 'Mọi chỉ số đều ở mức tốt — tiếp tục duy trì!' });
+  const alertCount = recommendations.filter(r => r.color !== 'var(--green)').length;
+
   return `
 ${renderDashDateFilter()}
+
+<!-- Alerts Banner nếu có cảnh báo -->
+${alertCount > 0 ? `
+<div class="dash-section" style="padding:0 16px 12px">
+  <div class="dash-alert-banner" style="background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(245,158,11,0.2)">
+    <div class="dash-badge" style="background:var(--amber);color:white;font-size:16px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0">${alertCount}</div>
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:600;color:#92400e">Có ${alertCount} điểm cần lưu ý</div>
+      <div style="font-size:12px;color:#b45309">Xem chi tiết bên dưới ↓</div>
+    </div>
+  </div>
+</div>
+` : ''}
+
+<!-- Gauge Chart: Utilization -->
+<div class="dash-section" style="padding:0 16px 16px">
+  <div class="dash-section-title">📊 Tỷ lệ lấp đầy</div>
+  <div style="display:flex;align-items:center;gap:16px;background:var(--bg-card);border-radius:16px;padding:16px;box-shadow:0 4px 12px rgba(0,0,0,0.08)">
+    <div style="width:120px;height:70px;position:relative;flex-shrink:0">
+      <canvas id="dash-gauge-canvas" width="120" height="70" style="width:120px;height:70px"></canvas>
+    </div>
+    <div style="flex:1">
+      <div style="font-size:24px;font-weight:700;color:${occColor}">${d.avgBusy}%</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${d.activeDresses}/${d.totalDresses} váy đang được thuê</div>
+      <div style="font-size:12px;color:${occColor};margin-top:4px;font-weight:500">${d.avgBusy >= 60 ? '✅ Tốt' : d.avgBusy >= 40 ? '⚠️ Trung bình' : '⚠️ Cần cải thiện'}</div>
+    </div>
+  </div>
+</div>
 
 <div class="dash-section">
   <div class="dash-section-title">📏 Chỉ số quan trọng</div>
@@ -7905,6 +8309,17 @@ ${renderDashDateFilter()}
     ${d.dressConcentrationRisk <= 40 ? '✅' : '⚠️'} <b>Tập trung Top 3 váy ${d.dressConcentrationRisk}%</b> — ${d.dressConcentrationRisk <= 30 ? 'Rủi ro thấp' : d.dressConcentrationRisk <= 50 ? 'Chấp nhận được' : 'Rủi ro cao — cần đa dạng hoá'}<br>
     ${d.overdueRate <= 10 ? '✅' : '⚠️'} <b>Quá hạn ${d.overdueRate}%</b> — ${d.overdueRate <= 5 ? 'Kiểm soát tốt' : d.overdueRate <= 15 ? 'Cần theo dõi' : 'Nghiêm trọng — cần xử lý ngay'}<br>
     ${d.revenueChange >= 0 ? '✅' : '⚠️'} <b>Doanh thu tháng này</b> — ${d.revenueChange >= 10 ? 'Tăng trưởng tốt' : d.revenueChange >= 0 ? 'Ổn định' : `Giảm ${Math.abs(d.revenueChange)}%`}
+  </div>
+</div>
+
+<!-- Alerts Section -->
+<div class="dash-section" style="padding:0 16px 16px">
+  <div class="dash-section-title" style="display:flex;align-items:center;gap:8px">
+    ⚠️ Khuyến nghị
+    <span class="dash-badge" style="background:${alertCount>0?'var(--amber)':'var(--green)'};color:white;font-size:11px">${alertCount > 0 ? alertCount + ' cảnh báo' : 'Tất cả tốt'}</span>
+  </div>
+  <div class="dash-recs">
+    ${recommendations.map(r => `<div class="dash-rec-item" style="border-left:3px solid ${r.color}"><span style="margin-right:8px">${r.icon}</span><span style="color:${r.color}">${r.text}</span></div>`).join('')}
   </div>
 </div>`;
 }
