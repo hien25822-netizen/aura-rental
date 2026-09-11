@@ -1941,6 +1941,10 @@ function copyOrdersTable() {
 function renderRawTable() {
   const sel = $('#raw-month-select');
   const monthFilter = sel ? sel.value : '';
+  const searchEl = $('#raw-search');
+  const searchQ = searchEl ? searchEl.value.toLowerCase().trim() : '';
+  const typeEl = $('#raw-type-chips .on');
+  const typeFilter = typeEl ? typeEl.dataset.rawtype : '';
 
   let arr = (db.don || []).filter(isHoanOrder);
 
@@ -1949,6 +1953,24 @@ function renderRawTable() {
     arr = arr.filter(o => {
       const d = o.Ngay_Lay || o.lay || '';
       return d.startsWith(monthFilter);
+    });
+  }
+
+  // Filter by search
+  if (searchQ) {
+    arr = arr.filter(o => {
+      const id = (o.Ma_Don || o.id || '').toLowerCase();
+      const ins = (o.Insta_Khach || o.insta || '').toLowerCase();
+      const sdt = (o.SDT || o.sdt || '').toLowerCase();
+      return id.includes(searchQ) || ins.includes(searchQ) || sdt.includes(searchQ);
+    });
+  }
+
+  // Filter by type
+  if (typeFilter) {
+    arr = arr.filter(o => {
+      const type = o.Trang_Thai_Don || o.type || '';
+      return type === typeFilter;
     });
   }
 
@@ -2039,6 +2061,23 @@ function renderRawTable() {
         .map(m => `<option value="${m}">${m}</option>`).join('');
     sel.value = current;
     sel.onchange = renderRawTable;
+  }
+
+  // Search input event
+  if (searchEl) {
+    searchEl.oninput = renderRawTable;
+  }
+
+  // Type chips click handlers
+  const typeChips = $('#raw-type-chips');
+  if (typeChips) {
+    typeChips.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        typeChips.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        renderRawTable();
+      };
+    });
   }
 }
 
