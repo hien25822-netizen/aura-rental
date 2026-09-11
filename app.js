@@ -2043,7 +2043,7 @@ function renderRawTable() {
 }
 
 function showRawExportModal() {
-  openModal('raw-export-modal');
+  openModal('m-raw-export');
   const modalSel = $('#raw-export-month');
   const mainSel = $('#raw-month-select');
   if (modalSel && mainSel) modalSel.value = mainSel.value;
@@ -2054,7 +2054,7 @@ function exportRawToExcelFromModal() {
   const mainSel = $('#raw-month-select');
   if (sel && mainSel) mainSel.value = sel.value;
   renderRawTable();
-  closeModal('raw-export-modal');
+  closeModal('m-raw-export');
   copyRawTableToClipboard();
 }
 

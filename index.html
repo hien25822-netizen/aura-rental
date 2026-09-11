@@ -197,6 +197,24 @@
 </section>
 
 
+<!-- ===== RAW DATA VIEW ===== -->
+<section id="v-raw" class="view">
+  <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
+    <select id="raw-month-select" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);font-size:var(--text-xs);background:var(--bg);color:var(--text);cursor:pointer">
+      <option value="">Tất cả các tháng</option>
+    </select>
+    <button class="header-btn" onclick="copyRawTableToClipboard()" title="Copy bảng RAW">📋</button>
+    <button class="header-btn" onclick="showRawExportModal()" title="Export">📤</button>
+  </div>
+  <div id="raw-table-count" style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 4px;font-weight:600"></div>
+  <div id="orders-table-container" style="overflow-x:auto">
+    <table id="raw-table" class="orders-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
 <!-- ===== DASHBOARD ===== -->
 <section id="v-dashboard" class="view" style="display:none"></section>
 
@@ -207,6 +225,7 @@
   <button data-go="v-orders-table"><span class="ico">📋</span><small>Bảng</small></button>
   <button data-go="v-dashboard"><span class="ico">📊</span><small>Dashboard</small></button>
   <button data-go="v-avail"><span class="ico">✨</span><small>Check</small></button>
+  <button data-go="v-raw"><span class="ico">📄</span><small>RAW</small></button>
   <button data-go="v-kho"><span class="ico">👗</span><small>Váy</small></button>
   <button data-go="v-pk"><span class="ico">💍</span><small>Phụ kiện</small></button>
 </nav>
@@ -231,6 +250,17 @@
 <div class="modal" id="m-refund-screenshot"><div class="sheet" id="rss-body"></div></div>
 <div class="modal" id="m-quick-note"><div class="sheet" id="qn-body"></div></div>
 <div class="modal" id="m-expense"><div class="sheet" id="exp-body"></div></div>
+<div class="modal" id="m-raw-export"><div class="sheet" id="raw-export-body">
+  <div class="modal-header"><h3>📤 Export RAW Data</h3><button class="icon-btn" onclick="closeModal('m-raw-export')">✕</button></div>
+  <div style="padding:16px">
+    <p style="margin:0 0 12px;font-size:13px;color:var(--text-secondary)">Chọn tháng để export:</p>
+    <select id="raw-export-month" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);font-size:14px;background:var(--bg);color:var(--text)"></select>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn secondary" onclick="closeModal('m-raw-export')" style="flex:1">Hủy</button>
+      <button class="btn primary" onclick="exportRawToExcelFromModal()" style="flex:1">Export</button>
+    </div>
+  </div>
+</div></div>
 <div class="modal" id="m-dash-lock">
   <div class="dash-lock-overlay">
     <div class="dash-lock-card">
