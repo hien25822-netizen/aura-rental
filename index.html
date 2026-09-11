@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#DAF0FE" />
 <title>Aura Rental - Quản lý thuê váy</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg" />
 <link rel="manifest" href="manifest.json" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Aura Rental" />
@@ -13,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Playfair+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=46" />
+<link rel="stylesheet" href="styles.css?v=55" />
 </head>
 <body>
 <div class="app">
@@ -25,7 +27,7 @@
     <span class="pill" id="pill">M6/2026</span>
   </div>
   <div class="header-right">
-    <span id="app-version" class="version-badge" title="Phiên bản app">v2.5</span>
+    <span id="app-version" class="version-badge" title="Phiên bản app">v2.11</span>
     <button id="pending-sync-badge" class="pending-sync-badge" style="display:none">🔄 0 chưa đồng bộ</button>
     <button class="header-btn" onclick="forceResync()" title="Cập nhật dữ liệu từ server" id="btn-resync">🔄</button>
     <button class="header-btn" onclick="openRefundOrders()" title="Đơn đã hoàn cọc">💰</button>
@@ -195,11 +197,15 @@
 </section>
 
 
+<!-- ===== DASHBOARD ===== -->
+<section id="v-dashboard" class="view" style="display:none"></section>
+
 <!-- ===== BOTTOM NAV ===== -->
 <nav class="bottom">
   <button class="active" data-go="v-cal"><span class="ico">📅</span><small>Lịch</small></button>
   <button data-go="v-orders"><span class="ico">📦</span><small>Đơn</small></button>
   <button data-go="v-orders-table"><span class="ico">📋</span><small>Bảng</small></button>
+  <button data-go="v-dashboard"><span class="ico">📊</span><small>Dashboard</small></button>
   <button data-go="v-avail"><span class="ico">✨</span><small>Check</small></button>
   <button data-go="v-kho"><span class="ico">👗</span><small>Váy</small></button>
   <button data-go="v-pk"><span class="ico">💍</span><small>Phụ kiện</small></button>
@@ -224,6 +230,20 @@
 <div class="modal" id="m-refund-orders"><div class="sheet" id="ro-body"></div></div>
 <div class="modal" id="m-refund-screenshot"><div class="sheet" id="rss-body"></div></div>
 <div class="modal" id="m-quick-note"><div class="sheet" id="qn-body"></div></div>
+<div class="modal" id="m-expense"><div class="sheet" id="exp-body"></div></div>
+<div class="modal" id="m-dash-lock">
+  <div class="dash-lock-overlay">
+    <div class="dash-lock-card">
+      <div class="dash-lock-icon">📊</div>
+      <h2>Dashboard</h2>
+      <p>Nhập mật khẩu để truy cập</p>
+      <input type="password" id="dash-lock-pwd" class="dash-lock-input" placeholder="Mật khẩu..." />
+      <div id="dash-lock-error" class="dash-lock-error" style="display:none">Sai mật khẩu, thử lại</div>
+      <button class="btn primary" onclick="checkDashPwd()">Xác nhận</button>
+      <button class="btn ghost" onclick="cancelDashLock()">Hủy</button>
+    </div>
+  </div>
+</div>
 
 <!-- Supabase Configuration -->
 <script>
@@ -303,9 +323,9 @@
     s.onload = onload;
     document.head.appendChild(s);
   }
-  loadScript('supabase-service.js?v=31', function() {
-    loadScript('app.js?v=66', function() {
-      loadScript('supabase-app.js?v=85', function() {
+  loadScript('supabase-service.js?v=33', function() {
+    loadScript('app.js?v=80', function() {
+      loadScript('supabase-app.js?v=88', function() {
         console.log('All scripts loaded dynamically');
       });
     });

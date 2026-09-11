@@ -1,11 +1,11 @@
-const STORE = 'aura_v8';
+const STORE = 'aura_v9';
 const DELETED_IDS_KEY = 'aura_deleted_ids_v1'; // Persistent tombstone - survives cache clear
 const TOMBSTONE_GRACE_MS = 365 * 24 * 60 * 60 * 1000; // 1 year - tombstone is permanent
 
 // Bump STORAGE_VERSION mỗi khi schema localStorage thay đổi —
 // khi user mở web, nếu thấy version cũ sẽ tự động xóa cache cũ
 // trước khi Supabase sync dữ liệu mới nhất về.
-const STORAGE_VERSION = 8;
+const STORAGE_VERSION = 10;
 const STORAGE_VERSION_KEY = 'aura_storage_version';
 const _storedVersion = parseInt(localStorage.getItem(STORAGE_VERSION_KEY) || '0', 10);
 
@@ -31,7 +31,7 @@ if (tombstoneCleaned) {
 if (_storedVersion < STORAGE_VERSION) {
   // PRESERVE deleted IDs across version bumps - DON'T clear DELETED_IDS_KEY
   Object.keys(localStorage).forEach(k => {
-    if (k.startsWith('aura_') && k !== STORAGE_VERSION_KEY && k !== DELETED_IDS_KEY) localStorage.removeItem(k);
+    if (k.startsWith('aura_') && k !== STORAGE_VERSION_KEY && k !== DELETED_IDS_KEY && k !== 'aura_v9') localStorage.removeItem(k);
   });
   localStorage.setItem(STORAGE_VERSION_KEY, String(STORAGE_VERSION));
   // Reload để RAM cũng được refresh (tránh hiện data cũ trong bộ nhớ tạm)
@@ -184,8 +184,8 @@ function isPendingCreate(maDon) {
   if (!db._pendingCreate) return false;
   const ts = db._pendingCreate[maDon];
   if (!ts) return false;
-  // Expire after 60s — if Supabase still hasn't responded, treat as failure
-  if (Date.now() - ts > 60000) {
+  // Expire after 24h — if Supabase still hasn't responded, treat as failure
+  if (Date.now() - ts > 24 * 60 * 60 * 1000) {
     delete db._pendingCreate[maDon];
     return false;
   }
@@ -339,7 +339,7 @@ function ngayTraThuc(goi, lay){
   if (!goi || !lay) return null;
   if (goi === '12h') return parseD(lay); // Trả cùng ngày
   if (goi === '1 ngày') return addD(lay, 1); // Trả ngày mai
-  if (goi === '3 ngày') return addD(lay, 3); // Trả sau 3 ngày (02→05)
+  if (goi === '3 ngày') return addD(lay, 3); // Trả sau 3 ngày (01→02→03→04)
   return parseD(lay);
 }
 
@@ -490,7 +490,8 @@ function renderTenVayList(tenVayArr) {
 function donTienThueVay(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
-  return ((don.dhvs || []).filter ? (don.dhvs || []) : []).reduce((s, x) => {
+  const arr = Array.isArray(don.dhvs) ? don.dhvs : [];
+  return arr.reduce((s, x) => {
     const key = x.Ma_Vay || x.vay;
     const v = key ? vayById.get(key) : null;
     return s + (v ? Number(v[g] || 0) : 0);
@@ -499,7 +500,7 @@ function donTienThueVay(don) {
 function donTienThuePK(don) {
   if (!don) return 0;
   const g = don.Goi_Thue === '12h' ? 'Gia_Thue_12h' : don.Goi_Thue === '3 ngày' ? 'Gia_Thue_3_Ngay' : 'Gia_Thue_1_Ngay';
-  const pkArr = ((don.Ma_PK || don.pks || []).filter ? (don.Ma_PK || don.pks || []) : []);
+  const pkArr = Array.isArray(don.Ma_PK || don.pks) ? (don.Ma_PK || don.pks) : [];
   return pkArr.reduce((s, id) => {
     const key = typeof id === 'object' ? (id.Ma_PK || '') : id;
     const p = key ? pkById.get(key) : null;
@@ -508,7 +509,8 @@ function donTienThuePK(don) {
 }
 function donCocGoiY(don) {
   if (!don) return 0;
-  const tong = (don.dhvs || []).reduce((s, x) => {
+  const arr = Array.isArray(don.dhvs) ? don.dhvs : [];
+  const tong = arr.reduce((s, x) => {
     const key = x.Ma_Vay || x.vay;
     const v = key ? vayById.get(key) : null;
     return s + (v ? Number(v.Gia_Vay_Goc || 0) : 0);
@@ -528,7 +530,7 @@ window.debugIsHoan = isHoanOrder;
 function isVayBusy(ma, dateIso, goi) {
   return db.don.some(o => {
     if (isHoanOrder(o)) return false;
-    const has = ((o.dhvs || []).some ? (o.dhvs || []) : []).some(x => (x.vay || x.Ma_Vay) === ma);
+    const has = (Array.isArray(o.dhvs) ? o.dhvs : []).some(x => (x.vay || x.Ma_Vay) === ma);
     if (!has) return false;
     const lay = parseD(o.Ngay_Lay);
     const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
@@ -668,6 +670,10 @@ function openModal(id) {
     document.body.style.top = `-${_modalScrollY}px`;
   }
   $('#' + id).classList.add('show');
+  // Delegated [data-close] listeners for this modal
+  $$('#' + id + ' [data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeModal(id), { once: true });
+  });
 }
 function closeModal(id) {
   $('#' + id).classList.remove('show');
@@ -713,10 +719,6 @@ function showConfirmModal({ title = 'Xác nhận', message = '', confirmText = '
     closeModal('m-confirm');
     if (typeof onConfirm === 'function') onConfirm();
   };
-  // Cancel/close buttons (any [data-close])
-  $$('#cf-body [data-close]').forEach(el => {
-    el.onclick = () => closeModal('m-confirm');
-  });
 }
 function closeAllModals() {
   // Untrack presence when closing any modal
@@ -771,15 +773,23 @@ function go(view) {
   curView = view;
   $$('section.view').forEach(s => s.classList.toggle('active', s.id === view));
   $$('nav.bottom button[data-go]').forEach(b => b.classList.toggle('active', b.dataset.go === view));
-  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!' };
+  $$('.header-tab').forEach(b => {
+    const v = b.getAttribute('onclick')?.match(/go\('([^']+)'\)/)?.[1];
+    b.classList.toggle('active', v === view);
+  });
+  const titleMap = { 'v-cal': 'Lịch thuê', 'v-orders': 'Đơn hàng', 'v-orders-table': 'Bảng đơn', 'v-kho': 'Kho váy', 'v-pk': 'Phụ kiện', 'v-avail': 'Check!', 'v-dashboard': 'Dashboard' };
   $('#title').textContent = titleMap[view] || '';
   $('#fab-add').style.display = (view === 'v-kho' || view === 'v-pk') ? 'flex' : 'none';
   if (view === 'v-cal') renderCal();
   else if (view === 'v-orders') renderOrders();
+  else if (view === 'v-orders-table') renderOrdersTable();
+  else if (view === 'v-raw') renderRawTable();
   else if (view === 'v-kho') renderKho();
   else if (view === 'v-pk') renderPk();
   else if (view === 'v-avail') { ensureAvailDefaultDate(); renderAvail(); }
+  else if (view === 'v-dashboard') { ensureDashAuth(); }
 }
+window._origGo = go;
 
 function ensureAvailDefaultDate() {
   // Auto-select "Hôm nay" on first entry to tab Check if no date picked yet
@@ -1128,9 +1138,9 @@ function DayOrderCard(o, group) {
           ${isLayOrTra && daChuanBi ? '<span class="chuan-bi-chip done">✓ Đã chuẩn bị</span>' : ''}
         </div>
         <div class="day-card-row day-card-row-dates">
-          <span class="day-date-chip"><span style="color:${color}">📦</span> ${ngayLayDisplay}</span>
+          <span class="day-date-chip">${ngayLayDisplay}</span>
           <span class="day-date-sep">→</span>
-          <span class="day-date-chip"><span style="color:${color}">🔄</span> ${ngayTraDisplay}</span>
+          <span class="day-date-chip">${ngayTraDisplay}</span>
         </div>
         ${hasNote
           ? `<div class="day-card-note" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để sửa">📝 ${escapeHtml(noteText)}</div>`
@@ -1379,6 +1389,110 @@ window.saveQuickNote = (id) => {
   toast(note ? 'Đã lưu ghi chú' : 'Đã xóa ghi chú', 'success');
 };
 
+// === Expense CRUD ===
+let _expenseModalOpen = false;
+window.openExpenseModal = (e) => {
+  // Prevent event bubbling from triggering parent click handlers
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  if (_expenseModalOpen) return;
+  _expenseModalOpen = true;
+  try {
+    if (!db.chiPhi) db.chiPhi = [];
+    const { month, year } = dashState;
+    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+    const monthExpenses = db.chiPhi.filter(e => {
+      const d = parseD(e.date);
+      return d && d.getMonth() + 1 === month && d.getFullYear() === year;
+    });
+    const total = monthExpenses.reduce((s, e) => s + Number(e.soTien || 0), 0);
+
+    const listHtml = monthExpenses.length > 0
+      ? monthExpenses.map(e => `
+        <div class="exp-item">
+          <div class="exp-item-left">
+            <div class="exp-item-date">${e.date}</div>
+            <div class="exp-item-content">${escapeHtml(e.noiDung || '')}</div>
+          </div>
+          <div class="exp-item-right">
+            <div class="exp-item-amount">${fmtVND(Number(e.soTien))}</div>
+            <button class="exp-del-btn" onclick="window.deleteExpense('${e.id}'); return false;">×</button>
+          </div>
+        </div>`).join('')
+      : '<div class="exp-empty">Chưa có chi phí nào tháng này</div>';
+
+    const expBody = document.getElementById('exp-body');
+    if (!expBody) {
+      console.error('exp-body element not found');
+      return;
+    }
+    expBody.innerHTML = `
+      <div class="sheet-head"><h2>💸 Chi phí thủ công</h2><button class="sheet-close" data-close>×</button></div>
+      <div class="sheet-body">
+        <div class="exp-total-bar">Tổng tháng: <strong>${fmtVND(total)}</strong></div>
+        <div class="exp-list">${listHtml}</div>
+        <div class="exp-form">
+          <div class="exp-form-title">＋ Thêm chi phí mới</div>
+          <div class="exp-row"><input type="date" id="exp-date" value="${todayStr}" class="exp-input" /></div>
+          <div class="exp-row"><input type="text" id="exp-content" placeholder="Nội dung (VD: sửa váy, giặt, mua phụ kiện...)" class="exp-input" /></div>
+          <div class="exp-row"><input type="number" id="exp-amount" placeholder="Số tiền (VNĐ)" class="exp-input" min="0" /></div>
+          <div class="exp-actions">
+            <button class="btn secondary" data-close>Hủy</button>
+            <button class="btn primary" onclick="window.saveExpense(); return false;">Lưu</button>
+          </div>
+        </div>
+      </div>
+    `;
+    openModal('m-expense');
+    _expenseModalOpen = false;
+  } catch(e) {
+    console.error('openExpenseModal error:', e);
+    _expenseModalOpen = false;
+    toast('Không thể mở chi phí: ' + e.message, 'error');
+  }
+};
+
+window.saveExpense = () => {
+  try {
+    if (!db.chiPhi) db.chiPhi = [];
+    const date = document.getElementById('exp-date')?.value;
+    const noiDung = document.getElementById('exp-content')?.value?.trim();
+    const soTien = parseInt(document.getElementById('exp-amount')?.value || '0', 10);
+    if (!date || !soTien) { toast('Nhập đầy đủ ngày và số tiền', 'error'); return; }
+    db.chiPhi.push({ id: 'exp_' + Date.now(), date, soTien, noiDung, _ts: Date.now() });
+    save();
+    closeAllModals();
+    // Invalidate dash cache
+    const key = `dash_${dashState.month}_${dashState.year}`;
+    if (typeof dashCache !== 'undefined') delete dashCache[key];
+    if (dashState.dashTab !== 'chiphi') { renderDashboard(); }
+    toast('Đã thêm chi phí', 'success');
+  } catch(e) {
+    console.error('saveExpense error:', e);
+    toast('Lỗi khi lưu: ' + e.message, 'error');
+  }
+};
+
+window.deleteExpense = (id) => {
+  openConfirm(
+    'Xóa chi phí này?',
+    () => {
+      try {
+        if (!db.chiPhi) return;
+        const idx = db.chiPhi.findIndex(e => e.id === id);
+        if (idx !== -1) db.chiPhi.splice(idx, 1);
+        save();
+        const key = `dash_${dashState.month}_${dashState.year}`;
+        if (typeof dashCache !== 'undefined') delete dashCache[key];
+        openExpenseModal();
+        toast('Đã xóa chi phí', 'success');
+      } catch(e) {
+        console.error('deleteExpense error:', e);
+        toast('Lỗi khi xóa: ' + e.message, 'error');
+      }
+    }
+  );
+};
+
 // Sync one order to Supabase (shared helper)
 async function syncOrderToSupabase(o) {
   if (typeof window.SupabaseService === 'undefined' || !window.SupabaseService.isConfigured?.()) return;
@@ -1519,9 +1633,11 @@ function renderOrders() {
     // Orders for this date
     dateOrders.forEach((o, i) => {
       const card = OrderCardListCard(o, today);
-      card.classList.add('stagger-item');
-      card.style.animationDelay = `${Math.min(i, 20) * 30}ms`;
-      list.appendChild(card);
+      const div = document.createElement('div');
+      div.className = 'stagger-item';
+      div.style.animationDelay = `${Math.min(i, 20) * 30}ms`;
+      div.innerHTML = card;
+      list.appendChild(div);
     });
   });
 }
@@ -1550,14 +1666,7 @@ function OrderCardListCard(o, refDate = new Date()) {
   else if (status === 'Qua_Han') statusColor = '#6b7280';
   else if (is12h && status === 'Dang_Thue_12h') statusColor = 'linear-gradient(135deg, #10b981, #ef4444)';
 
-  const card = document.createElement('div');
-  card.className = `order-list-card status-${status === 'Chuan_Bi' ? 'lay' : status === 'Tra_Ve' ? 'tra' : status === 'Qua_Han' ? 'qua' : 'dang'}`;
-  if (o._dbId && typeof isRecentRemote === 'function' && isRecentRemote('don', o._dbId)) {
-    card.classList.add('is-new');
-  }
-  card.onclick = () => openOrderDetail(id);
-
-  // Build extra dress avatars (2nd, 3rd, ...) shown stacked right below avatar #1
+  // Build extra avatars (2nd, 3rd, ...) — same structure as calendar day view
   let extraAvatarsHTML = '';
   if (tenVay.length > 1) {
     const dhvs = o.dhvs || o.dresses || [];
@@ -1567,50 +1676,44 @@ function OrderCardListCard(o, refDate = new Date()) {
       const imgSrc = v.Anh_Vay || v.anh || '';
       const letter = (v.Ten_Vay || v.ten || '?')[0].toUpperCase();
       if (imgSrc) {
-        return `<div class="olc-avatar olc-avatar-sm" style="background: ${statusColor};"><img src="${escapeHtml(imgSrc)}" alt="" /></div>`;
+        return `<div class="day-card-avatar day-card-avatar-sm" style="background: ${statusColor};"><img src="${escapeHtml(imgSrc)}" alt="" /></div>`;
       }
-      return `<div class="olc-avatar olc-avatar-sm" style="background: ${statusColor};"><span>${letter}</span></div>`;
+      return `<div class="day-card-avatar day-card-avatar-sm" style="background: ${statusColor};"><span>${letter}</span></div>`;
     }).join('');
-    extraAvatarsHTML = `<div class="olc-extras">${extras}</div>`;
+    extraAvatarsHTML = `<div class="day-card-extras">${extras}</div>`;
   }
 
-  card.innerHTML = `
-    <div class="olc-main-row">
-      <div class="olc-avatar-col">
-        <div class="olc-avatar" style="background: ${statusColor};">
-          <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+  return `
+    <div class="day-order-card" style="border-left-color: ${statusColor};" onclick="openOrderDetail('${id}')">
+      <div class="day-card-left" style="background: ${statusColor}20;">
+        <div class="day-card-avatar-col">
+          <div class="day-card-avatar" style="background: ${statusColor}40;">
+            <span>${(tenVayPrimary[0] || 'V').toUpperCase()}</span>
+          </div>
+          ${extraAvatarsHTML}
         </div>
-        ${extraAvatarsHTML}
       </div>
-      <div class="olc-content">
-        <div class="olc-row olc-row-top">
-          <span class="olc-name">${tenVayList}</span>
-          ${is12h ? '<span class="olc-badge">12h</span>' : `<span class="olc-badge">${goi}</span>`}
+      <div class="day-card-content">
+        <div class="day-card-row day-card-row-top">
+          <span class="day-card-name">${tenVayList}</span>
+          ${is12h ? '<span class="day-card-badge badge-12h">12h</span>' : `<span class="day-card-badge">${goi}</span>`}
         </div>
-        <div class="olc-row olc-row-meta">
-          <button type="button" class="type-pill ${typeClass(type)}" data-type-btn>${type}</button>
-          <span class="olc-id">${id}</span>
+        <div class="day-card-row day-card-row-meta">
+          <span class="day-type-badge day-type-${typeClass(type).toLowerCase()}" data-type-btn onclick="event.stopPropagation();openTypePickerById('${id}')">${type}</span>
+          <span class="day-card-id">${id}</span>
         </div>
-        <div class="olc-row olc-row-dates">
-          <span class="olc-date-chip"><span style="color:${statusColor}">📦</span> ${ngayLayDisplay}</span>
-          <span class="olc-date-sep">→</span>
-          <span class="olc-date-chip"><span style="color:${statusColor}">🔄</span> ${ngayTraDisplay}</span>
+        <div class="day-card-row day-card-row-dates">
+          <span class="day-date-chip">${ngayLayDisplay}</span>
+          <span class="day-date-sep">→</span>
+          <span class="day-date-chip">${ngayTraDisplay}</span>
         </div>
-        ${hasNote ? `<div class="olc-note" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để sửa">📝 ${escapeHtml(noteText)}</div>` : `<div class="olc-note olc-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để thêm ghi chú">+ Thêm ghi chú</div>`}
+        ${hasNote
+          ? `<div class="day-card-note" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để sửa">${escapeHtml(noteText)}</div>`
+          : `<div class="day-card-note day-card-note-empty" onclick="event.stopPropagation();openQuickNote('${id}')" title="Click để thêm ghi chú">+ Thêm ghi chú</div>`
+        }
       </div>
     </div>
   `;
-
-  // Type pill click → mở picker
-  const typeBtn = card.querySelector('[data-type-btn]');
-  if (typeBtn) {
-    typeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openTypePicker(o);
-    });
-  }
-
-  return card;
 }
 
 $('#search').oninput = debounce(e => { curOrderSearch = e.target.value; renderOrders(); }, 300);
@@ -1689,38 +1792,61 @@ function renderOrdersTable() {
   thead.innerHTML = `<tr>
     <th>Ngày lấy</th>
     <th>Mã đơn</th>
-    <th>Tên KH</th>
+    <th>Loại đơn</th>
+    <th>Khách hàng</th>
     <th>SĐT</th>
-    <th>Loại</th>
     <th>Váy</th>
+    <th>PK</th>
+    <th>Gói thuê</th>
+    <th>Giờ lấy</th>
     <th>Ngày trả</th>
-    <th>Tiền</th>
+    <th>Nhận đồ</th>
+    <th>Địa chỉ</th>
+    <th>Tiền váy</th>
+    <th>Tiền PK</th>
+    <th>Tổng tiền</th>
     <th>Đặt cọc</th>
-    <th>Trạng thái</th>
+    <th>Ghi chú</th>
+    <th>Hoàn cọc</th>
   </tr>`;
 
   tbody.innerHTML = arr.map(o => {
-    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
-    const dressNames = dresses.map(d => {
-      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
-      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
-    }).filter(Boolean).join(', ');
-
-    const total = o.Tong_Tien || o.tong || 0;
-    const deposit = o.Dat_Coc || o.coc || 0;
-    const status = o.Trang_Thai || o.trang_thai || '';
+    const tenVay = donTenVay(o).join(' + ') || '—';
+    const pkKeys = (o.Ma_PK || o.pks || []);
+    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
+      const p = pkById.get(pk);
+      return p ? (p.Ten_PK || p.ten) : '';
+    }).filter(Boolean).join(', ') || '—';
+    const goi = o.Goi_Thue || o.goi || '';
+    const lay = o.Ngay_Lay || o.lay || '';
+    const ngayTra = ngayTraThuc(goi, lay);
+    const ngayTraStr = ngayTra ? isoToVN(ngayTra) : '—';
+    const tienVay = donTienThueVay(o);
+    const tienPK = donTienThuePK(o);
+    const tong = tienVay + tienPK;
+    const coc = donCocGoiY(o);
+    const ghichu = o.Ghi_Chu || o.ghichu || '';
+    const hoan = isHoanOrder(o);
 
     return `<tr onclick="openOrderDetail('${o.Ma_Don || o.id}')">
-      <td>${o.Ngay_Lay || o.ngay_lay || ''}</td>
-      <td>${o.Ma_Don || o.ma_don || ''}</td>
-      <td>${o.Ten_KH || o.ten_kh || ''}</td>
+      <td>${isoToVN(lay)}</td>
+      <td><b>${o.Ma_Don || o.id || ''}</b></td>
+      <td>${o.Trang_Thai_Don || o.type || '—'}</td>
+      <td>${escapeHtml(o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || '—')}</td>
       <td>${o.SDT || o.sdt || ''}</td>
-      <td>${o.Loai || o.loai || ''}</td>
-      <td>${dressNames}</td>
-      <td>${o.Ngay_Tra || o.ngay_tra || ''}</td>
-      <td>${fmtVND(total)}</td>
-      <td>${fmtVND(deposit)}</td>
-      <td>${status}</td>
+      <td>${escapeHtml(tenVay)}</td>
+      <td>${escapeHtml(tenPK)}</td>
+      <td>${goi}</td>
+      <td>${o.Gio_Lay || o.gio || ''}</td>
+      <td>${ngayTraStr}</td>
+      <td>${escapeHtml(o.Hinh_Thuc_Nhan || o.nhan || '')}</td>
+      <td>${escapeHtml(o.Dia_Chi || o.dc || '')}</td>
+      <td>${fmtVND(tienVay)}</td>
+      <td>${fmtVND(tienPK)}</td>
+      <td>${fmtVND(tong)}</td>
+      <td>${fmtVND(coc)}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(ghichu)}">${escapeHtml(ghichu)}</td>
+      <td>${hoan ? '<span style="color:var(--text-muted)">Đã hoàn</span>' : '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -1760,34 +1886,193 @@ $$('#orders-table-chips button').forEach(b => b.onclick = () => {
 // Copy table to clipboard (tab-separated for Excel)
 function copyOrdersTable() {
   const rows = [];
-  rows.push(['Ngày lấy', 'Mã đơn', 'Tên KH', 'SĐT', 'Loại', 'Váy', 'Ngày trả', 'Tiền', 'Đặt cọc', 'Trạng thái']);
+  rows.push(['Ngày lấy', 'Mã đơn', 'Loại đơn', 'Khách hàng', 'SĐT', 'Váy', 'PK', 'Gói thuê', 'Giờ lấy', 'Ngày trả', 'Nhận đồ', 'Địa chỉ', 'Tiền váy', 'Tiền PK', 'Tổng tiền', 'Đặt cọc', 'Ghi chú', 'Hoàn cọc']);
 
   const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
 
   arr.forEach(o => {
-    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
-    const dressNames = dresses.map(d => {
-      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
-      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    const tenVay = donTenVay(o).join(' + ') || '';
+    const pkKeys = (o.Ma_PK || o.pks || []);
+    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
+      const p = pkById.get(pk);
+      return p ? (p.Ten_PK || p.ten) : '';
     }).filter(Boolean).join(', ');
+    const goi = o.Goi_Thue || o.goi || '';
+    const lay = o.Ngay_Lay || o.lay || '';
+    const ngayTra = ngayTraThuc(goi, lay);
+    const ngayTraStr = ngayTra ? isoOf(ngayTra) : '';
+    const tienVay = donTienThueVay(o);
+    const tienPK = donTienThuePK(o);
+    const tong = tienVay + tienPK;
+    const coc = donCocGoiY(o);
+    const ghichu = o.Ghi_Chu || o.ghichu || '';
+    const hoan = isHoanOrder(o) ? 'Đã hoàn' : '';
 
     rows.push([
-      o.Ngay_Lay || o.ngay_lay || '',
-      o.Ma_Don || o.ma_don || '',
-      o.Ten_KH || o.ten_kh || '',
+      isoToVN(lay),
+      o.Ma_Don || o.id || '',
+      o.Trang_Thai_Don || o.type || '',
+      o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || '',
       o.SDT || o.sdt || '',
-      o.Loai || o.loai || '',
-      dressNames,
-      o.Ngay_Tra || o.ngay_tra || '',
-      (o.Tong_Tien || o.tong || 0).toString(),
-      (o.Dat_Coc || o.coc || 0).toString(),
-      o.Trang_Thai || o.trang_thai || ''
+      tenVay,
+      tenPK,
+      goi,
+      o.Gio_Lay || o.gio || '',
+      ngayTraStr,
+      o.Hinh_Thuc_Nhan || o.nhan || '',
+      o.Dia_Chi || o.dc || '',
+      tienVay.toString(),
+      tienPK.toString(),
+      tong.toString(),
+      coc.toString(),
+      ghichu,
+      hoan
     ]);
   });
 
   const text = rows.map(r => r.join('\t')).join('\n');
   navigator.clipboard.writeText(text).then(() => {
     toast('Đã copy bảng vào clipboard!', 'success');
+  }).catch(() => {
+    toast('Lỗi copy', 'error');
+  });
+}
+
+function renderRawTable() {
+  const sel = $('#raw-month-select');
+  const monthFilter = sel ? sel.value : '';
+
+  let arr = (db.don || []).slice();
+
+  // Filter by month
+  if (monthFilter) {
+    arr = arr.filter(o => {
+      const d = o.Ngay_Lay || o.lay || '';
+      return d.startsWith(monthFilter);
+    });
+  }
+
+  // Sort by Ngay_Lay descending
+  arr.sort((a, b) => {
+    return (b.Ngay_Lay || b.lay || '').localeCompare(a.Ngay_Lay || a.lay || '');
+  });
+
+  // Update count
+  const countEl = $('#raw-table-count');
+  if (countEl) countEl.textContent = `${arr.length} đơn`;
+
+  const thead = $('#raw-table thead');
+  const tbody = $('#raw-table tbody');
+  if (!thead || !tbody) return;
+
+  thead.innerHTML = `<tr>
+    <th>Ngày lấy</th>
+    <th>Mã đơn</th>
+    <th>Loại đơn</th>
+    <th>Khách hàng</th>
+    <th>SĐT</th>
+    <th>Váy</th>
+    <th>PK</th>
+    <th>Gói thuê</th>
+    <th>Giờ lấy</th>
+    <th>Ngày trả</th>
+    <th>Nhận đồ</th>
+    <th>Địa chỉ</th>
+    <th>Tiền váy</th>
+    <th>Tiền PK</th>
+    <th>Tổng tiền</th>
+    <th>Đặt cọc</th>
+    <th>Ghi chú</th>
+    <th>Hoàn cọc</th>
+  </tr>`;
+
+  tbody.innerHTML = arr.map(o => {
+    const tenVay = donTenVay(o).join(' + ') || '—';
+    const pkKeys = o.Ma_PK || o.pks || [];
+    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
+      const p = pkById.get(pk);
+      return p ? (p.Ten_PK || p.ten) : '';
+    }).filter(Boolean).join(', ') || '—';
+    const goi = o.Goi_Thue || o.goi || '';
+    const lay = o.Ngay_Lay || o.lay || '';
+    const ngayTra = ngayTraThuc(goi, lay);
+    const ngayTraStr = ngayTra ? isoToVN(ngayTra) : '—';
+    const tienVay = donTienThueVay(o);
+    const tienPK = donTienThuePK(o);
+    const tong = tienVay + tienPK;
+    const coc = donCocGoiY(o);
+    const ghichu = o.Ghi_Chu || o.ghichu || '';
+    const hoan = isHoanOrder(o);
+    const timeHoan = o.time_hoan ? isoToVN(o.time_hoan) + ' ' + o.time_hoan.slice(11, 16) : '';
+    return `<tr onclick="openOrderDetail('${o.Ma_Don || o.id}')">
+      <td>${isoToVN(lay)}</td>
+      <td><b>${o.Ma_Don || o.id || ''}</b></td>
+      <td>${o.Trang_Thai_Don || o.type || '—'}</td>
+      <td>${escapeHtml(o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || '—')}</td>
+      <td>${o.SDT || o.sdt || ''}</td>
+      <td>${escapeHtml(tenVay)}</td>
+      <td>${escapeHtml(tenPK)}</td>
+      <td>${escapeHtml(goi)}</td>
+      <td>${o.Gio_Lay || o.gio || ''}</td>
+      <td>${ngayTraStr}</td>
+      <td>${escapeHtml(o.Hinh_Thuc_Nhan || o.nhan || '')}</td>
+      <td>${escapeHtml(o.Dia_Chi || o.dc || '')}</td>
+      <td>${fmtVND(tienVay)}</td>
+      <td>${fmtVND(tienPK)}</td>
+      <td>${fmtVND(tong)}</td>
+      <td>${fmtVND(coc)}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(ghichu)}">${escapeHtml(ghichu)}</td>
+      <td>${hoan ? `<span style="color:#d4af37;font-weight:600">${timeHoan || 'Đã hoàn'}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Populate month select with available months
+  if (sel) {
+    const months = new Set();
+    (db.don || []).forEach(o => {
+      const d = o.Ngay_Lay || o.lay || '';
+      if (d) months.add(d.slice(0, 7));
+    });
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Tất cả các tháng</option>' +
+      Array.from(months).sort((a, b) => b.localeCompare(a))
+        .map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.value = current;
+    sel.onchange = renderRawTable;
+  }
+}
+
+function showRawExportModal() {
+  openModal('raw-export-modal');
+  const modalSel = $('#raw-export-month');
+  const mainSel = $('#raw-month-select');
+  if (modalSel && mainSel) modalSel.value = mainSel.value;
+}
+
+function exportRawToExcelFromModal() {
+  const sel = $('#raw-export-month');
+  const mainSel = $('#raw-month-select');
+  if (sel && mainSel) mainSel.value = sel.value;
+  renderRawTable();
+  closeModal('raw-export-modal');
+  copyRawTableToClipboard();
+}
+
+function copyRawTableToClipboard() {
+  const rows = [];
+  const theadTr = $('#raw-table thead tr');
+  if (theadTr) {
+    rows.push(Array.from(theadTr.querySelectorAll('th')).map(th => th.textContent.trim()));
+  }
+  const tb = $('#raw-table tbody');
+  if (tb) {
+    tb.querySelectorAll('tr').forEach(tr => {
+      rows.push(Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim()));
+    });
+  }
+  const text = rows.map(r => r.join('\t')).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Đã copy bảng RAW vào clipboard!', 'success');
   }).catch(() => {
     toast('Lỗi copy', 'error');
   });
@@ -1802,18 +2087,29 @@ function copyAllDataForAI() {
 
   // Orders
   lines.push('## ĐƠN HÀNG');
-  lines.push('| Ngày lấy | Mã đơn | Tên KH | SĐT | Loại | Váy | Ngày trả | Tiền | Đặt cọc | Trạng thái |');
+  lines.push('| Ngày lấy | Mã đơn | Loại | Khách | SĐT | Váy | PK | Gói | Giờ | Ngày trả | Nhận | Địa chỉ | Tiền váy | Tiền PK | Tổng | Đặt cọc | Ghi chú | Hoàn cọc |');
 
   const arr = (db.don || []).slice().sort((a, b) => (b.Ngay_Lay || b.ngay_lay || '').localeCompare(a.Ngay_Lay || a.ngay_lay || ''));
 
   arr.forEach(o => {
-    const dresses = (db.dhv || []).filter(d => (d.Ma_Don || d.ma_don) === (o.Ma_Don || o.ma_don));
-    const dressNames = dresses.map(d => {
-      const v = (db.vay || []).find(v => (v.Ma_Vay || v.ma_vay) === (d.Ma_Vay || d.ma_vay));
-      return v?.Ten_Vay || v?.ten || d.Ma_Vay || d.ma_vay || '';
+    const tenVay = donTenVay(o).join(' + ') || '';
+    const pkKeys = (o.Ma_PK || o.pks || []);
+    const tenPK = (Array.isArray(pkKeys) ? pkKeys : []).map(pk => {
+      const p = pkById.get(pk);
+      return p ? (p.Ten_PK || p.ten) : '';
     }).filter(Boolean).join(', ');
+    const goi = o.Goi_Thue || o.goi || '';
+    const lay = o.Ngay_Lay || o.lay || '';
+    const ngayTra = ngayTraThuc(goi, lay);
+    const ngayTraStr = ngayTra ? isoOf(ngayTra) : '';
+    const tienVay = donTienThueVay(o);
+    const tienPK = donTienThuePK(o);
+    const tong = tienVay + tienPK;
+    const coc = donCocGoiY(o);
+    const ghichu = o.Ghi_Chu || o.ghichu || '';
+    const hoan = isHoanOrder(o) ? 'Đã hoàn' : '';
 
-    lines.push(`| ${o.Ngay_Lay || o.ngay_lay || ''} | ${o.Ma_Don || o.ma_don || ''} | ${o.Ten_KH || o.ten_kh || ''} | ${o.SDT || o.sdt || ''} | ${o.Loai || o.loai || ''} | ${dressNames} | ${o.Ngay_Tra || o.ngay_tra || ''} | ${fmtVND(o.Tong_Tien || o.tong || 0)} | ${fmtVND(o.Dat_Coc || o.coc || 0)} | ${o.Trang_Thai || o.trang_thai || ''} |`);
+    lines.push(`| ${isoToVN(lay)} | ${o.Ma_Don || o.id || ''} | ${o.Trang_Thai_Don || o.type || ''} | ${o.Insta_Khach || o.insta || o.Ten_KH || o.ten_kh || ''} | ${o.SDT || o.sdt || ''} | ${tenVay} | ${tenPK} | ${goi} | ${o.Gio_Lay || o.gio || ''} | ${ngayTraStr} | ${o.Hinh_Thuc_Nhan || o.nhan || ''} | ${o.Dia_Chi || o.dc || ''} | ${fmtVND(tienVay)} | ${fmtVND(tienPK)} | ${fmtVND(tong)} | ${fmtVND(coc)} | ${ghichu} | ${hoan} |`);
   });
 
   lines.push('');
@@ -2787,7 +3083,8 @@ function openOrderDetail(id) {
   const tong = tienVay + tienPK;
   const cocGoiY = donCocGoiY(o);
   const status = statusForDate(o, isoOf(new Date()));
-  const dressImgs = (o.dhvs || []).map(x => {
+  const dhvs = Array.isArray(o.dhvs) ? o.dhvs : [];
+  const dressImgs = dhvs.map(x => {
     const v = vayById.get(x.vay || x.Ma_Vay);
     return v?.Anh_Vay || v?.anh || '';
   }).filter(Boolean);
@@ -2798,7 +3095,7 @@ function openOrderDetail(id) {
   const gioLay = o.Gio_Lay || o.gio || '';
 
   // Pick first dress for avatar
-  const firstDressId = (o.dhvs || [])[0]?.vay;
+  const firstDressId = dhvs[0]?.vay;
   const firstDress = firstDressId && vayById.get(firstDressId);
   const dressImg = firstDress?.Anh_Vay || firstDress?.anh || '';
   const customerName = o.Insta_Khach || o.insta || 'Khách';
@@ -2872,7 +3169,7 @@ function openOrderDetail(id) {
         <div class="od-section-title"><span class="ico">👗</span> Váy & Phụ kiện</div>
         <div class="od-dress-list">
           ${tenVay.map((v, i) => {
-            const vay = vayById.get((o.dhvs || [])[i]?.vay || (o.dhvs || [])[i]?.Ma_Vay);
+            const vay = vayById.get(dhvs[i]?.vay || dhvs[i]?.Ma_Vay);
             const img = vay?.Anh_Vay || vay?.anh || '';
             const size = vay ? (vay.Size || vay.size || '') : '';
             const initial = (v[0] || 'V').toUpperCase();
@@ -3204,8 +3501,7 @@ window.saveEditOrder = async function(id) {
   // Sau khi Supabase xong → lưu localStorage → đóng modal
   save();
   closeModal('m-edit-order');
-  const isPending = o._pendingSync === true;
-  toastSave('Đã lưu đơn', isPending);
+  toastSave('Đã lưu đơn', false);
   refreshCurView();
 };
 
@@ -3260,8 +3556,11 @@ function refreshCurView() {
   const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
   if (curView === 'v-cal') renderCal();
   else if (curView === 'v-orders') renderOrders();
+  else if (curView === 'v-orders-table') renderOrdersTable();
+  else if (curView === 'v-raw') renderRawTable();
   else if (curView === 'v-kho') renderKho();
   else if (curView === 'v-pk') renderPk();
+  else if (curView === 'v-dashboard') renderDashboard();
   if (scrollY > 0) {
     // Restore after DOM paints — double rAF handles image/font reflow cases too
     requestAnimationFrame(() => {
@@ -3408,8 +3707,13 @@ function doSaveRefund(coc, cp, tong, hoan) {
   if (!refundDon) return;
   refundDon.hoan = true;
   refundDon.Trang_Thai_Hoan_Coc = true;
-  refundDon.time_hoan = new Date().toISOString();
+  // Dùng giờ VN (UTC+7)
+  const vn = new Date();
+  vn.setMinutes(vn.getMinutes() + 7 - vn.getTimezoneOffset());
+  refundDon.time_hoan = vn.toISOString();
   refundDon.chiphi = cp;
+  // Max _ts so Google Sheets merge always prefers this local version (protects hoan flags)
+  refundDon._ts = Date.now() + 86400000;
 
   if (!db.tt) db.tt = [];
   db.tt.unshift({
@@ -4136,6 +4440,8 @@ function renderRefundOrdersFull() {
         const view = document.querySelector('section.view.active')?.id;
         if (view === 'v-cal') renderCal();
         else if (view === 'v-orders') renderOrders();
+        else if (view === 'v-orders-table') renderOrdersTable();
+        else if (view === 'v-raw') renderRawTable();
         else if (view === 'v-kho') renderKho();
         else if (view === 'v-pk') renderPk();
         else if (view === 'v-avail') renderAvail();
@@ -4179,6 +4485,17 @@ function renderRefundOrdersFull() {
         const id = findId_(remoteRow);
         if (!id) return;
         const localIdx = db[localKey].findIndex(r => findId_(r) === id);
+        // PROTECT hoàn cọc orders — local hoan flags take precedence over remote non-hoan
+        if (localKey === 'don') {
+          const localRow = localIdx >= 0 ? db[localKey][localIdx] : null;
+          if (localRow && (localRow.hoan || localRow.Trang_Thai_Hoan_Coc)) {
+            const remoteHoan = remoteRow.hoan || remoteRow.Trang_Thai_Hoan_Coc;
+            if (!remoteHoan) {
+              // Local đã hoàn cọc, remote chưa → giữ local, bỏ qua merge
+              return;
+            }
+          }
+        }
         const remoteTs = ts(remoteRow);
         if (localIdx < 0) {
           const norm = Object.assign({}, remoteRow);
@@ -5289,4 +5606,2302 @@ function showUpdateBanner() {
   banner.innerHTML = '🔄 Có bản cập nhật mới — bấm để tải lại <span style="margin-left:6px;font-size:11px;opacity:0.7">⏎</span>';
   banner.onclick = () => location.reload(true);
   document.body.appendChild(banner);
+}
+
+/* ============================================================
+ *  DASHBOARD
+ * ============================================================ */
+const DASHBOARD_PASSWORD = 'aura2026';
+var dashState = {
+  month: new Date().getMonth() + 1,
+  year: new Date().getFullYear(),
+  topTab: 'rented',
+  revenueMode: 'day',
+  dateFilter: 'thismonth' // 'today' | '7days' | 'thismonth'
+};
+
+// Cache dashboard data per month/year key
+var dashCache = {};
+var dashAllTimeCache = null; // dress/customer analytics computed once for all months
+
+function ensureDashAuth() {
+  // Always require auth on Dashboard entry - clear any previous auth
+  sessionStorage.removeItem('dashAuth');
+  showDashLockModal();
+}
+
+function authedDashRender() {
+  if (db && db.don && db.don.length > 0) {
+    dashAllTimeCache = null; // invalidate all-time cache on fresh auth
+    renderDashboard();
+  } else {
+    var waitCount = 0;
+    var waitInterval = setInterval(function() {
+      waitCount++;
+      if (db && db.don && db.don.length > 0) {
+        clearInterval(waitInterval);
+        dashAllTimeCache = null;
+        renderDashboard();
+      } else if (waitCount > 50) {
+        clearInterval(waitInterval);
+      }
+    }, 200);
+  }
+}
+
+function showDashLockModal() {
+  // Hide dashboard section while locked
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const m = $('#m-dash-lock');
+  if (m) {
+    m.style.display = 'flex';
+    m.classList.add('show');
+  }
+  const inp = $('#dash-lock-pwd');
+  if (inp) { inp.value = ''; inp.focus(); }
+  const err = $('#dash-lock-error');
+  if (err) err.style.display = 'none';
+  inp && inp.addEventListener('keydown', e => { if (e.key === 'Enter') checkDashPwd(); });
+}
+
+function checkDashPwd() {
+  const inp = $('#dash-lock-pwd');
+  if (!inp) return;
+  if (inp.value === DASHBOARD_PASSWORD) {
+    sessionStorage.setItem('dashAuth', 'ok');
+    const m = $('#m-dash-lock');
+    if (m) { m.style.display = 'none'; m.classList.remove('show'); }
+    // Hide other views, show dashboard directly
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    const dash = $('#v-dashboard');
+    if (dash) {
+      dash.style.display = '';
+      dash.classList.add('active');
+    }
+    const dashBtn = document.querySelector('[data-go="v-dashboard"]');
+    if (dashBtn) dashBtn.classList.add('active');
+    if (typeof authedDashRender === 'function') authedDashRender();
+  } else {
+    const err = $('#dash-lock-error');
+    if (err) err.style.display = 'block';
+    inp.value = '';
+    inp.focus();
+  }
+}
+
+function cancelDashLock() {
+  const m = $('#m-dash-lock');
+  if (m) { m.style.display = 'none'; m.classList.remove('show'); }
+  (window._origGo || go)('v-cal');
+}
+
+function calculateAllTimeAnalytics() {
+  // Chạy 1 lần cho dress + customer analytics (không thay đổi theo tháng)
+  if (dashAllTimeCache) return dashAllTimeCache;
+  const orders = db.don || [];
+  const vayList = db.vay || [];
+
+  // === Dress analytics (all time) ===
+  const dressCount = {}, dressRevenue = {}, dressLastRent = {};
+  orders.forEach(o => {
+    if (isHoanOrder(o)) return;
+    const rev = donTienThueVay(o);
+    const layIso = o.Ngay_Lay;
+    (o.dhvs || []).forEach(x => {
+      const key = x.Ma_Vay || x.vay;
+      if (!key) return;
+      dressCount[key] = (dressCount[key] || 0) + 1;
+      dressRevenue[key] = (dressRevenue[key] || 0) + Math.round(rev / Math.max((o.dhvs || []).length, 1));
+      if (!dressLastRent[key] || layIso > dressLastRent[key]) dressLastRent[key] = layIso;
+    });
+  });
+  const everRented = new Set(Object.keys(dressCount));
+  const dressData = Object.entries(dressCount).map(([k, cnt]) => {
+    const v = vayById.get(k);
+    const giaGoc = v ? Number(v.Gia_Vay_Goc || 0) : 0;
+    const revenue = dressRevenue[k] || 0;
+    const roi = giaGoc > 0 ? Math.round((revenue - giaGoc) / giaGoc * 100) : 0;
+    return { ten: v ? v.Ten_Vay : k, key: k, count: cnt, revenue, giaGoc, roi, lastRent: dressLastRent[k] || '' };
+  });
+  dressData.sort((a, b) => b.count - a.count);
+
+  const neverRented = vayList.filter(v => {
+    const k = v.Ma_Vay || v.id;
+    return k && !everRented.has(k);
+  }).slice(0, 20).map(v => ({ ten: v.Ten_Vay || v.Ten, key: v.Ma_Vay || v.id }));
+
+  // === Customer analytics (all time) ===
+  const customerData = {};
+  orders.forEach(o => {
+    if (isHoanOrder(o)) return;
+    const key = o.Insta_Khach || o.insta || o.SDT || o.sdt || 'Khách lẻ';
+    if (!customerData[key]) {
+      const d = parseD(o.Ngay_Lay);
+      customerData[key] = {
+        name: key, sdt: o.SDT || o.sdt || '',
+        count: 0, revenue: 0, type: new Set(),
+        firstMonth: d ? d.getMonth() + d.getFullYear() * 12 : 9999,
+        lastMonth: d ? d.getMonth() + d.getFullYear() * 12 : 0
+      };
+    }
+    customerData[key].count++;
+    customerData[key].revenue += donTienThueVay(o) + donTienThuePK(o);
+    customerData[key].type.add(o.Goi_Thue || 'Chốt thuê');
+    const d = parseD(o.Ngay_Lay);
+    if (d) {
+      const cm = d.getMonth() + d.getFullYear() * 12;
+      if (cm < customerData[key].firstMonth) customerData[key].firstMonth = cm;
+      if (cm > customerData[key].lastMonth) customerData[key].lastMonth = cm;
+    }
+  });
+
+  const allCustomers = Object.values(customerData);
+  const topCustomers = allCustomers
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 15)
+    .map(c => ({ ...c, typeArr: [...c.type] }));
+
+  dashAllTimeCache = { dressData, neverRented, allCustomers, topCustomers };
+  return dashAllTimeCache;
+}
+
+function calculateDashboardData(month, year) {
+  const cacheKey = `${year}-${month}`;
+  if (dashCache[cacheKey]) return dashCache[cacheKey];
+
+  const orders = (db.don || []);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  const daysInMonth = end.getDate();
+  const elapsedDays = Math.min(today.getDate(), daysInMonth);
+
+  // Filter orders in this month (by Ngay_Lay) — CHỈ tính orders đã hoàn cọc
+  const monthOrders = orders.filter(o => {
+    if (!isHoanOrder(o)) return false; // BẮT BUỘC phải hoàn cọc mới tính
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d >= start && d <= end;
+  });
+
+  // === KPI: Revenue & Orders ===
+  // Revenue = (tiền thuê váy + tiền thuê PK) - chiphi (chỉ orders đã hoàn cọc)
+  let totalRevenue = 0, totalDeposit = 0;
+  monthOrders.forEach(o => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    totalRevenue += (gross - expenses);
+    totalDeposit += donCocGoiY(o);
+  });
+  const totalOrders = monthOrders.length;
+  const aov = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+  const revPerDay = elapsedDays > 0 ? Math.round(totalRevenue / elapsedDays) : 0;
+
+  // === Revenue by Order Type ===
+  const byType = { 'Chốt thuê': [], 'Fitting': [], 'Fitting xa': [], 'Đặt ship': [] };
+  monthOrders.forEach(o => {
+    const t = o.Goi_Thue || o.Loai_Don || 'Chốt thuê';
+    const key = t === '12h' || t === '1 ngày' ? 'Chốt thuê'
+      : t === 'Fitting xa' ? 'Fitting xa'
+      : t === 'Đặt ship' ? 'Đặt ship'
+      : t.includes('Fitting') ? 'Fitting' : 'Chốt thuê';
+    if (byType[key]) byType[key].push(o);
+  });
+  const typeStats = Object.entries(byType).filter(([, arr]) => arr.length > 0).map(([type, arr]) => {
+    const rev = arr.reduce((s, o) => {
+      const gross = donTienThueVay(o) + donTienThuePK(o);
+      const expenses = Number(o.chiphi || 0);
+      return s + (gross - expenses);
+    }, 0);
+    return { type, count: arr.length, revenue: rev, pct: totalRevenue > 0 ? Math.round(rev / totalRevenue * 100) : 0, aov: arr.length > 0 ? Math.round(rev / arr.length) : 0 };
+  });
+
+  // === Prev month comparison ===
+  const prevM = month === 1 ? 12 : month - 1;
+  const prevY = month === 1 ? year - 1 : year;
+  const prevStart = new Date(prevY, prevM - 1, 1);
+  const prevEnd = new Date(prevY, prevM, 0);
+  const prevOrders = orders.filter(o => {
+    if (!isHoanOrder(o)) return false; // CHỈ tính orders đã hoàn cọc
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d >= prevStart && d <= prevEnd;
+  });
+  let prevRevenue = prevOrders.reduce((s, o) => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    return s + (gross - expenses);
+  }, 0);
+  const revenueChange = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : 0;
+  const ordersChange = prevOrders.length > 0 ? Math.round(((totalOrders - prevOrders.length) / prevOrders.length) * 100) : 0;
+
+  // === Last 2 months for comparison chart ===
+  const last2M = month === 1 ? 12 : month - 1;
+  const last2Y = month === 1 ? year - 1 : year;
+  const last2Start = new Date(last2Y, last2M - 1, 1);
+  const last2End = new Date(last2Y, last2M, 0);
+  const last2Orders = orders.filter(o => {
+    if (!isHoanOrder(o)) return false; // CHỈ tính orders đã hoàn cọc
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d >= last2Start && d <= last2End;
+  });
+  const last2Revenue = last2Orders.reduce((s, o) => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    return s + (gross - expenses);
+  }, 0);
+  const monthlyComparison = [
+    { label: `T${last2M}/${last2Y}`, revenue: last2Revenue, orders: last2Orders.length },
+    { label: `T${prevM}/${prevY}`, revenue: prevRevenue, orders: prevOrders.length },
+    { label: `T${month}/${year}`, revenue: totalRevenue, orders: totalOrders },
+  ];
+
+  // === Active rentals (ongoing) ===
+  const activeRentals = orders.filter(o => {
+    if (isHoanOrder(o)) return false;
+    const lay = parseD(o.Ngay_Lay);
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return false;
+    return lay <= today && tra >= today;
+  }).length;
+
+  // === Today's pickups & returns ===
+  const todayIso = today.toISOString().slice(0, 10);
+  const pickupsToday = monthOrders.filter(o => o.Ngay_Lay === todayIso).length;
+  const returnsToday = monthOrders.filter(o => {
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    return tra && tra.toISOString().slice(0, 10) === todayIso;
+  }).length;
+
+  // === Daily revenue (use Map for speed) — net revenue (gross - chiphi), ngày ghi nhận = Ngay_Lay
+  const dayRevMap = {};
+  const dayCountMap = {};
+  monthOrders.forEach(o => {
+    const iso = o.Ngay_Lay;
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    dayRevMap[iso] = (dayRevMap[iso] || 0) + (gross - expenses);
+    dayCountMap[iso] = (dayCountMap[iso] || 0) + 1;
+  });
+  const dailyRevenue = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = new Date(year, month - 1, d).toISOString().slice(0, 10);
+    dailyRevenue.push({ date: iso, day: d, revenue: dayRevMap[iso] || 0, count: dayCountMap[iso] || 0 });
+  }
+
+  // === Weekly revenue ===
+  const weeklyRevenue = [];
+  for (let w = 0; w < 5; w++) {
+    const wStart = new Date(year, month - 1, w * 7 + 1);
+    const wEnd = new Date(year, month - 1, Math.min((w + 1) * 7, daysInMonth));
+    const wOrders = monthOrders.filter(o => {
+      const d = parseD(o.Ngay_Lay);
+      return d && d >= wStart && d <= wEnd;
+    });
+    const wRev = wOrders.reduce((s, o) => {
+      const gross = donTienThueVay(o) + donTienThuePK(o);
+      const expenses = Number(o.chiphi || 0);
+      return s + (gross - expenses);
+    }, 0);
+    weeklyRevenue.push({ label: `T${w + 1}`, revenue: wRev, orders: wOrders.length });
+  }
+
+  // === Revenue heatmap data ===
+  const heatmap = [];
+  for (let w = 0; w < 5; w++) {
+    for (let dow = 0; dow < 7; dow++) {
+      const dayNum = w * 7 + dow + 1;
+      if (dayNum > daysInMonth) {
+        heatmap.push({ day: null, revenue: 0, count: 0 });
+      } else {
+        const iso = new Date(year, month - 1, dayNum).toISOString().slice(0, 10);
+        heatmap.push({ day: dayNum, revenue: dayRevMap[iso] || 0, count: dayCountMap[iso] || 0, dow });
+      }
+    }
+  }
+
+  // === Dress analytics (month-specific) ===
+  const vayList = db.vay || [];
+  const totalDresses = vayList.length;
+  const monthDressCount = {}, monthDressRev = {}, monthDressLast = {};
+  monthOrders.forEach(o => {
+    const rev = donTienThueVay(o);
+    const layIso = o.Ngay_Lay;
+    (o.dhvs || []).forEach(x => {
+      const key = x.Ma_Vay || x.vay;
+      if (!key) return;
+      monthDressCount[key] = (monthDressCount[key] || 0) + 1;
+      monthDressRev[key] = (monthDressRev[key] || 0) + Math.round(rev / Math.max((o.dhvs || []).length, 1));
+      if (!monthDressLast[key] || layIso > monthDressLast[key]) monthDressLast[key] = layIso;
+    });
+  });
+  const monthDressData = Object.entries(monthDressCount).map(([k, cnt]) => {
+    const v = vayById.get(k);
+    return { ten: v ? v.Ten_Vay : k, key: k, count: cnt, revenue: monthDressRev[k] || 0, lastRent: monthDressLast[k] || '' };
+  });
+  monthDressData.sort((a, b) => b.count - a.count);
+  const topDresses = monthDressData.slice(0, 20);
+  const bottomDresses = [...monthDressData].sort((a, b) => a.count - b.count).slice(0, 20);
+  const topRevenueDresses = [...monthDressData].sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+
+  // === DUR: Fast computation using busy date index ===
+  // Build a set of (dressKey, dateIso) pairs that are busy this month
+  const busySet = new Set();
+  orders.forEach(o => {
+    if (isHoanOrder(o)) return;
+    const lay = parseD(o.Ngay_Lay);
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return;
+    const d = new Date(lay);
+    while (d <= tra) {
+      (o.dhvs || []).forEach(x => {
+        const key = x.Ma_Vay || x.vay;
+        if (key) busySet.add(key + '|' + d.toISOString().slice(0, 10));
+      });
+      d.setDate(d.getDate() + 1);
+    }
+  });
+  let totalBusyDays = 0;
+  vayList.forEach(v => {
+    const key = v.Ma_Vay || v.id;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = new Date(year, month - 1, day).toISOString().slice(0, 10);
+      if (busySet.has(key + '|' + iso)) totalBusyDays++;
+    }
+  });
+  const dur = totalDresses > 0 ? Math.round((totalBusyDays / (totalDresses * daysInMonth)) * 100) : 0;
+  const activeDresses = monthDressData.length;
+  const inactiveDresses = totalDresses - activeDresses;
+
+  // Dress age analysis
+  const dressAge = { new: 0, stable: 0, old: 0, veryOld: 0 };
+  vayList.forEach(v => {
+    const created = parseD(v.Ngay_Tao || v.created_at || v.Ngay_Them);
+    if (!created) { dressAge.stable++; return; }
+    const months = (end - created) / (30 * 24 * 3600 * 1000);
+    if (months < 3) dressAge.new++;
+    else if (months < 6) dressAge.stable++;
+    else if (months < 12) dressAge.old++;
+    else dressAge.veryOld++;
+  });
+
+  // === Customer analytics (month-specific: new vs returning) ===
+  const curMonth = month + year * 12;
+  const at = calculateAllTimeAnalytics();
+  const newCustomers = at.allCustomers.filter(c => c.firstMonth === curMonth).length;
+  const returningCustomers = at.allCustomers.filter(c => c.firstMonth < curMonth).length;
+  const repeatRate = (newCustomers + returningCustomers) > 0 ? Math.round(returningCustomers / (newCustomers + returningCustomers) * 100) : 0;
+  const top10Rev = at.topCustomers.slice(0, 10).reduce((s, c) => s + c.revenue, 0);
+  const top10RevShare = totalRevenue > 0 ? Math.round(top10Rev / totalRevenue * 100) : 0;
+  const custByType = {
+    'Chốt thuê': at.allCustomers.filter(c => c.type.has('12h') || c.type.has('1 ngày') || c.type.has('Chốt thuê')).length,
+    'Fitting': at.allCustomers.filter(c => c.type.has('Fitting') || c.type.has('Fitting xa')).length,
+    'Đặt ship': at.allCustomers.filter(c => c.type.has('Đặt ship')).length,
+  };
+
+  // === Costs & P&L ===
+  let totalShip = 0, totalOther = 0;
+  monthOrders.forEach(o => {
+    totalShip += Number(o.Ship || o.chiPhiShip || 0);
+    totalOther += Number(o.Chi_Phi_Khac || o.chiphi || 0);
+  });
+  // Manual costs (sửa váy, sửa khóa, etc.)
+  const manualCosts = (db.chiPhi || []).filter(e => {
+    const d = parseD(e.date);
+    return d && d.getMonth() + 1 === month && d.getFullYear() === year;
+  });
+  const totalManualCost = manualCosts.reduce((s, e) => s + Number(e.soTien || 0), 0);
+  const totalOtherCost = totalShip + totalOther + totalManualCost;
+  const netProfit = totalRevenue - totalOtherCost;
+  const grossMargin = totalRevenue > 0 ? Math.round(netProfit / totalRevenue * 100) : 0;
+
+  // === Forecast ===
+  const nextMonthStart = new Date(year, month, 1);
+  const nextMonthEnd = new Date(year, month + 1, 0);
+  const nextWeekStart = new Date(today); nextWeekStart.setDate(today.getDate() + 1);
+  const nextWeekEnd = new Date(today); nextWeekEnd.setDate(today.getDate() + 7);
+  const nextMonthOrders_count = orders.filter(o => {
+    if (isHoanOrder(o)) return false;
+    const d = parseD(o.Ngay_Lay);
+    return d && d >= nextMonthStart && d <= nextMonthEnd;
+  }).length;
+  const nextWeekOrders_count = orders.filter(o => {
+    if (isHoanOrder(o)) return false;
+    const d = parseD(o.Ngay_Lay);
+    return d && d >= nextWeekStart && d <= nextWeekEnd;
+  }).length;
+
+  // Busiest upcoming day
+  const upcomingDays = {};
+  for (let i = 1; i <= 30; i++) {
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    const cnt = orders.filter(o => {
+      if (isHoanOrder(o)) return false;
+      return o.Ngay_Lay === iso;
+    }).length;
+    if (cnt > 0) upcomingDays[iso] = cnt;
+  }
+  const busyUpcoming = Object.entries(upcomingDays).filter(([, c]) => c > 5).slice(0, 5);
+
+  // === Overdue ===
+  const overdue = orders.filter(o => {
+    if (isHoanOrder(o)) return false;
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!tra || tra >= today) return false;
+    return tra < today;
+  });
+
+  // === Trend ===
+  let trend = 'stable';
+  if (revenueChange > 5) trend = 'up';
+  else if (revenueChange < -5) trend = 'down';
+
+  // === Power BI Ratios ===
+  const uniqueCustomers = new Set(monthOrders.map(o => o.Insta_Khach || o.insta || o.SDT || o.sdt || '')).size;
+  const totalRentals = monthOrders.reduce((s, o) => s + (o.dhvs || []).length, 0);
+
+  // Pending refunds (đơn đã trả nhưng chưa hoàn)
+  const pendingRefunds = orders.filter(o => {
+    if (!isHoanOrder(o)) return false;
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    return tra && tra < today && !o.Trang_Thai_Hoan_Coc;
+  }).reduce((s, o) => s + (o.Hinh_Thuc_Coc === 'Cọc 100%' ? donCocGoiY(o) : donCocGoiY(o) / 2), 0);
+
+  // Average rental days
+  const totalRentalDays = monthOrders.reduce((s, o) => {
+    const lay = parseD(o.Ngay_Lay);
+    const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return s;
+    return s + Math.round((tra - lay) / (24 * 3600 * 1000)) + 1;
+  }, 0);
+  const avgRentalDays = totalOrders > 0 ? Math.round(totalRentalDays / totalOrders) : 0;
+
+  // Top dress revenue share
+  const topDressRevShare = at.dressData && at.dressData.length > 0 && totalRevenue > 0
+    ? Math.round((at.dressData[0].revenue || 0) / totalRevenue * 100) : 0;
+
+  // Top 3 dresses concentration risk
+  const top3Rev = at.dressData ? at.dressData.slice(0, 3).reduce((s, d) => s + (d.revenue || 0), 0) : 0;
+  const dressConcentrationRisk = totalRevenue > 0 ? Math.round(top3Rev / totalRevenue * 100) : 0;
+
+  // Total fitting orders
+  const totalFittingOrders = monthOrders.filter(o => o.Trang_Thai_Don === 'Fitting' || o.Trang_Thai_Don === 'Fitting xa').length;
+
+  // Fitting-to-close rate
+  const fittedOrders = monthOrders.filter(o => {
+    if (o.Trang_Thai_Don !== 'Chốt thuê') return false;
+    // Tìm đơn Fitting trước đó cùng khách
+    const key = o.Insta_Khach || o.insta || o.SDT || o.sdt;
+    if (!key) return false;
+    const lay = parseD(o.Ngay_Lay);
+    if (!lay) return false;
+    const prev = orders.find(x => {
+      if (x === o) return false;
+      const kx = x.Insta_Khach || x.insta || x.SDT || x.sdt;
+      if (kx !== key) return false;
+      const dx = parseD(x.Ngay_Lay);
+      return dx && dx < lay && (x.Trang_Thai_Don === 'Fitting' || x.Trang_Thai_Don === 'Fitting xa');
+    });
+    return !!prev;
+  }).length;
+  const fittingToCloseRate = totalFittingOrders > 0 ? Math.round(fittedOrders / totalFittingOrders * 100) : 0;
+
+  // Cash flow metrics
+  const avgDepositPerOrder = totalOrders > 0 ? Math.round(totalDeposit / totalOrders) : 0;
+  const daysOfCashBuffer = revPerDay > 0 ? Math.round((totalDeposit - pendingRefunds) / revPerDay) : 0;
+
+  // Break-even revenue
+  const breakEvenRevenue = grossMargin > 0 ? Math.round(totalOtherCost / (grossMargin / 100)) : 0;
+
+  // CAC (Customer Acquisition Cost) - ship cost / new customers
+  const cac = newCustomers > 0 ? Math.round(totalShip / newCustomers) : 0;
+
+  // Avg orders per customer
+  const avgOrdersPerCustomer = uniqueCustomers > 0 ? Math.round(totalOrders / uniqueCustomers * 10) / 10 : 0;
+
+  // Dress turnover rate (rentals / dresses)
+  const dressTurnoverRate = totalDresses > 0 ? Math.round(totalRentals / totalDresses * 10) / 10 : 0;
+
+  // Peak day revenue
+  const peakDayRevenue = Object.values(dailyRevenue).length > 0
+    ? Math.max(...Object.values(dailyRevenue)) : 0;
+
+  // Overdue rate
+  const overdueRate = totalOrders > 0 ? Math.round(overdue.length / totalOrders * 100) : 0;
+
+  // YoY growth
+  const yoyOrders = orders.filter(o => {
+    if (isHoanOrder(o)) return false;
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d.getMonth() + 1 === month && d.getFullYear() === year - 1;
+  });
+  const yoyRevenue = yoyOrders.reduce((s, o) => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    return s + (gross - expenses);
+  }, 0);
+  const yoyGrowth = yoyRevenue > 0 ? Math.round((totalRevenue - yoyRevenue) / yoyRevenue * 100) : 0;
+
+  const result = {
+    totalOrders, totalRevenue, totalDeposit, activeRentals,
+    aov, revenueChange, ordersChange,
+    avgBusy: dur, totalDresses, activeDresses, inactiveDresses,
+    pickupsToday, returnsToday,
+    dailyRevenue, weeklyRevenue, heatmap,
+    monthlyComparison, typeStats,
+    prevRevenue, prevOrders: prevOrders.length,
+    topDresses, bottomDresses, topRevenueDresses, neverRented: at.neverRented, dressAge,
+    topCustomers: at.topCustomers, newCustomers, returningCustomers, repeatRate, top10RevShare, custByType,
+    totalShip, totalOther, totalManualCost, totalOtherCost, netProfit, grossMargin,
+    nextMonthOrders_count, nextWeekOrders_count, busyUpcoming,
+    trend, overdue,
+    month, year, daysInMonth, elapsedDays,
+    // Power BI ratios
+    uniqueCustomers, totalRentals, pendingRefunds, avgRentalDays, fittingToCloseRate,
+    totalFittingOrders, fittedOrders,
+    topDressRevShare, dressConcentrationRisk,
+    avgDepositPerOrder, revPerDay, daysOfCashBuffer, breakEvenRevenue,
+    cac, avgOrdersPerCustomer, dressTurnoverRate, peakDayRevenue, overdueRate, yoyGrowth,
+  };
+
+  dashCache[cacheKey] = result;
+  return result;
+}
+
+function renderDashboard() {
+  const { month, year } = dashState;
+  const s = $('#v-dashboard');
+
+  // Default to tongquan tab
+  if (!dashState.dashTab) dashState.dashTab = 'tongquan';
+
+  const tabMeta = {
+    tongquan:   { icon: '📊', label: 'Tổng quan' },
+    khovaypk:   { icon: '👗', label: 'Kho váy & PK' },
+    soquy:      { icon: '💰', label: 'Sổ quỹ' },
+    baocao:     { icon: '📋', label: 'Báo cáo' },
+    phantich:   { icon: '🔍', label: 'Phân tích' },
+  };
+
+  s.innerHTML = `
+<div class="dash-header">
+  <div class="dash-nav">
+    <button class="dash-nav-btn" onclick="dashChangePeriod(-1)">‹</button>
+    <span class="dash-month-label">Tháng ${month}/${year}</span>
+    <button class="dash-nav-btn" onclick="dashChangePeriod(1)">›</button>
+  </div>
+  <div class="dash-header-right">
+    <span class="dash-refresh-info" id="dash-refresh-info"></span>
+    <button class="dash-export-btn" onclick="exportDashboardCSV()">📥 Export</button>
+  </div>
+</div>
+
+<div class="dash-tabs">
+  ${Object.entries(tabMeta).map(([key, m]) =>
+    `<button class="dash-tab ${dashState.dashTab===key?'active':''}" onclick="setDashTab('${key}')">${m.icon} ${m.label}</button>`
+  ).join('')}
+</div>
+
+<div class="dash-content" id="dash-content">
+  <div class="dash-loading">
+    <div class="dash-spinner"></div>
+    <p>Đang tải dữ liệu...</p>
+  </div>
+</div>`;
+
+  // Wrapper for expense modal button — stops propagation to avoid parent click handler conflicts
+  window.openExpenseBtn = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } window.openExpenseModal(e); };
+
+  // Use setTimeout(0) to defer calculation until after DOM paint, then render
+  setTimeout(function() {
+    try {
+      const d = calculateDashboardData(month, year);
+      renderDashTab(d);
+    } catch(e) {
+      console.error('Dashboard error:', e);
+      const content = $('#dash-content');
+      if (content) content.innerHTML = '<div class="dash-loading"><p style="color:var(--red);padding:20px">Lỗi tải Dashboard. Thử tải lại trang.</p></div>';
+    }
+  }, 0);
+}
+
+function setDashTab(tab) {
+  dashState.dashTab = tab;
+  const { month, year } = dashState;
+  const content = $('#dash-content');
+  if (content) {
+    content.innerHTML = `<div class="dash-loading"><div class="dash-spinner"></div><p>Đang tải...</p></div>`;
+    setTimeout(function() {
+      try {
+        const d = calculateDashboardData(month, year);
+        renderDashTab(d);
+      } catch(e) {
+        console.error('Dashboard tab error:', e);
+        content.innerHTML = '<div class="dash-loading"><p style="color:var(--red);padding:20px">Lỗi tải dữ liệu Dashboard.</p></div>';
+      }
+    }, 0);
+  }
+}
+
+function renderDashTab(d) {
+  const content = $('#dash-content');
+  if (!content) return;
+
+  const tab = dashState.dashTab;
+  if (tab === 'tongquan') content.innerHTML = renderDashTongQuan(d);
+  else if (tab === 'khovaypk') content.innerHTML = renderDashKhoVayPK(d);
+  else if (tab === 'soquy') content.innerHTML = renderDashSoQuy(d);
+  else if (tab === 'baocao') content.innerHTML = renderDashBaoCao(d);
+  else if (tab === 'phantich') content.innerHTML = renderDashPhanTich(d);
+
+  requestAnimationFrame(() => {
+    if (tab === 'tongquan') { renderDashBarChart(); }
+    if (tab === 'khovaypk') { renderDashKhoVayDonut(); }
+    if (tab === 'soquy') { renderDashSoQuyChart(); }
+    if (tab === 'baocao') { renderDashBaoCaoChart(); }
+  });
+}
+
+function changeClass(str, cls, val) {
+  return val ? str + ' ' + cls : str;
+}
+
+// ============================================================
+// DASHBOARD — 5 NEW SUB-TABS
+// ============================================================
+
+// --- Revenue filter helper ---
+function dashRevenueFilter(mode, month, year) {
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const today = new Date(); today.setHours(0,0,0,0);
+  let start, end, label;
+
+  if (mode === 'today') {
+    start = end = new Date(today); label = 'Hôm nay';
+  } else if (mode === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    start = end = new Date(y); label = 'Hôm qua';
+  } else if (mode === '7days') {
+    start = new Date(today); start.setDate(start.getDate() - 6);
+    end = new Date(today); label = '7 ngày';
+  } else {
+    start = new Date(year, month - 1, 1);
+    end = new Date(year, month, 0); label = `T${month}/${year}`;
+  }
+
+  const filtered = orders.filter(o => {
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d >= start && d <= end;
+  });
+
+  let revenue = 0, count = 0;
+  filtered.forEach(o => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const expenses = Number(o.chiphi || 0);
+    revenue += (gross - expenses);
+    count++;
+  });
+  return { revenue, count, label };
+}
+
+// --- Top dresses by filter ---
+function dashTopDresses(mode, month, year) {
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const today = new Date(); today.setHours(0,0,0,0);
+  let start, end;
+
+  if (mode === 'today') {
+    start = end = new Date(today);
+  } else if (mode === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    start = end = new Date(y);
+  } else if (mode === '7days') {
+    start = new Date(today); start.setDate(start.getDate() - 6);
+    end = new Date(today);
+  } else {
+    start = new Date(year, month - 1, 1);
+    end = new Date(year, month, 0);
+  }
+
+  const filtered = orders.filter(o => {
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return false;
+    return d >= start && d <= end;
+  });
+
+  const counts = {};
+  filtered.forEach(o => {
+    const dhvs = Array.isArray(o.dhvs) ? o.dhvs : [];
+    dhvs.forEach(x => {
+      const key = x.Ma_Vay || x.vay;
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    });
+  });
+
+  const vayList = db.vay || [];
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([key, cnt]) => {
+      const v = vayById.get(key);
+      return { ten: v ? v.Ten_Vay : key, key, count: cnt };
+    });
+}
+
+// --- TODAY vs YESTERDAY vs SAME DAY LAST MONTH ---
+function dashTodayStats(month, year) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  const sameDayLastMonth = new Date(today); sameDayLastMonth.setMonth(sameDayLastMonth.getMonth() - 1);
+
+  const calc = (date) => {
+    const iso = date.toISOString().slice(0, 10);
+    const orders = (db.don || []).filter(o => isHoanOrder(o) && o.Ngay_Lay === iso);
+    const rev = orders.reduce((s, o) => {
+      const gross = donTienThueVay(o) + donTienThuePK(o);
+      const expenses = Number(o.chiphi || 0);
+      return s + (gross - expenses);
+    }, 0);
+    return { rev, count: orders.length };
+  };
+
+  const todayD = calc(today);
+  const yesterdayD = calc(yesterday);
+  const sameDayLastMonthD = calc(sameDayLastMonth);
+
+  const pctVsYesterday = yesterdayD.rev > 0 ? Math.round((todayD.rev - yesterdayD.rev) / yesterdayD.rev * 100) : 0;
+  const pctVsLastMonth = sameDayLastMonthD.rev > 0 ? Math.round((todayD.rev - sameDayLastMonthD.rev) / sameDayLastMonthD.rev * 100) : 0;
+
+  return { today: todayD, yesterday: yesterdayD, sameDayLastMonth: sameDayLastMonthD, pctVsYesterday, pctVsLastMonth };
+}
+
+// ============================================================
+// TAB 1: TỔNG QUAN
+// ============================================================
+function renderDashTongQuan(d) {
+  // Sub-tab state
+  const subTab = dashState.subTab || 'banhang';
+  const revMode = dashState.revMode || '7days';
+  const topMode = dashState.topMode || '7days';
+  const { month, year } = dashState;
+
+  // Stats for today
+  const todayStats = dashTodayStats(month, year);
+  const rev7 = dashRevenueFilter('7days', month, year);
+  const revThisMonth = dashRevenueFilter('thismonth', month, year);
+  const topD7 = dashTopDresses('7days', month, year);
+  const topDMonth = dashTopDresses('thismonth', month, year);
+
+  // Filter top dresses by subTab
+  const topDresses = subTab === 'doanhthu' ? topD7 : topDMonth;
+
+  return `
+${renderDashDateFilter()}
+
+<!-- SUB-TABS -->
+<div class="dash-sub-tabs">
+  <button class="dash-sub-tab ${subTab==='banhang'?'active':''}" onclick="setDashSubTab('banhang')">📈 Kết quả BH</button>
+  <button class="dash-sub-tab ${subTab==='doanhthu'?'active':''}" onclick="setDashSubTab('doanhthu')">💰 Doanh thu thuần</button>
+  <button class="dash-sub-tab ${subTab==='topvay'?'active':''}" onclick="setDashSubTab('topvay')">🏆 Top 20 váy</button>
+</div>
+
+${subTab === 'banhang' ? `
+<!-- 1a: Kết quả bán hàng -->
+<div class="dash-section">
+  <div class="dash-section-title">Kết quả bán hàng</div>
+  <div class="dash-today-stats">
+    <div class="dash-today-card main">
+      <div class="dash-today-rev">${fmtVND(todayStats.today.rev)}</div>
+      <div class="dash-today-label">Doanh thu hôm nay</div>
+      <div class="dash-today-count">${todayStats.today.count} đơn</div>
+    </div>
+    <div class="dash-today-compare">
+      <div class="dash-compare-row">
+        <span class="dash-compare-label">vs Hôm qua</span>
+        <span class="dash-compare-val ${todayStats.pctVsYesterday>=0?'pos':'neg'}">${todayStats.pctVsYesterday>=0?'▲':'▼'} ${Math.abs(todayStats.pctVsYesterday)}%</span>
+        <span class="dash-compare-amount muted">${fmtVND(todayStats.yesterday.rev)}</span>
+      </div>
+      <div class="dash-compare-row">
+        <span class="dash-compare-label">vs Cùng kỳ tháng trước</span>
+        <span class="dash-compare-val ${todayStats.pctVsLastMonth>=0?'pos':'neg'}">${todayStats.pctVsLastMonth>=0?'▲':'▼'} ${Math.abs(todayStats.pctVsLastMonth)}%</span>
+        <span class="dash-compare-amount muted">${fmtVND(todayStats.sameDayLastMonth.rev)}</span>
+      </div>
+    </div>
+  </div>
+</div>
+` : ''}
+
+${subTab === 'doanhthu' ? `
+<!-- 1b: Doanh thu thuần -->
+<div class="dash-section">
+  <div class="dash-rev-filter-row">
+    <div class="dash-chart-tabs">
+      <button class="dash-chart-tab ${revMode==='today'?'active':''}" onclick="setDashRevMode('today')">Hôm nay</button>
+      <button class="dash-chart-tab ${revMode==='yesterday'?'active':''}" onclick="setDashRevMode('yesterday')">Hôm qua</button>
+      <button class="dash-chart-tab ${revMode==='7days'?'active':''}" onclick="setDashRevMode('7days')">7 ngày</button>
+      <button class="dash-chart-tab ${revMode==='thismonth'?'active':''}" onclick="setDashRevMode('thismonth')">Tháng này</button>
+    </div>
+  </div>
+  ${(() => {
+    const filterRev = dashRevenueFilter(revMode, month, year);
+    const aov = filterRev.count > 0 ? Math.round(filterRev.revenue / filterRev.count) : 0;
+    return `
+  <div class="dash-rev-summary">
+    <div class="dash-rev-big accent">${fmtVND(filterRev.rev)}</div>
+    <div class="dash-rev-meta muted">${filterRev.label} · ${filterRev.count} đơn · AOV ${fmtVND(aov)}</div>
+  </div>
+  <div class="dash-chart-wrap" id="dash-rev-chart-wrap" style="height:200px">
+    <canvas id="dash-rev-chart"></canvas>
+    <div class="dash-chart-tooltip" id="dash-rev-tooltip"></div>
+  </div>`;
+  })()}
+</div>
+` : ''}
+
+${subTab === 'topvay' ? `
+<!-- 1c: Top 20 váy bán chạy -->
+<div class="dash-section">
+  <div class="dash-rev-filter-row">
+    <div class="dash-chart-tabs">
+      <button class="dash-chart-tab ${topMode==='7days'?'active':''}" onclick="setDashTopMode('7days')">7 ngày</button>
+      <button class="dash-chart-tab ${topMode==='thismonth'?'active':''}" onclick="setDashTopMode('thismonth')">Tháng này</button>
+    </div>
+  </div>
+  <div class="dash-top20-wrap" id="dash-top20-wrap">
+    ${topDresses.length === 0 ? `
+    <div class="dash-empty-state">
+      <div class="dash-empty-icon">👗</div>
+      <div class="dash-empty-title">Chưa có đơn thuê nào</div>
+      <div class="dash-empty-desc">Tạo đơn mới để xem top váy bán chạy ${topMode==='7days'?'7 ngày qua':'tháng này'}</div>
+      <button class="dash-empty-btn" onclick="openNewOrder()">+ Tạo đơn mới</button>
+    </div>` : topDresses.map((v, i) => `
+    <div class="dash-top20-row" onclick="openOrderByDress('${v.key}')">
+      <span class="dash-rank">${i+1}</span>
+      <span class="dash-top20-name">${v.ten}</span>
+      <span class="dash-top20-count">${v.count} lần</span>
+    </div>`).join('')}
+  </div>
+</div>
+` : ''}
+
+<!-- Shared: Monthly summary strip -->
+<div class="dash-section" style="margin-top:0">
+  <div class="dash-section-title" style="font-size:12px;color:var(--text-muted)">Tháng ${month}/${year}: ${fmtVND(d.totalRevenue)} · ${d.totalOrders} đơn · ${d.revenueChange>=0?'▲':'▼'} ${Math.abs(d.revenueChange)}% vs tháng trước</div>
+</div>
+`;
+}
+
+function setDashSubTab(tab) { dashState.subTab = tab; renderDashboard(); }
+function setDashRevMode(mode) { dashState.revMode = mode; renderDashboard(); }
+function setDashTopMode(mode) { dashState.topMode = mode; renderDashboard(); }
+
+// === Date Filter System ===
+function setDashDateFilter(filter) {
+  dashState.dateFilter = filter;
+  renderDashboard();
+}
+
+function dashChangePeriod(dir) {
+  const { month, year } = dashState;
+  if (dir === 1 && month === 12) {
+    dashState.month = 1;
+    dashState.year++;
+  } else if (dir === -1 && month === 1) {
+    dashState.month = 12;
+    dashState.year--;
+  } else {
+    dashState.month += dir;
+  }
+  renderDashboard();
+}
+
+function renderDashDateFilter() {
+  const df = dashState.dateFilter || 'thismonth';
+  const { month, year } = dashState;
+  const today_d = new Date();
+  const label = df === 'today' ? `Hôm nay · ${today_d.getDate()}/${today_d.getMonth()+1}` :
+                df === '7days' ? '7 ngày gần nhất' :
+                `Tháng ${month}/${year}`;
+  return `
+  <div class="dash-date-filter-bar">
+    <div class="dash-date-filter-tabs">
+      <button class="dash-date-filter-btn ${df==='today'?'active':''}" onclick="setDashDateFilter('today')">Ngày</button>
+      <button class="dash-date-filter-btn ${df==='7days'?'active':''}" onclick="setDashDateFilter('7days')">Tuần</button>
+      <button class="dash-date-filter-btn ${df==='thismonth'?'active':''}" onclick="setDashDateFilter('thismonth')">Tháng</button>
+    </div>
+    <div class="dash-date-nav">
+      <button onclick="dashChangePeriod(-1)" style="background:none;border:none;cursor:pointer;font-size:18px;font-weight:600;padding:4px 8px;color:var(--text-secondary)">‹</button>
+      <span class="dash-date-label">${label}</span>
+      <button onclick="dashChangePeriod(1)" style="background:none;border:none;cursor:pointer;font-size:18px;font-weight:600;padding:4px 8px;color:var(--text-secondary)">›</button>
+    </div>
+  </div>`;
+}
+
+function getDateFilterRange() {
+  const df = dashState.dateFilter || 'thismonth';
+  const { month, year } = dashState;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const todayIso = isoOf(now);
+
+  if (df === 'today') {
+    return { from: todayIso, to: todayIso };
+  } else if (df === '7days') {
+    const from = addD(todayIso, -6);
+    return { from, to: todayIso };
+  } else {
+    // thismonth - get first and last day of month
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    return { from: isoOf(firstDay), to: isoOf(lastDay) };
+  }
+}
+
+function openOrderByDress(key) {
+  go('v-orders');
+  const searchInput = document.getElementById('search');
+  if (searchInput) { searchInput.value = key; searchInput.dispatchEvent(new Event('input')); }
+}
+
+// ============================================================
+// TAB 3: SỔ QUỸ
+// ============================================================
+
+// Chi phí data management
+function getChiPhiEntries() { return db.chiPhi || []; }
+function getThuKhacEntries() { return db.thuKhac || []; }
+
+function saveThuKhacEntry(entry) {
+  const entries = getThuKhacEntries();
+  entries.push(entry);
+  db.thuKhac = entries;
+  saveDB();
+}
+
+function saveChiPhiEntry(entry) {
+  const entries = getChiPhiEntries();
+  entries.push(entry);
+  db.chiPhi = entries;
+  saveDB();
+}
+
+function deleteChiPhiEntry(id) {
+  const entries = getChiPhiEntries().filter(e => e.id !== id);
+  db.chiPhi = entries;
+  saveDB();
+}
+
+function deleteThuKhacEntry(id) {
+  const entries = getThuKhacEntries().filter(e => e.id !== id);
+  db.thuKhac = entries;
+  saveDB();
+}
+
+function openAddThuKhacModal() {
+  const today = new Date().toISOString().slice(0, 10);
+  openModal('m-expense');
+  setTimeout(() => {
+    const body = document.getElementById('exp-body');
+    if (body) {
+      body.innerHTML = `
+        <div class="sheet-header">
+          <div class="sheet-title">💰 Thêm thu khác</div>
+          <button class="icon-btn" onclick="closeModal('m-expense')">✕</button>
+        </div>
+        <div class="sheet-body" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <label class="field-label">Mô tả</label>
+            <input type="text" id="exp-mo-ta" class="field-input" placeholder="VD: Bán phụ kiện cũ" />
+          </div>
+          <div>
+            <label class="field-label">Số tiền (đ)</label>
+            <input type="number" id="exp-so-tien" class="field-input" placeholder="VD: 500000" min="0" />
+          </div>
+          <div>
+            <label class="field-label">Ngày</label>
+            <input type="date" id="exp-ngay" class="field-input" value="${today}" />
+          </div>
+          <button class="btn primary" onclick="doSaveThuKhac()" style="margin-top:8px">Lưu</button>
+        </div>`;
+    }
+  }, 50);
+}
+
+function doSaveThuKhac() {
+  const moTa = document.getElementById('exp-mo-ta')?.value.trim();
+  const soTien = parseInt(document.getElementById('exp-so-tien')?.value) || 0;
+  const ngay = document.getElementById('exp-ngay')?.value || new Date().toISOString().slice(0, 10);
+  if (!moTa || soTien <= 0) { showToast('Nhập đầy đủ thông tin', 'warn'); return; }
+  saveThuKhacEntry({ id: 'tk_' + Date.now(), moTa, soTien, ngay, date: ngay });
+  closeModal('m-expense');
+  showToast('Đã lưu thu khác');
+  renderDashboard();
+}
+
+function openAddChiPhiModal() {
+  const today = new Date().toISOString().slice(0, 10);
+  const loaiOptions = [
+    'Mua váy mới', 'Trả lương NV', 'Chi phí vận chuyển',
+    'Chi phí giặt ủi', 'Chi phí khác'
+  ];
+  openModal('m-expense');
+  setTimeout(() => {
+    const body = document.getElementById('exp-body');
+    if (body) {
+      body.innerHTML = `
+        <div class="sheet-header">
+          <div class="sheet-title">💸 Thêm chi phí</div>
+          <button class="icon-btn" onclick="closeModal('m-expense')">✕</button>
+        </div>
+        <div class="sheet-body" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <label class="field-label">Loại chi phí</label>
+            <select id="exp-loai" class="field-input">
+              ${loaiOptions.map(l => `<option value="${l}">${l}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Mô tả</label>
+            <input type="text" id="exp-mo-ta" class="field-input" placeholder="VD: Mua váy abc" />
+          </div>
+          <div>
+            <label class="field-label">Số tiền (đ)</label>
+            <input type="number" id="exp-so-tien" class="field-input" placeholder="VD: 200000" min="0" />
+          </div>
+          <div>
+            <label class="field-label">Ngày</label>
+            <input type="date" id="exp-ngay" class="field-input" value="${today}" />
+          </div>
+          <button class="btn primary" onclick="doSaveChiPhi()" style="margin-top:8px">Lưu</button>
+        </div>`;
+    }
+  }, 50);
+}
+
+function doSaveChiPhi() {
+  const loai = document.getElementById('exp-loai')?.value;
+  const moTa = document.getElementById('exp-mo-ta')?.value.trim();
+  const soTien = parseInt(document.getElementById('exp-so-tien')?.value) || 0;
+  const ngay = document.getElementById('exp-ngay')?.value || new Date().toISOString().slice(0, 10);
+  if (!loai || !moTa || soTien <= 0) { showToast('Nhập đầy đủ thông tin', 'warn'); return; }
+  saveChiPhiEntry({ id: 'cp_' + Date.now(), loai, moTa, soTien, ngay, date: ngay });
+  closeModal('m-expense');
+  showToast('Đã lưu chi phí');
+  renderDashboard();
+}
+
+function renderDashSoQuy(d) {
+  const df = dashState.dateFilter || 'thismonth';
+  const { month, year } = dashState;
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+  const dateFromObj = parseD(dateFrom);
+  const dateToObj = parseD(dateTo);
+
+  // Revenue from orders (hoan)
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const monthOrders = orders.filter(o => {
+    const lay = parseD(o.Ngay_Lay); if (!lay) return false;
+    return lay >= dateFromObj && lay <= dateToObj;
+  });
+  const totalRevenue = monthOrders.reduce((s, o) => {
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const exp = Number(o.chiphi || 0);
+    return s + (gross - exp);
+  }, 0);
+
+  // Thu khác
+  const thuKhac = getThuKhacEntries().filter(e => {
+    const d2 = parseD(e.date); if (!d2) return false;
+    return d2 >= dateFromObj && d2 <= dateToObj;
+  });
+  const totalThuKhac = thuKhac.reduce((s, e) => s + Number(e.soTien || 0), 0);
+
+  // Chi phí
+  const chiPhi = getChiPhiEntries().filter(e => {
+    const d2 = parseD(e.date); if (!d2) return false;
+    return d2 >= dateFromObj && d2 <= dateToObj;
+  });
+  const totalChiPhi = chiPhi.reduce((s, e) => s + Number(e.soTien || 0), 0);
+
+  const tongThu = totalRevenue + totalThuKhac;
+  const canBang = tongThu - totalChiPhi;
+
+  // Group chi phi by loai
+  const chiByLoai = {};
+  chiPhi.forEach(e => { chiByLoai[e.loai] = (chiByLoai[e.loai] || 0) + Number(e.soTien || 0); });
+
+  // Group by date for chart
+  const thuByDate = {};
+  monthOrders.forEach(o => {
+    const iso = o.Ngay_Lay;
+    const gross = donTienThueVay(o) + donTienThuePK(o);
+    const exp = Number(o.chiphi || 0);
+    thuByDate[iso] = (thuByDate[iso] || 0) + (gross - exp);
+  });
+  thuKhac.forEach(e => {
+    const iso = e.date;
+    thuByDate[iso] = (thuByDate[iso] || 0) + Number(e.soTien || 0);
+  });
+
+  const chiByDate = {};
+  chiPhi.forEach(e => {
+    const iso = e.date;
+    chiByDate[iso] = (chiByDate[iso] || 0) + Number(e.soTien || 0);
+  });
+
+  return `
+${renderDashDateFilter()}
+
+<!-- Summary Cards -->
+<div class="dash-summary-cards">
+  <div class="dash-summary-card income">
+    <div class="dash-summary-icon">💰</div>
+    <div class="dash-summary-val">${fmtVND(tongThu)}</div>
+    <div class="dash-summary-label">Tổng thu</div>
+  </div>
+  <div class="dash-summary-card expense">
+    <div class="dash-summary-icon">💸</div>
+    <div class="dash-summary-val">${fmtVND(totalChiPhi)}</div>
+    <div class="dash-summary-label">Tổng chi</div>
+  </div>
+  <div class="dash-summary-card balance">
+    <div class="dash-summary-icon">📊</div>
+    <div class="dash-summary-val">${fmtVND(canBang)}</div>
+    <div class="dash-summary-label">Cân bằng</div>
+  </div>
+</div>
+
+<!-- Income vs Expense Chart -->
+<div class="dash-section">
+  <div class="dash-section-title">Thu vs Chi theo ngày</div>
+  <div class="dash-chart-wrap" style="height:200px;background:var(--bg-card);border-radius:12px;padding:8px;box-shadow:var(--glass-shadow)">
+    <canvas id="dash-soquy-chart"></canvas>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="dash-section" style="display:flex;gap:8px">
+  <button class="btn primary" onclick="openAddThuKhacModal()" style="flex:1">💰 Thêm thu khác</button>
+  <button class="btn secondary" onclick="openAddChiPhiModal()" style="flex:1">💸 Thêm chi phí</button>
+</div>
+
+<!-- Chi phí breakdown -->
+${chiPhi.length > 0 ? `
+<div class="dash-section">
+  <div class="dash-section-title">Chi phí</div>
+  <div class="dash-expense-list">
+    ${Object.entries(chiByLoai).map(([loai, amount]) => `
+    <div class="dash-expense-row">
+      <div class="dash-expense-loai">${loai}</div>
+      <div class="dash-expense-amount">${fmtVND(amount)}</div>
+    </div>`).join('')}
+  </div>
+  <div class="dash-expense-entries">
+    ${chiPhi.map(e => `
+    <div class="dash-expense-entry" onclick="if(confirm('Xóa khoản chi này?')){deleteChiPhiEntry('${e.id}');renderDashboard();}">
+      <span class="dash-expense-date">${e.date}</span>
+      <span class="dash-expense-loai-small">${e.loai}</span>
+      <span class="dash-expense-note">${e.moTa}</span>
+      <span class="dash-expense-amount-small">-${fmtVND(e.soTien)}</span>
+      <span class="dash-expense-del">🗑️</span>
+    </div>`).join('')}
+  </div>
+</div>
+` : '<div class="dash-section"><p class="muted" style="text-align:center;padding:16px">Chưa có chi phí</p></div>'}
+
+<!-- Thu khác -->
+${thuKhac.length > 0 ? `
+<div class="dash-section">
+  <div class="dash-section-title">Thu khác</div>
+  <div class="dash-expense-entries">
+    ${thuKhac.map(e => `
+    <div class="dash-expense-entry" style="border-left:3px solid var(--green)" onclick="if(confirm('Xóa khoản thu này?')){deleteThuKhacEntry('${e.id}');renderDashboard();}">
+      <span class="dash-expense-date">${e.date}</span>
+      <span class="dash-expense-note">${e.moTa}</span>
+      <span class="dash-expense-amount-small" style="color:var(--green)">+${fmtVND(e.soTien)}</span>
+      <span class="dash-expense-del">🗑️</span>
+    </div>`).join('')}
+  </div>
+</div>
+` : ''}
+`;
+}
+
+// ============================================================
+// SỔ QUỸ CHART
+// ============================================================
+function renderDashSoQuyChart() {
+  const canvas = document.getElementById('dash-soquy-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const W = rect.width || 320;
+  const H = rect.height || 200;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const df = dashState.dateFilter || 'thismonth';
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+
+  // Build date labels
+  const labels = [];
+  const incomeData = [];
+  const expenseData = [];
+  let cursor = parseD(dateFrom);
+  const end = parseD(dateTo);
+  const maxDays = 31;
+  let days = 0;
+  while (cursor <= end && days < maxDays) {
+    const iso = isoOf(cursor);
+    labels.push(cursor.getDate() + '/' + (cursor.getMonth() + 1));
+    // Income for this day
+    const orders = (db.don || []).filter(o => isHoanOrder(o) && o.Ngay_Lay === iso);
+    let income = 0;
+    orders.forEach(o => {
+      income += donTienThueVay(o) + donTienThuePK(o) - Number(o.chiphi || 0);
+    });
+    const thuKhac = getThuKhacEntries().filter(e => e.date === iso);
+    income += thuKhac.reduce((s, e) => s + Number(e.soTien || 0), 0);
+    incomeData.push(income);
+    // Expense for this day
+    const chiPhi = getChiPhiEntries().filter(e => e.date === iso);
+    expenseData.push(chiPhi.reduce((s, e) => s + Number(e.soTien || 0), 0));
+    cursor = addD(cursor, 1);
+    days++;
+  }
+
+  if (labels.length === 0) {
+    ctx.clearRect(0, 0, W, H);
+    return;
+  }
+
+  const maxVal = Math.max(...incomeData.map(Math.abs), ...expenseData.map(Math.abs), 1);
+  const padL = 50, padR = 10, padT = 20, padB = 30;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const stepX = cW / Math.max(labels.length - 1, 1);
+  const yScale = (v) => padT + cH - (v / maxVal) * cH;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (cH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    // Y labels
+    const val = Math.round(maxVal * (1 - i / 4));
+    ctx.fillStyle = '#AEAEB2';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtVND(val), padL - 4, y + 3);
+  }
+  // X labels
+  const skip = Math.max(1, Math.floor(labels.length / 7));
+  labels.forEach((l, i) => {
+    if (i % skip !== 0 && i !== labels.length - 1) return;
+    const x = padL + i * stepX;
+    ctx.fillStyle = '#AEAEB2';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'center';
+    ctx.fillText(l, x, H - 8);
+  });
+
+  // Draw income area
+  const drawAreaLine = (data, color) => {
+    const grad = ctx.createLinearGradient(0, padT, 0, padT + cH);
+    grad.addColorStop(0, color.replace('1)', '0.3)').replace('rgb', 'rgba'));
+    grad.addColorStop(1, color.replace('1)', '0)').replace('rgb', 'rgba'));
+    ctx.beginPath();
+    ctx.moveTo(padL, padT + cH);
+    data.forEach((v, i) => {
+      const x = padL + i * stepX;
+      const y = yScale(v);
+      if (i === 0) ctx.lineTo(x, y);
+      else {
+        const prevX = padL + (i - 1) * stepX;
+        const prevY = yScale(data[i - 1]);
+        const cpx = (prevX + x) / 2;
+        ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+      }
+    });
+    ctx.lineTo(padL + (data.length - 1) * stepX, padT + cH);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+    // Line
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = padL + i * stepX;
+      const y = yScale(v);
+      if (i === 0) ctx.moveTo(x, y);
+      else {
+        const prevX = padL + (i - 1) * stepX;
+        const prevY = yScale(data[i - 1]);
+        const cpx = (prevX + x) / 2;
+        ctx.bezierCurveTo(cpx, prevY, cpx, y, x, y);
+      }
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  };
+
+  drawAreaLine(incomeData, 'rgb(52, 199, 89)');  // green
+  drawAreaLine(expenseData, 'rgb(255, 59, 48)'); // red
+
+  // Legend
+  ctx.font = '11px Plus Jakarta Sans';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#34C759';
+  ctx.fillRect(padL, H - 22, 10, 3);
+  ctx.fillStyle = '#636366';
+  ctx.fillText('Thu', padL + 14, H - 18);
+  ctx.fillStyle = '#FF3B30';
+  ctx.fillRect(padL + 50, H - 22, 10, 3);
+  ctx.fillStyle = '#636366';
+  ctx.fillText('Chi', padL + 64, H - 18);
+}
+
+// ============================================================
+// TAB 4: BÁO CÁO
+// ============================================================
+function renderDashBaoCao(d) {
+  const subTab = dashState.baocaoSubTab || 'tonghop';
+  const df = dashState.dateFilter || 'thismonth';
+  const { month, year } = dashState;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+  const monthStart = parseD(dateFrom);
+  const monthEnd = parseD(dateTo);
+
+  // Calculate daily data for charts
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const dayData = {};
+  for (let day = 1; day <= monthEnd.getDate(); day++) {
+    const iso = new Date(year, month - 1, day).toISOString().slice(0, 10);
+    dayData[iso] = { revenue: 0, count: 0, chi: 0 };
+  }
+
+  orders.filter(o => {
+    const lay = parseD(o.Ngay_Lay); if (!lay) return false;
+    return lay >= monthStart && lay <= monthEnd;
+  }).forEach(o => {
+    const iso = o.Ngay_Lay;
+    if (dayData[iso]) {
+      const gross = donTienThueVay(o) + donTienThuePK(o);
+      const exp = Number(o.chiphi || 0);
+      dayData[iso].revenue += (gross - exp);
+      dayData[iso].count++;
+    }
+  });
+
+  const chiPhi = getChiPhiEntries().filter(e => {
+    const d2 = parseD(e.date); if (!d2) return false;
+    return d2 >= monthStart && d2 <= monthEnd;
+  });
+  chiPhi.forEach(e => {
+    const iso = e.date;
+    if (dayData[iso]) dayData[iso].chi += Number(e.soTien || 0);
+  });
+
+  const tongThu = Object.values(dayData).reduce((s, dd) => s + dd.revenue, 0);
+  const tongChi = chiPhi.reduce((s, e) => s + Number(e.soTien || 0), 0);
+  const tongDon = Object.values(dayData).reduce((s, dd) => s + dd.count, 0);
+  const canBang = tongThu - tongChi;
+
+  // Days elapsed in range
+  const daysElapsed = Math.max(1, Math.round((monthEnd - monthStart) / (1000 * 60 * 60 * 24)) + 1);
+  const avgRev = daysElapsed > 0 ? Math.round(tongThu / daysElapsed) : 0;
+  const avgChi = daysElapsed > 0 ? Math.round(tongChi / daysElapsed) : 0;
+
+  return `
+<!-- SUB-TABS -->
+<div class="dash-sub-tabs">
+  <button class="dash-sub-tab ${subTab==='tonghop'?'active':''}" onclick="setDashBaocaoSubTab('tonghop')">📋 Cuối ngày</button>
+  <button class="dash-sub-tab ${subTab==='banhang'?'active':''}" onclick="setDashBaocaoSubTab('banhang')">📈 Bán hàng</button>
+  <button class="dash-sub-tab ${subTab==='taichinh'?'active':''}" onclick="setDashBaocaoSubTab('taichinh')">💰 Tài chính</button>
+</div>
+
+${subTab === 'tonghop' ? `
+<!-- 4a: Báo cáo cuối ngày tổng hợp -->
+<div class="dash-section">
+  <div class="dash-section-title">Tổng kết thu chi</div>
+  <div class="dash-pnl-hero" style="margin-bottom:16px">
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Tổng thu</div>
+      <div class="dash-pnl-val accent">${fmtVND(tongThu)}</div>
+    </div>
+    <div class="dash-pnl-sep"></div>
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Tổng chi</div>
+      <div class="dash-pnl-val">${fmtVND(tongChi)}</div>
+    </div>
+    <div class="dash-pnl-sep"></div>
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Cân bằng</div>
+      <div class="dash-pnl-val" style="color:${canBang>=0?'var(--green)':'var(--red)'}">${fmtVND(canBang)}</div>
+    </div>
+  </div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(3,1fr)">
+    <div class="dash-metric-card">
+      <div class="dash-metric-val">${tongDon}</div>
+      <div class="dash-metric-label">Tổng đơn hoàn cọc</div>
+      <div class="dash-metric-sub">Tháng ${month}</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-val">${fmtVND(tongDon > 0 ? Math.round(tongThu / tongDon) : 0)}</div>
+      <div class="dash-metric-label">AOV</div>
+      <div class="dash-metric-sub">Trung bình/đơn</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-val">${fmtVND(avgRev)}</div>
+      <div class="dash-metric-label">TB/ngày</div>
+      <div class="dash-metric-sub">${daysElapsed} ngày đã qua</div>
+    </div>
+  </div>
+</div>
+
+<!-- Chi tiết chi phí -->
+<div class="dash-section">
+  <div class="dash-section-title">Chi phí chi tiết</div>
+  ${chiPhi.length === 0 ? '<p class="muted" style="text-align:center;padding:16px">Chưa có chi phí</p>' : `
+  <div class="dash-table-card">
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>Ngày</th><th>Loại</th><th>Mô tả</th><th>Số tiền</th></tr></thead>
+        <tbody>
+          ${chiPhi.map(e => `<tr>
+            <td>${e.date}</td>
+            <td>${e.loai}</td>
+            <td>${e.moTa}</td>
+            <td class="dash-money">${fmtVND(e.soTien)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`}
+</div>
+` : ''}
+
+${subTab === 'banhang' ? `
+<!-- 4b: Báo cáo bán hàng -->
+<div class="dash-section">
+  <div class="dash-section-title">Doanh thu & Chi phí theo ngày — Tháng ${month}/${year}</div>
+  <div class="dash-chart-wrap" style="height:220px">
+    <canvas id="dash-rev-chart"></canvas>
+    <div class="dash-chart-tooltip" id="dash-rev-tooltip"></div>
+  </div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(4,1fr);margin-top:8px">
+    <div class="dash-metric-card">
+      <div class="dash-metric-val accent">${fmtVND(tongThu)}</div>
+      <div class="dash-metric-label">Doanh thu</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-val">${fmtVND(tongChi)}</div>
+      <div class="dash-metric-label">Chi phí</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-val" style="color:${canBang>=0?'var(--green)':'var(--red)'}">${fmtVND(canBang)}</div>
+      <div class="dash-metric-label">Lợi nhuận</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-val">${tongDon}</div>
+      <div class="dash-metric-label">Đơn</div>
+    </div>
+  </div>
+</div>
+` : ''}
+
+${subTab === 'taichinh' ? `
+<!-- 4c: Báo cáo tài chính -->
+<div class="dash-section">
+  <div class="dash-section-title">P&L Summary — Tháng ${month}/${year}</div>
+  <div class="dash-pnl-hero" style="margin-bottom:16px">
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Tổng thu</div>
+      <div class="dash-pnl-val accent">${fmtVND(tongThu)}</div>
+    </div>
+    <div class="dash-pnl-sep"></div>
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Tổng chi</div>
+      <div class="dash-pnl-val">${fmtVND(tongChi)}</div>
+    </div>
+    <div class="dash-pnl-sep"></div>
+    <div class="dash-pnl-col">
+      <div class="dash-pnl-label">Profit</div>
+      <div class="dash-pnl-val" style="color:${canBang>=0?'var(--green)':'var(--red)'}">${fmtVND(canBang)}</div>
+      <div class="dash-pnl-sub">${tongThu > 0 ? Math.round(canBang/tongThu*100) : 0}% margin</div>
+    </div>
+  </div>
+
+  ${chiPhi.length > 0 ? `
+  <div class="dash-section-title" style="font-size:12px;margin-bottom:8px">Chi phí theo loại</div>
+  <div class="dash-pnl-bar-wrap">
+    ${Object.entries(
+      chiPhi.reduce((acc, e) => { acc[e.loai] = (acc[e.loai] || 0) + Number(e.soTien || 0); return acc; }, {})
+    ).map(([loai, amount]) => {
+      const pct = tongChi > 0 ? Math.round(amount / tongChi * 100) : 0;
+      return `<div class="dash-pnl-bar-row">
+        <span class="dash-pnl-bar-label">${loai}</span>
+        <div class="dash-pnl-bar-track"><div class="dash-pnl-bar-fill ship" style="width:${pct}%"></div></div>
+        <span class="dash-pnl-bar-val">${fmtVND(amount)} (${pct}%)</span>
+      </div>`;
+    }).join('')}
+  </div>
+  ` : ''}
+</div>
+` : ''}
+`;
+}
+
+function setDashBaocaoSubTab(tab) { dashState.baocaoSubTab = tab; renderDashboard(); }
+
+// ============================================================
+// TAB 2: KHO VÁY & PK
+// ============================================================
+function renderDashKhoVayPK(d) {
+  const subTab = dashState.khoSubTab || 'overview';
+  const { month, year } = dashState;
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+  const dateFromObj = parseD(dateFrom);
+  const dateToObj = parseD(dateTo);
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+
+  // Calculate BCG data for dresses - use date filter range
+  const thisStart = dateFromObj;
+  const thisEnd = dateToObj;
+  // Previous period (same length before)
+  const prevEnd = addD(thisStart, -1);
+  const prevLen = Math.round((thisEnd - thisStart) / (1000 * 60 * 60 * 24));
+  const prevStart = addD(prevEnd, -prevLen);
+
+  const countDress = (start, end) => {
+    const counts = {};
+    orders.filter(o => {
+      const lay = parseD(o.Ngay_Lay); return lay && lay >= start && lay <= end;
+    }).forEach(o => {
+      (Array.isArray(o.dhvs) ? o.dhvs : []).forEach(x => {
+        const k = x.Ma_Vay || x.vay; if (k) counts[k] = (counts[k] || 0) + 1;
+      });
+    });
+    return counts;
+  };
+
+  const thisCounts = countDress(thisStart, thisEnd);
+  const prevCounts = countDress(prevStart, prevEnd);
+  const totalThisMonth = Object.values(thisCounts).reduce((s, v) => s + v, 0);
+
+  const vayList = db.vay || [];
+  const pkList = db.pk || [];
+  const busyToday = new Set();
+  const today = new Date(); today.setHours(0,0,0,0);
+  (db.don || []).filter(o => {
+    if (isHoanOrder(o)) return false;
+    const lay = parseD(o.Ngay_Lay); const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return false;
+    return lay <= today && tra >= today;
+  }).forEach(o => {
+    (Array.isArray(o.dhvs) ? o.dhvs : []).forEach(x => {
+      const k = x.Ma_Vay || x.vay; if (k) busyToday.add(k);
+    });
+  });
+
+  const totalVay = vayList.length;
+  const busyVay = busyToday.size;
+  const totalPk = pkList.length;
+  const busyPk = new Set();
+  (db.don || []).filter(o => {
+    if (isHoanOrder(o)) return false;
+    const lay = parseD(o.Ngay_Lay); const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return false;
+    return lay <= today && tra >= today;
+  }).forEach(o => {
+    (Array.isArray(o.dhvs) ? o.dhvs : []).forEach(x => {
+      const k = x.Ma_PK || x.pk; if (k) busyPk.add(k);
+    });
+  });
+
+  // BCG for dresses
+  const maxCount = Math.max(...Object.values(thisCounts), 1);
+  const topVays = Object.entries(thisCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([key, cnt]) => {
+      const v = vayById.get(key);
+      const prevCnt = prevCounts[key] || 0;
+      const growth = prevCnt > 0 ? cnt / prevCnt : cnt > 0 ? 2 : 0.5;
+      const share = totalThisMonth > 0 ? cnt / totalThisMonth : 0;
+      const medianShare = 0.05;
+      let bcg = '';
+      let bcgLabel = '';
+      let bcgColor = '';
+      if (growth >= 1 && share >= medianShare) { bcg = '⭐'; bcgLabel = 'Star'; bcgColor = 'var(--green)'; }
+      else if (growth < 1 && share >= medianShare) { bcg = '💰'; bcgLabel = 'Cash Cow'; bcgColor = 'var(--accent)'; }
+      else if (growth >= 1 && share < medianShare) { bcg = '❓'; bcgLabel = 'Question'; bcgColor = 'var(--amber)'; }
+      else { bcg = '🐕'; bcgLabel = 'Dog'; bcgColor = 'var(--text-muted)'; }
+      return { ten: v ? v.Ten_Vay : key, key, count: cnt, share, growth, bcg, bcgLabel, bcgColor };
+    });
+
+  // BCG for PK (simplified - count by pk in orders)
+  const pkCounts = {};
+  orders.forEach(o => {
+    const lay = parseD(o.Ngay_Lay); if (!lay || lay < thisStart || lay > thisEnd) return;
+    (Array.isArray(o.phukiens) ? o.phukiens : []).forEach(x => {
+      const k = x.Ma_PK || x.pk; if (k) pkCounts[k] = (pkCounts[k] || 0) + 1;
+    });
+  });
+  const totalPkMonth = Object.values(pkCounts).reduce((s, v) => s + v, 0);
+  const topPKs = Object.entries(pkCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([key, cnt]) => {
+      const p = pkById.get(key);
+      const share = totalPkMonth > 0 ? cnt / totalPkMonth : 0;
+      return { ten: p ? p.Ten_PK : key, key, count: cnt, share };
+    });
+
+  return `
+${renderDashDateFilter()}
+
+<!-- SUB-TABS -->
+<div class="dash-sub-tabs">
+  <button class="dash-sub-tab ${subTab==='overview'?'active':''}" onclick="setDashKhoSubTab('overview')">📊 Tổng quan</button>
+  <button class="dash-sub-tab ${subTab==='topvay'?'active':''}" onclick="setDashKhoSubTab('topvay')">👗 Top 20 váy</button>
+  <button class="dash-sub-tab ${subTab==='toppk'?'active':''}" onclick="setDashKhoSubTab('toppk')">💍 Top 20 PK</button>
+</div>
+
+${subTab === 'overview' ? `
+<!-- 2a: Overview -->
+<div class="dash-section">
+  <div class="dash-inv-hero">
+    <div class="dash-inv-card">
+      <div class="dash-inv-big">${totalVay}</div>
+      <div class="dash-inv-label">Tổng váy</div>
+      <div class="dash-inv-sub">${busyVay} đang thuê · ${totalVay - busyVay} trống</div>
+    </div>
+    <div class="dash-inv-divider"></div>
+    <div class="dash-inv-card">
+      <div class="dash-inv-big">${totalPk}</div>
+      <div class="dash-inv-label">Tổng phụ kiện</div>
+      <div class="dash-inv-sub">${busyPk.size} đang thuê · ${totalPk - busyPk.size} trống</div>
+    </div>
+  </div>
+  <div class="dash-chart-wrap" style="height:160px;margin-top:16px">
+    <canvas id="dash-inv-chart"></canvas>
+  </div>
+</div>
+` : ''}
+
+${subTab === 'topvay' ? `
+<!-- 2b: Top 20 váy + BCG -->
+<div class="dash-section">
+  <div class="dash-section-title">Top 20 váy — Tháng ${month}/${year}</div>
+  <div class="dash-table-card">
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>#</th><th>Tên váy</th><th>Lần thuê</th><th>Share</th><th>Growth</th><th>BCG</th></tr></thead>
+        <tbody>
+          ${topVays.length === 0 ? `
+          <tr><td colspan="6">
+            <div class="dash-empty-state">
+              <div class="dash-empty-icon">📊</div>
+              <div class="dash-empty-title">Chưa có dữ liệu thuê tháng này</div>
+              <div class="dash-empty-desc">Top váy sẽ hiển thị khi có đơn thuê trong tháng ${month}/${year}</div>
+              <button class="dash-empty-btn" onclick="openNewOrder()">+ Tạo đơn mới</button>
+            </div>
+          </td></tr>` : topVays.map((v, i) => `
+          <tr>
+            <td class="dash-rank">${i+1}</td>
+            <td class="dash-vay-name">${v.ten}</td>
+            <td><span class="dash-count-badge">${v.count}</span></td>
+            <td class="muted">${Math.round(v.share * 100)}%</td>
+            <td class="${v.growth >= 1 ? 'pos' : 'neg'}">${v.growth >= 1 ? '▲' : '▼'} ${Math.round(Math.abs(v.growth - 1) * 100)}%</td>
+            <td><span class="dash-bcg-badge" style="background:${v.bcgColor}20;color:${v.bcgColor}">${v.bcg} ${v.bcgLabel}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="dash-bcg-legend">
+      <span><span style="color:var(--green)">⭐</span> Star</span>
+      <span><span style="color:var(--accent)">💰</span> Cash Cow</span>
+      <span><span style="color:var(--amber)">❓</span> Question</span>
+      <span style="color:var(--text-muted)">🐕 Dog</span>
+    </div>
+  </div>
+</div>
+` : ''}
+
+${subTab === 'toppk' ? `
+<!-- 2c: Top 20 PK -->
+<div class="dash-section">
+  <div class="dash-section-title">Top 20 phụ kiện — Tháng ${month}/${year}</div>
+  <div class="dash-table-card">
+    <div class="dash-table-wrap">
+      <table class="dash-table">
+        <thead><tr><th>#</th><th>Tên phụ kiện</th><th>Lần thuê</th><th>Share</th></tr></thead>
+        <tbody>
+          ${topPKs.length === 0 ? `
+          <tr><td colspan="4">
+            <div class="dash-empty-state">
+              <div class="dash-empty-icon">💍</div>
+              <div class="dash-empty-title">Chưa có dữ liệu</div>
+              <div class="dash-empty-desc">Top phụ kiện sẽ hiển thị khi có đơn thuê trong tháng ${month}/${year}</div>
+            </div>
+          </td></tr>` : topPKs.map((p, i) => `
+          <tr>
+            <td class="dash-rank">${i+1}</td>
+            <td>${p.ten}</td>
+            <td><span class="dash-count-badge">${p.count}</span></td>
+            <td class="muted">${Math.round(p.share * 100)}%</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+` : ''}
+`;
+}
+
+function setDashKhoSubTab(tab) { dashState.khoSubTab = tab; renderDashboard(); }
+
+// --- Calculate daily revenue for a month ---
+function calculateDashboardRevenue(month, year) {
+  const orders = (db.don || []).filter(o => isHoanOrder(o));
+  const daily = {};
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month - 1, d);
+    const key = date.toISOString().slice(0, 10);
+    daily[key] = 0;
+  }
+
+  orders.forEach(o => {
+    const d = parseD(o.Ngay_Lay);
+    if (!d) return;
+    const key = d.toISOString().slice(0, 10);
+    if (daily.hasOwnProperty(key)) {
+      const gross = donTienThueVay(o) + donTienThuePK(o);
+      const expenses = Number(o.chiphi || 0);
+      daily[key] += (gross - expenses);
+    }
+  });
+
+  return { daily };
+}
+
+function renderDashBarChart() {
+  const canvas = $('#dash-rev-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { month, year } = dashState;
+  const revData = calculateDashboardRevenue(month, year);
+
+  // Build area data for last 14 days
+  const days = 14;
+  const labels = [];
+  const values = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(year, month - 1, 1);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    labels.push(d.getDate());
+    values.push(revData.daily[key] || 0);
+  }
+
+  const W = canvas.offsetWidth * 2;
+  const H = 180 * 2;
+  canvas.width = W; canvas.height = H;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  const padL = 10, padR = 10, padT = 16, padB = 28;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+  const maxV = Math.max(...values, 1);
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (chartH * i / 3);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(padL + chartW, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // X labels
+  ctx.fillStyle = '#9ca3af';
+  ctx.font = '11px Plus Jakarta Sans, sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < labels.length; i += 2) {
+    ctx.fillText(labels[i], padL + (chartW * i / (labels.length - 1)), h - 6);
+  }
+
+  if (values.every(v => v === 0)) {
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '13px Plus Jakarta Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Không có dữ liệu', w / 2, h / 2);
+    return;
+  }
+
+  // Area path
+  const pts = values.map((v, i) => ({
+    x: padL + (chartW * i / (values.length - 1)),
+    y: padT + chartH - (v / maxV) * chartH
+  }));
+
+  // Smooth bezier curve
+  function smoothPath(pts) {
+    let p = `M ${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const cpX = (pts[i].x + pts[i + 1].x) / 2;
+      p += ` Q ${pts[i].x},${pts[i].y} ${cpX},${(pts[i].y + pts[i + 1].y) / 2}`;
+    }
+    p += ` L ${pts[pts.length - 1].x},${pts[pts.length - 1].y}`;
+    p += ` L ${pts[pts.length - 1].x},${padT + chartH}`;
+    p += ` L ${pts[0].x},${padT + chartH} Z`;
+    return p;
+  }
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, padT, 0, padT + chartH);
+  grad.addColorStop(0, 'rgba(102,126,234,0.35)');
+  grad.addColorStop(1, 'rgba(102,126,234,0.02)');
+
+  ctx.beginPath();
+  ctx.fillStyle = grad;
+  const path = new Path2D(smoothPath(pts));
+  ctx.fill(path);
+
+  // Line stroke
+  ctx.beginPath();
+  ctx.strokeStyle = '#667eea';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  let lineP = `M ${pts[0].x},${pts[0].y}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const cpX = (pts[i].x + pts[i + 1].x) / 2;
+    lineP += ` Q ${pts[i].x},${pts[i].y} ${cpX},${(pts[i].y + pts[i + 1].y) / 2}`;
+  }
+  lineP += ` L ${pts[pts.length - 1].x},${pts[pts.length - 1].y}`;
+  ctx.stroke(new Path2D(lineP));
+
+  // Dots
+  pts.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#667eea';
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+}
+
+function renderDashKhoVayDonut() {
+  const canvas = $('#dash-inv-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { month, year } = dashState;
+  const vayList = db.vay || [];
+  const pkList = db.pk || [];
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const busyV = new Set(), busyP = new Set();
+  (db.don || []).filter(o => {
+    if (isHoanOrder(o)) return false;
+    const lay = parseD(o.Ngay_Lay); const tra = ngayTraThuc(o.Goi_Thue, o.Ngay_Lay);
+    if (!lay || !tra) return false;
+    return lay <= today && tra >= today;
+  }).forEach(o => {
+    (Array.isArray(o.dhvs) ? o.dhvs : []).forEach(x => {
+      const k = x.Ma_Vay || x.vay; if (k) busyV.add(k);
+    });
+    (Array.isArray(o.phukiens) ? o.phukiens : []).forEach(x => {
+      const k = x.Ma_PK || x.pk; if (k) busyP.add(k);
+    });
+  });
+
+  const data = [
+    { label: 'Váy bận', val: busyV.size, color: '#d4af37' },
+    { label: 'Váy trống', val: Math.max(0, vayList.length - busyV.size), color: '#e5e7eb' },
+    { label: 'PK bận', val: busyP.size, color: '#3b82f6' },
+    { label: 'PK trống', val: Math.max(0, pkList.length - busyP.size), color: '#f3f4f6' },
+  ];
+
+  const W = canvas.offsetWidth * 2;
+  const H = 140 * 2;
+  canvas.width = W; canvas.height = H;
+  ctx.scale(2, 2);
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  const cx = w * 0.3, cy = h / 2, r = Math.min(h / 2 - 8, 50);
+
+  let startAngle = -Math.PI / 2;
+  const total = data.reduce((s, d) => s + d.val, 0) || 1;
+  data.forEach(d => {
+    const slice = (d.val / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+    ctx.closePath();
+    ctx.fillStyle = d.color;
+    ctx.fill();
+    startAngle += slice;
+  });
+
+  // Legend on right
+  ctx.font = '10px Plus Jakarta Sans, sans-serif';
+  let legendY = 10;
+  data.forEach(d => {
+    ctx.fillStyle = d.color;
+    ctx.fillRect(w * 0.62, legendY, 10, 10);
+    ctx.fillStyle = '#374151';
+    ctx.fillText(d.label + ': ' + d.val, w * 0.62 + 14, legendY + 9);
+    legendY += 18;
+  });
+}
+
+// ============================================================
+// BÁO CÁO CHART — Grouped Bar Chart
+// ============================================================
+function renderDashBaoCaoChart() {
+  const canvas = document.getElementById('dash-rev-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const W = rect.width || 320;
+  const H = rect.height || 220;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const df = dashState.dateFilter || 'thismonth';
+  const { from: dateFrom, to: dateTo } = getDateFilterRange();
+  const monthStart = parseD(dateFrom);
+  const monthEnd = parseD(dateTo);
+
+  // Build day labels based on filter
+  const labels = [];
+  const revenueData = [];
+  const expenseData = [];
+  let cursor = parseD(dateFrom);
+  const maxDays = 31;
+  let days = 0;
+  while (cursor <= monthEnd && days < maxDays) {
+    const iso = isoOf(cursor);
+    labels.push(cursor.getDate() + '/' + (cursor.getMonth() + 1));
+    // Revenue
+    const orders = (db.don || []).filter(o => isHoanOrder(o) && o.Ngay_Lay === iso);
+    let rev = 0;
+    orders.forEach(o => {
+      rev += donTienThueVay(o) + donTienThuePK(o) - Number(o.chiphi || 0);
+    });
+    revenueData.push(rev);
+    // Expense
+    const chiPhi = getChiPhiEntries().filter(e => e.date === iso);
+    expenseData.push(chiPhi.reduce((s, e) => s + Number(e.soTien || 0), 0));
+    cursor = addD(cursor, 1);
+    days++;
+  }
+
+  if (labels.length === 0) {
+    ctx.clearRect(0, 0, W, H);
+    return;
+  }
+
+  const maxVal = Math.max(...revenueData, ...expenseData, 1);
+  const padL = 50, padR = 10, padT = 20, padB = 30;
+  const cW = W - padL - padR;
+  const cH = H - padT - padB;
+  const groupW = cW / Math.max(labels.length, 1);
+  const barW = Math.min(12, groupW * 0.35);
+  const yScale = (v) => padT + cH - (v / maxVal) * cH;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (cH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+    const val = Math.round(maxVal * (1 - i / 4));
+    ctx.fillStyle = '#AEAEB2';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtVND(val), padL - 4, y + 3);
+  }
+
+  // Bars
+  labels.forEach((l, i) => {
+    const x = padL + i * groupW + groupW * 0.2;
+    const revH = (revenueData[i] / maxVal) * cH;
+    const chiH = (expenseData[i] / maxVal) * cH;
+    // Revenue bar (green)
+    ctx.fillStyle = 'rgba(52,199,89,0.8)';
+    ctx.beginPath();
+    ctx.roundRect(x, yScale(revenueData[i]), barW, revH, [4, 4, 0, 0]);
+    ctx.fill();
+    // Expense bar (red)
+    ctx.fillStyle = 'rgba(255,59,48,0.8)';
+    ctx.beginPath();
+    ctx.roundRect(x + barW + 2, yScale(expenseData[i]), barW, chiH, [4, 4, 0, 0]);
+    ctx.fill();
+  });
+
+  // X labels
+  const skip = Math.max(1, Math.floor(labels.length / 7));
+  labels.forEach((l, i) => {
+    if (i % skip !== 0 && i !== labels.length - 1) return;
+    const x = padL + i * groupW + groupW * 0.5;
+    ctx.fillStyle = '#AEAEB2';
+    ctx.font = '10px Plus Jakarta Sans';
+    ctx.textAlign = 'center';
+    ctx.fillText(l, x, H - 8);
+  });
+
+  // Legend
+  ctx.font = '11px Plus Jakarta Sans';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#34C759';
+  ctx.fillRect(padL, H - 22, 10, 10);
+  ctx.fillStyle = '#636366';
+  ctx.fillText('Thu', padL + 14, H - 14);
+  ctx.fillStyle = '#FF3B30';
+  ctx.fillRect(padL + 50, H - 22, 10, 10);
+  ctx.fillStyle = '#636366';
+  ctx.fillText('Chi', padL + 64, H - 14);
+}
+
+function renderDashPhanTich(d) {
+  const gmColor = d.grossMargin >= 30 ? 'var(--green)' : d.grossMargin >= 15 ? 'var(--amber)' : 'var(--red)';
+  const occColor = d.avgBusy >= 60 ? 'var(--green)' : d.avgBusy >= 40 ? 'var(--amber)' : 'var(--red)';
+  const repColor = d.repeatRate >= 40 ? 'var(--green)' : d.repeatRate >= 25 ? 'var(--amber)' : 'var(--red)';
+  const fitColor = d.fittingToCloseRate >= 40 ? 'var(--green)' : d.fittingToCloseRate >= 20 ? 'var(--amber)' : 'var(--red)';
+  const ovColor = d.overdueRate <= 5 ? 'var(--green)' : d.overdueRate <= 15 ? 'var(--amber)' : 'var(--red)';
+  const recommendations = [];
+  if (d.revenueChange >= 10) recommendations.push({ icon: '📈', color: 'var(--green)', text: `Doanh thu tăng ${d.revenueChange}% so với tháng trước — tiếp tục duy trì đà tăng.` });
+  else if (d.revenueChange < -10) recommendations.push({ icon: '📉', color: 'var(--red)', text: `Doanh thu giảm ${Math.abs(d.revenueChange)}% so với tháng trước — cần xem xét nguyên nhân và có giải pháp.` });
+  if (d.overdueRate > 10) recommendations.push({ icon: '⚠️', color: 'var(--red)', text: `Tỷ lệ quá hạn cao (${d.overdueRate}%) — cần cải thiện quy trình thu hồi và nhắc nhở khách.` });
+  else if (d.overdueRate > 5) recommendations.push({ icon: '🔔', color: 'var(--amber)', text: `Tỷ lệ quá hạn ${d.overdueRate}% — theo dõi sát và nhắc nhở khách trả đúng hạn.` });
+  if (d.avgBusy < 40) recommendations.push({ icon: '👗', color: 'var(--amber)', text: `Tỷ lệ lấp đầy thấp (${d.avgBusy}%) — nhiều váy chưa được khai thác, xem xét giảm giá hoặc marketing.` });
+  if (d.dressConcentrationRisk > 50) recommendations.push({ icon: '⚠️', color: 'var(--red)', text: `Top 3 váy chiếm ${d.dressConcentrationRisk}% doanh thu — rủi ro tập trung cao, cần đa dạng hoá.` });
+  else if (d.dressConcentrationRisk > 35) recommendations.push({ icon: '💡', color: 'var(--amber)', text: `Top 3 váy chiếm ${d.dressConcentrationRisk}% doanh thu — giám sát và phát triển thêm các mẫu tiềm năng.` });
+  if (d.fittingToCloseRate < 20 && d.totalFittingOrders > 0) recommendations.push({ icon: '🎯', color: 'var(--amber)', text: `Tỷ lệ Fitting → Chốt thấp (${d.fittingToCloseRate}%) — cải thiện trải nghiệm fitting và chốt đơn.` });
+  if (d.grossMargin < 15) recommendations.push({ icon: '💸', color: 'var(--red)', text: `Gross margin thấp (${d.grossMargin}%) — cần giảm chi phí hoặc tăng giá thuê.` });
+  else if (d.grossMargin >= 30) recommendations.push({ icon: '✅', color: 'var(--green)', text: `Gross margin tốt (${d.grossMargin}%) — kinh doanh có lợi nhuận tốt.` });
+  if (d.repeatRate < 20 && d.totalOrders > 5) recommendations.push({ icon: '🔄', color: 'var(--amber)', text: `Khách quay lại thấp (${d.repeatRate}%) — tạo chương trình khách hàng thân thiết.` });
+  if (d.neverRented && d.neverRented.length > 0) recommendations.push({ icon: '👗', color: 'var(--amber)', text: `${d.neverRented.length} váy chưa từng được thuê — cân nhắc giảm giá hoặc refresh mẫu mã.` });
+  if (recommendations.length === 0) recommendations.push({ icon: '✅', color: 'var(--green)', text: 'Mọi chỉ số đều ở mức tốt — tiếp tục duy trì!' });
+  return `
+${renderDashDateFilter()}
+
+<div class="dash-section">
+  <div class="dash-section-title">📏 Chỉ số quan trọng</div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(4,1fr)">
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">💰</span></div>
+      <div class="dash-metric-val" style="color:${gmColor}">${d.grossMargin}%</div>
+      <div class="dash-metric-label">Gross Margin</div>
+      <div class="dash-metric-sub" style="color:${gmColor}">${d.grossMargin >= 30 ? 'Xuất sắc' : d.grossMargin >= 15 ? 'Khá tốt' : '⚠️ Cần cải thiện'}</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">📊</span></div>
+      <div class="dash-metric-val" style="color:${occColor}">${d.avgBusy}%</div>
+      <div class="dash-metric-label">Tỷ lệ lấp đầy</div>
+      <div class="dash-metric-sub" style="color:${occColor}">${d.avgBusy >= 60 ? 'Tốt' : d.avgBusy >= 40 ? 'TB' : '⚠️ Thấp'}</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">🔄</span></div>
+      <div class="dash-metric-val" style="color:${repColor}">${d.repeatRate}%</div>
+      <div class="dash-metric-label">Khách quay lại</div>
+      <div class="dash-metric-sub" style="color:${repColor}">${d.repeatRate >= 40 ? 'Tuyệt vời' : d.repeatRate >= 25 ? 'Khá tốt' : '⚠️ Thấp'}</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">⚠️</span></div>
+      <div class="dash-metric-val" style="color:${ovColor}">${d.overdueRate}%</div>
+      <div class="dash-metric-label">Tỷ lệ quá hạn</div>
+      <div class="dash-metric-sub" style="color:${ovColor}">${d.overdueRate <= 5 ? 'Tốt' : d.overdueRate <= 15 ? 'Cần theo dõi' : '⚠️ Nghiêm trọng'}</div>
+    </div>
+  </div>
+</div>
+<div class="dash-section">
+  <div class="dash-section-title">💰 Sức khoẻ doanh thu</div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(3,1fr)">
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">📈</span><span class="dash-metric-change ${d.revenueChange>=0?'pos':'neg'}">${d.revenueChange>=0?'▲':'▼'} ${Math.abs(d.revenueChange)}%</span></div>
+      <div class="dash-metric-val">${fmtVND(d.totalRevenue)}</div>
+      <div class="dash-metric-label">Doanh thu tháng</div>
+      <div class="dash-metric-sub">vs tháng trước</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">🏆</span></div>
+      <div class="dash-metric-val">${fmtVND(d.aov)}</div>
+      <div class="dash-metric-label">AOV / đơn</div>
+      <div class="dash-metric-sub">Giá trị trung bình</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">💎</span></div>
+      <div class="dash-metric-val">${fmtVND(d.breakEvenRevenue)}</div>
+      <div class="dash-metric-label">Break-even</div>
+      <div class="dash-metric-sub">Doanh thu cần hòa vốn</div>
+    </div>
+  </div>
+</div>
+<div class="dash-section">
+  <div class="dash-section-title">⚙️ Hiệu quả vận hành</div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(4,1fr)">
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">📊</span></div>
+      <div class="dash-metric-val" style="color:${occColor}">${d.avgBusy}%</div>
+      <div class="dash-metric-label">Tỷ lệ lấp đầy</div>
+      <div class="dash-metric-sub">${d.activeDresses}/${d.totalDresses} váy hoạt động</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">🎯</span></div>
+      <div class="dash-metric-val" style="color:${fitColor}">${d.fittingToCloseRate}%</div>
+      <div class="dash-metric-label">Fitting → Chốt</div>
+      <div class="dash-metric-sub">${d.fittedOrders}/${d.totalFittingOrders} fitting</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">⏱️</span></div>
+      <div class="dash-metric-val">${d.avgRentalDays}</div>
+      <div class="dash-metric-label">Ngày thuê TB</div>
+      <div class="dash-metric-sub">Trung bình mỗi đơn</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">💧</span></div>
+      <div class="dash-metric-val">${d.daysOfCashBuffer}</div>
+      <div class="dash-metric-label">Cash buffer</div>
+      <div class="dash-metric-sub">Ngày tiền mặt dự trữ</div>
+    </div>
+  </div>
+</div>
+<div class="dash-section">
+  <div class="dash-section-title">👤 Khách hàng</div>
+  <div class="dash-metric-row" style="grid-template-columns:repeat(4,1fr)">
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">🔄</span></div>
+      <div class="dash-metric-val" style="color:${repColor}">${d.repeatRate}%</div>
+      <div class="dash-metric-label">Khách quay lại</div>
+      <div class="dash-metric-sub">${d.newCustomers} mới · ${d.returningCustomers} cũ</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">💵</span></div>
+      <div class="dash-metric-val">${fmtVND(Math.round(d.avgOrdersPerCustomer * d.aov))}</div>
+      <div class="dash-metric-label">LTV proxy</div>
+      <div class="dash-metric-sub">${d.avgOrdersPerCustomer} đơn × AOV</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">🚚</span></div>
+      <div class="dash-metric-val">${fmtVND(d.cac)}</div>
+      <div class="dash-metric-label">CAC</div>
+      <div class="dash-metric-sub">Chi phí/khách mới</div>
+    </div>
+    <div class="dash-metric-card">
+      <div class="dash-metric-header"><span class="dash-metric-icon">📦</span></div>
+      <div class="dash-metric-val">${d.avgOrdersPerCustomer}</div>
+      <div class="dash-metric-label">Đơn/khách</div>
+      <div class="dash-metric-sub">Trung bình</div>
+    </div>
+  </div>
+</div>
+<div class="dash-section">
+  <div class="dash-section-title">💡 Khuyến nghị cho Phương</div>
+  <div class="dash-recs">
+    ${recommendations.map(r => `<div class="dash-rec-item" style="border-left:3px solid ${r.color}"><span style="margin-right:8px">${r.icon}</span><span style="color:${r.color}">${r.text}</span></div>`).join('')}
+  </div>
+</div>
+<div class="dash-section">
+  <div class="dash-section-title">🏥 Chẩn đoán sức khoẻ</div>
+  <div class="dash-diagnosis-grid">
+    ${d.grossMargin >= 30 ? '✅' : '⚠️'} <b>Gross Margin ${d.grossMargin}%</b> — ${d.grossMargin >= 35 ? 'Xuất sắc' : d.grossMargin >= 20 ? 'Khá tốt, cần cải thiện chi phí' : 'Cần giảm chi phí gấp'}<br>
+    ${d.avgBusy >= 50 ? '✅' : '⚠️'} <b>Tỷ lệ lấp đầy ${d.avgBusy}%</b> — ${d.avgBusy >= 60 ? 'Tốt' : d.avgBusy >= 40 ? 'Cần tăng lượt thuê' : 'Nhiều váy chưa được khai thác'}<br>
+    ${d.repeatRate >= 30 ? '✅' : '⚠️'} <b>Khách quay lại ${d.repeatRate}%</b> — ${d.repeatRate >= 40 ? 'Tuyệt vời' : d.repeatRate >= 25 ? 'Khá tốt' : 'Cần cải thiện chất lượng dịch vụ'}<br>
+    ${d.fittingToCloseRate >= 30 ? '✅' : '⚠️'} <b>Fitting → Chốt ${d.fittingToCloseRate}%</b> — ${d.fittingToCloseRate >= 40 ? 'Tốt, fitting hiệu quả' : d.fittingToCloseRate >= 20 ? 'Cần cải thiện chốt đơn' : 'Fitting chưa hiệu quả'}<br>
+    ${d.dressConcentrationRisk <= 40 ? '✅' : '⚠️'} <b>Tập trung Top 3 váy ${d.dressConcentrationRisk}%</b> — ${d.dressConcentrationRisk <= 30 ? 'Rủi ro thấp' : d.dressConcentrationRisk <= 50 ? 'Chấp nhận được' : 'Rủi ro cao — cần đa dạng hoá'}<br>
+    ${d.overdueRate <= 10 ? '✅' : '⚠️'} <b>Quá hạn ${d.overdueRate}%</b> — ${d.overdueRate <= 5 ? 'Kiểm soát tốt' : d.overdueRate <= 15 ? 'Cần theo dõi' : 'Nghiêm trọng — cần xử lý ngay'}<br>
+    ${d.revenueChange >= 0 ? '✅' : '⚠️'} <b>Doanh thu tháng này</b> — ${d.revenueChange >= 10 ? 'Tăng trưởng tốt' : d.revenueChange >= 0 ? 'Ổn định' : `Giảm ${Math.abs(d.revenueChange)}%`}
+  </div>
+</div>`;
+}
+
+
+function exportDashboardCSV() {
+  const { month, year } = dashState;
+  const d = calculateDashboardData(month, year);
+  let csv = '﻿'; // BOM for UTF-8
+  csv += 'DASHBOARD - Tháng ' + month + '/' + year + '\n\n';
+
+  // KPI
+  csv += '=== KPI ===\n';
+  csv += 'Tổng đơn,' + d.totalOrders + '\n';
+  csv += 'Doanh thu,' + d.totalRevenue + '\n';
+  csv += 'Đặt cọc,' + d.totalDeposit + '\n';
+  csv += 'Đang thuê,' + d.activeRentals + '\n\n';
+
+  // Daily revenue
+  csv += '=== Doanh thu theo ngày ===\n';
+  csv += 'Ngày,Doanh thu\n';
+  d.dailyRevenue.forEach(r => { csv += r.date + ',' + r.revenue + '\n'; });
+  csv += '\n';
+
+  // Top dresses
+  csv += '=== Top Váy (Thuê nhiều) ===\n';
+  csv += 'STT,Tên váy,Lần thuê,Doanh thu\n';
+  d.topDresses.forEach((r, i) => { csv += (i+1) + ',' + r.ten + ',' + r.count + ',' + r.revenue + '\n'; });
+  csv += '\n';
+
+  // Customers
+  csv += '=== Top Khách hàng ===\n';
+  csv += 'STT,Khách,Đơn,Doanh thu\n';
+  d.topCustomers.forEach((c, i) => { csv += (i+1) + ',' + c.name + ',' + c.count + ',' + c.revenue + '\n'; });
+  csv += '\n';
+
+  // Cost
+  csv += '=== Chi phí & Lợi nhuận ===\n';
+  csv += 'Chi phí vận chuyển,' + d.totalShip + '\n';
+  csv += 'Chi phí khác,' + d.totalOther + '\n';
+  csv += 'Lợi nhuận ròng,' + d.netProfit + '\n\n';
+
+  // Forecast
+  csv += '=== Dự báo ===\n';
+  csv += 'Tuần tới,' + d.nextWeekOrders + '\n';
+  csv += 'Tháng tới,' + d.nextMonthOrders + '\n';
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'dashboard_' + month + '_' + year + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function goDetail(maDon) {
+  const o = (db.don || []).find(d => (d.Ma_Don || d.id) === maDon);
+  if (o) { openOrderDetail(o.Ma_Don || o.id); go('v-orders'); }
 }
