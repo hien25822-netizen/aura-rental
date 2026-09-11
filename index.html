@@ -82,29 +82,6 @@
   <div id="order-list"></div>
 </section>
 
-<!-- ===== ORDERS TABLE VIEW (Excel-like) ===== -->
-<section class="view" id="v-orders-table">
-  <div class="view-toolbar" style="gap:6px;flex-wrap:wrap">
-    <input class="search" id="search-orders-table" placeholder="Tìm đơn..." style="flex:1;min-width:0" />
-    <button class="header-btn" onclick="exportOrdersToExcel()" title="Xuất Excel">📥</button>
-    <button class="header-btn" onclick="copyOrdersTable()" title="Copy bảng (paste vào Excel)">📋</button>
-    <button class="header-btn" onclick="copyAllDataForAI()" title="Copy cho Claude">🤖</button>
-  </div>
-  <div class="chips" id="orders-table-chips">
-    <button class="on" data-f="all">Tất cả</button>
-    <input type="date" id="order-table-date" aria-label="Lọc theo ngày">
-    <button data-f="today">Hôm nay</button>
-    <button data-f="tomorrow">Ngày mai</button>
-    <button data-f="yesterday">Hôm qua</button>
-  </div>
-  <div id="orders-table-count" style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 4px;font-weight:600"></div>
-  <div id="orders-table-container" style="overflow-x:auto">
-    <table id="orders-table" class="orders-table">
-      <thead></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</section>
 
 <!-- ===== DRESSES (KHO VÁY) ===== -->
 <section class="view" id="v-kho">
@@ -206,15 +183,20 @@
     <button class="header-btn" onclick="copyRawTableToClipboard()" title="Copy bảng RAW">📋</button>
     <button class="header-btn" onclick="showRawExportModal()" title="Export">📤</button>
   </div>
+  <div class="chips" id="raw-status-chips">
+    <button class="on" data-rawstatus="">Tất cả</button>
+    <button data-rawstatus="dangthue">Đang thuê</button>
+    <button data-rawstatus="dahoan">Đã hoàn</button>
+  </div>
   <div class="chips" id="raw-type-chips">
-    <button class="on" data-rawtype="">Tất cả</button>
+    <button class="on" data-rawtype="">Tất cả loại</button>
     <button data-rawtype="Chốt thuê">Chốt thuê</button>
     <button data-rawtype="Fitting">Fitting</button>
     <button data-rawtype="Fitting xa">Fitting xa</button>
     <button data-rawtype="Đặt ship">Đặt ship</button>
   </div>
   <div id="raw-table-count" style="font-size:var(--text-xs);color:var(--text-muted);padding:8px 4px;font-weight:600"></div>
-  <div id="orders-table-container" style="overflow-x:auto">
+  <div id="raw-table-container" style="overflow-x:auto">
     <table id="raw-table" class="orders-table">
       <thead></thead>
       <tbody></tbody>
@@ -229,10 +211,9 @@
 <nav class="bottom">
   <button class="active" data-go="v-cal"><span class="ico">📅</span><small>Lịch</small></button>
   <button data-go="v-orders"><span class="ico">📦</span><small>Đơn</small></button>
-  <button data-go="v-orders-table"><span class="ico">📋</span><small>Bảng</small></button>
+  <button data-go="v-raw"><span class="ico">📋</span><small>RAW</small></button>
   <button data-go="v-dashboard"><span class="ico">📊</span><small>Dashboard</small></button>
   <button data-go="v-avail"><span class="ico">✨</span><small>Check</small></button>
-  <button data-go="v-raw"><span class="ico">📄</span><small>RAW</small></button>
   <button data-go="v-kho"><span class="ico">👗</span><small>Váy</small></button>
   <button data-go="v-pk"><span class="ico">💍</span><small>Phụ kiện</small></button>
 </nav>

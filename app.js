@@ -1943,10 +1943,21 @@ function renderRawTable() {
   const monthFilter = sel ? sel.value : '';
   const searchEl = $('#raw-search');
   const searchQ = searchEl ? searchEl.value.toLowerCase().trim() : '';
+  const statusEl = $('#raw-status-chips .on');
+  const statusFilter = statusEl ? statusEl.dataset.rawstatus : '';
   const typeEl = $('#raw-type-chips .on');
   const typeFilter = typeEl ? typeEl.dataset.rawtype : '';
 
-  let arr = (db.don || []).filter(isHoanOrder);
+  // Show ALL orders, filter by status
+  let arr = (db.don || []).slice();
+
+  // Filter by hoan status
+  if (statusFilter === 'dangthue') {
+    arr = arr.filter(o => !isHoanOrder(o));
+  } else if (statusFilter === 'dahoan') {
+    arr = arr.filter(o => isHoanOrder(o));
+  }
+  // '' = Tất cả: không filter
 
   // Filter by month
   if (monthFilter) {
@@ -1966,7 +1977,7 @@ function renderRawTable() {
     });
   }
 
-  // Filter by type
+  // Filter by type (AND với status)
   if (typeFilter) {
     arr = arr.filter(o => {
       const type = o.Trang_Thai_Don || o.type || '';
@@ -2066,6 +2077,18 @@ function renderRawTable() {
   // Search input event
   if (searchEl) {
     searchEl.oninput = renderRawTable;
+  }
+
+  // Status chips click handlers (Đang thuê / Đã hoàn)
+  const statusChips = $('#raw-status-chips');
+  if (statusChips) {
+    statusChips.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        statusChips.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        renderRawTable();
+      };
+    });
   }
 
   // Type chips click handlers
